@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Registration Retention Dashboard</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; color: #1a1d23; min-height: 100vh; }
+
+/* ── Header ── */
+.header { background: #1e2d4f; color: white; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.header-left h1 { font-size: 17px; font-weight: 700; }
+.header-left .subtitle { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.privacy-badge { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.5); border-radius: 20px; padding: 4px 11px; font-size: 11px; color: #6ee7b7; font-weight: 600; }
+.upload-btn { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.3); border-radius: 7px; padding: 6px 14px; font-size: 12px; color: white; cursor: pointer; font-weight: 600; transition: background 0.15s; }
+.upload-btn:hover { background: rgba(255,255,255,0.22); }
+
+/* ── Upload Panel ── */
+.upload-panel { display: none; background: white; border-bottom: 2px solid #e0e4ec; padding: 20px 28px; }
+.upload-panel.open { display: block; }
+.upload-panel-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.upload-panel-note { font-size: 12px; color: #555; margin-bottom: 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 7px; padding: 9px 13px; display: flex; align-items: flex-start; gap: 8px; }
+.upload-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.term-settings { background: #f8f9fb; border: 1px solid #e0e4ec; border-radius: 8px; padding: 12px 14px; margin-top: 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.term-settings .ts-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #888; }
+.term-settings .ts-field { display: flex; flex-direction: column; gap: 3px; }
+.term-settings .ts-field label { font-size: 10px; font-weight: 600; color: #666; }
+.term-settings input[type=date], .term-settings input[type=text] { border: 1px solid #dde1ea; border-radius: 6px; padding: 5px 8px; font-size: 12px; color: #1a1d23; outline: none; background: white; height: 28px; }
+.term-settings input[type=date]:focus, .term-settings input[type=text]:focus { border-color: #2563eb; }
+.term-settings .ts-hint { font-size: 11px; color: #888; flex-basis: 100%; margin-top: 2px; }
+.drop-zone { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 20px 16px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; position: relative; }
+.drop-zone:hover, .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; }
+.drop-zone.loaded { border-color: #16a34a; background: #f0fdf4; }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop-icon { font-size: 24px; margin-bottom: 8px; }
+.drop-label { font-size: 13px; font-weight: 700; color: #1a1d23; margin-bottom: 4px; }
+.drop-hint { font-size: 11px; color: #888; }
+.drop-status { font-size: 11px; font-weight: 600; margin-top: 8px; }
+.drop-zone.loaded .drop-status { color: #16a34a; }
+.drop-zone:not(.loaded) .drop-status { color: #888; }
+
+/* ── Nav ── */
+.nav { background: white; border-bottom: 1px solid #e0e4ec; padding: 0 28px; display: flex; overflow-x: auto; }
+.nav-tab { padding: 11px 16px; font-size: 13px; font-weight: 500; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; user-select: none; white-space: nowrap; }
+.nav-tab:hover { color: #1e2d4f; }
+.nav-tab.active { color: #1e2d4f; border-bottom-color: #2563eb; font-weight: 600; }
+
+/* ── Pages ── */
+.page { display: none; padding: 22px 28px; }
+.page.active { display: block; }
+
+/* ── Section labels ── */
+.section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: #aaa; margin-bottom: 8px; }
+
+/* ── KPI Cards ── */
+.kpi-row { display: grid; gap: 13px; margin-bottom: 20px; }
+.kpi-row-3 { grid-template-columns: repeat(3, 1fr); }
+.kpi-row-4 { grid-template-columns: repeat(4, 1fr); }
+.kpi-row-5 { grid-template-columns: repeat(5, 1fr); }
+.kpi-card { background: white; border-radius: 10px; padding: 16px 18px; border: 1px solid #e0e4ec; position: relative; overflow: hidden; }
+.kpi-card.clickable { cursor: pointer; transition: box-shadow 0.15s; }
+.kpi-card.clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; border-radius:10px 10px 0 0; }
+.kpi-card.blue::before   { background:#2563eb; }
+.kpi-card.green::before  { background:#16a34a; }
+.kpi-card.red::before    { background:#dc2626; }
+.kpi-card.amber::before  { background:#d97706; }
+.kpi-card.teal::before   { background:#0d9488; }
+.kpi-card.indigo::before { background:#4f46e5; }
+.kpi-card.sky::before    { background:#0284c7; }
+.kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: #888; margin-bottom: 5px; }
+.kpi-value { font-size: 26px; font-weight: 800; color: #1a1d23; line-height: 1; }
+.kpi-sub { font-size: 11px; color: #888; margin-top: 4px; }
+
+/* ── Charts row ── */
+.charts-row { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 20px; }
+.card { background: white; border-radius: 10px; padding: 18px 20px; border: 1px solid #e0e4ec; }
+.card-title { font-size: 13px; font-weight: 700; color: #1a1d23; margin-bottom: 4px; }
+.card-subtitle { font-size: 11px; color: #888; margin-bottom: 14px; }
+.hold-donuts-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.returning-donuts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.hold-donut-item { text-align: center; padding: 8px 4px 4px; border-radius: 8px; transition: background 0.15s, transform 0.15s; }
+.hold-donut-item-clickable { cursor: pointer; }
+.hold-donut-item-clickable:hover { background: #f3f4f6; transform: translateY(-1px); }
+.hold-donut-name { font-size: 11px; font-weight: 700; color: #1a1d23; margin-bottom: 8px; min-height: 28px; line-height: 1.2; }
+.hold-donut-svg { display: block; margin: 0 auto; }
+.hold-donut-legend { font-size: 10px; color: #666; margin-top: 6px; line-height: 1.4; }
+.reasons-chart { display: flex; flex-direction: column; gap: 6px; }
+.reason-bar-row { display: grid; grid-template-columns: 220px 1fr 36px; align-items: center; gap: 10px; font-size: 12px; }
+.reason-bar-label { color: #1a1d23; font-weight: 500; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reason-bar-track { background: #f0f2f6; height: 18px; border-radius: 4px; overflow: hidden; }
+.reason-bar-fill { background: #2563eb; height: 100%; border-radius: 4px; transition: width 0.2s; }
+.reason-bar-count { font-weight: 700; color: #1a1d23; text-align: left; }
+.reasons-chart-empty { padding: 18px 0; color: #888; font-size: 12px; text-align: center; }
+.hold-donut-legend .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+@media (max-width: 1100px) {
+  .hold-donuts-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.donut-wrap { max-width: 190px; margin: 0 auto; }
+.legend-row { margin-top: 12px; font-size: 11px; color: #666; text-align: center; line-height: 2; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+/* ── Hold cards ── */
+.hold-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
+.hold-card { background: white; border-radius: 10px; border: 1px solid #e0e4ec; padding: 14px; cursor: pointer; transition: box-shadow 0.15s, border-color 0.15s; }
+.hold-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.09); border-color: #2563eb; }
+.hold-card.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.hold-type { font-size: 12px; font-weight: 700; color: #1a1d23; margin-bottom: 3px; }
+.hold-count { font-size: 22px; font-weight: 800; color: #2563eb; }
+.hold-pct { font-size: 11px; color: #888; margin-top: 2px; }
+.hold-bar-bg { height: 4px; background: #e8eaf0; border-radius: 2px; margin-top: 9px; }
+.hold-bar-fill { height: 4px; border-radius: 2px; }
+
+/* ── Filter row ── */
+.filter-row { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; flex-wrap: wrap; }
+.filter-label { font-size: 12px; color: #666; font-weight: 500; }
+.filter-select { border: 1px solid #dde1ea; border-radius: 6px; padding: 5px 9px; font-size: 12px; color: #1a1d23; background: white; outline: none; cursor: pointer; }
+.filter-select:focus { border-color: #2563eb; }
+.table-search { border: 1px solid #dde1ea; border-radius: 6px; padding: 5px 11px; font-size: 12px; width: 200px; outline: none; color: #1a1d23; }
+.table-search:focus { border-color: #2563eb; }
+
+/* ── Table ── */
+.table-wrap { background: white; border-radius: 10px; border: 1px solid #e0e4ec; overflow: hidden; }
+.table-header-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 15px; border-bottom: 1px solid #e8eaf0; flex-wrap: wrap; gap: 8px; }
+.table-header-row h3 { font-size: 13px; font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { background: #f8f9fb; padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #777; border-bottom: 1px solid #e8eaf0; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #f0f2f6; transition: background 0.1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #f7f9ff; }
+tbody td { padding: 8px 12px; color: #2d3142; }
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: #2563eb; }
+.sortable::after { content:' ↕'; opacity:0.4; font-size:9px; }
+.sortable.asc::after  { content:' ↑'; opacity:1; color:#2563eb; }
+.sortable.desc::after { content:' ↓'; opacity:1; color:#2563eb; }
+
+/* ── Chips ── */
+.chip { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.chip-red    { background:#fee2e2; color:#b91c1c; }
+.chip-amber  { background:#fef3c7; color:#92400e; }
+.chip-blue   { background:#dbeafe; color:#1d4ed8; }
+.chip-purple { background:#ede9fe; color:#6d28d9; }
+.chip-teal   { background:#ccfbf1; color:#0f766e; }
+.chip-green  { background:#dcfce7; color:#15803d; }
+.chip-indigo { background:#e0e7ff; color:#3730a3; }
+.chip-gray   { background:#f3f4f6; color:#374151; }
+.athlete-badge { display:inline-flex; align-items:center; gap:3px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:20px; padding:2px 7px; font-size:11px; color:#15803d; font-weight:600; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 40px 20px; color: #888; }
+.empty-state .empty-icon { font-size: 36px; margin-bottom: 10px; }
+.empty-state p { font-size: 13px; }
+.empty-state a { color: #2563eb; cursor: pointer; text-decoration: underline; }
+
+/* ── Not Returning form ── */
+.nr-add-row { background: white; border-radius: 10px; border: 1px solid #2563eb; padding: 14px 16px; margin-bottom: 16px; display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.nr-add-row .nr-field { display: flex; flex-direction: column; gap: 4px; }
+.nr-add-row .nr-field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #888; white-space: nowrap; }
+.nr-add-row .nr-field input,
+.nr-add-row .nr-field select { border: 1px solid #dde1ea; border-radius: 6px; padding: 6px 9px; font-size: 12px; color: #1a1d23; outline: none; background: white; height: 32px; }
+.nr-add-row .nr-field input:focus,
+.nr-add-row .nr-field select:focus { border-color: #2563eb; }
+.nr-add-row .nr-field.wide input { width: 180px; }
+.nr-add-row .nr-field.med  input,
+.nr-add-row .nr-field.med  select { width: 140px; }
+.nr-add-row .nr-field.sm   input { width: 100px; }
+.nr-add-btn { background: #2563eb; color: white; border: none; border-radius: 7px; padding: 0 18px; height: 32px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.15s; flex-shrink: 0; }
+.nr-add-btn:hover { background: #1d4ed8; }
+.nr-row-btn { background: white; border: 1px solid #d1d5db; border-radius: 5px; padding: 3px 9px; font-size: 11px; font-weight: 600; color: #374151; cursor: pointer; margin-right: 4px; transition: background 0.15s, border-color 0.15s; }
+.nr-row-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+.nr-row-btn-primary { background: #2563eb; color: white; border-color: #2563eb; }
+.nr-row-btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+.nr-row-btn-danger { color: #b91c1c; border-color: #fecaca; }
+.nr-row-btn-danger:hover { background: #fef2f2; border-color: #fca5a5; }
+.nr-edit-input { border: 1px solid #fbbf24; border-radius: 5px; padding: 3px 6px; font-size: 11px; color: #1a1d23; outline: none; background: white; height: 26px; }
+.nr-edit-input:focus { border-color: #2563eb; }
+.nr-cell-input { border: 1px solid #e5e7eb; border-radius: 5px; padding: 3px 6px; font-size: 11px; color: #1a1d23; outline: none; background: white; height: 26px; transition: border-color 0.15s, background 0.15s; }
+.nr-cell-input:hover { border-color: #cbd5e1; background: #fafbfc; }
+.nr-cell-input:focus { border-color: #2563eb; background: white; }
+.nr-reason-other-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.nr-cell-revert { background: none; border: none; color: #888; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; height: 22px; border-radius: 4px; }
+.nr-cell-revert:hover { background: #f3f4f6; color: #dc2626; }
+
+.nr-input-row { margin-bottom: 10px; }
+.nr-input { width:100%; border:1px solid #dde1ea; border-radius:6px; padding:7px 9px; font-size:13px; outline:none; color:#1a1d23; }
+.nr-select { width:100%; border:1px solid #dde1ea; border-radius:6px; padding:7px 9px; font-size:12px; outline:none; color:#1a1d23; background:white; }
+.nr-btn { background:#2563eb; color:white; border:none; border-radius:7px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+.nr-btn:hover { background:#1d4ed8; }
+.alert-box { border-radius:8px; padding:9px 12px; font-size:12px; margin-bottom:10px; }
+.alert-error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+.alert-warn  { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .kpi-row-4, .kpi-row-5 { grid-template-columns: repeat(2, 1fr); }
+  .hold-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr; }
+  .nr-add-row { flex-direction: column; align-items: stretch; }
+  .nr-add-row .nr-field.wide input, .nr-add-row .nr-field.med input, .nr-add-row .nr-field.sm input, .nr-add-row .nr-field.med select { width: 100%; }
+  .upload-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 1200px) and (min-width: 901px) {
+  .upload-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Withdrawal CSV chip on NR rows ── */
+.nr-source-chip { display: inline-block; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; font-size: 9px; font-weight: 600; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
+
+/* ── CSV export buttons ── */
+.export-cluster { display: inline-flex; gap: 6px; align-items: center; }
+.export-btn { background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 11px; font-size: 11px; font-weight: 600; color: #1e2d4f; cursor: pointer; transition: background 0.15s, border-color 0.15s; white-space: nowrap; }
+.export-btn:hover { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+.export-btn.export-btn-all { background: #f8fafc; }
+.export-btn.export-btn-all:hover { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div class="header-left">
+    <h1>Registration Retention Dashboard</h1>
+    <div class="subtitle" id="header-subtitle">No data loaded — click "Update Data" to upload CSVs</div>
+  </div>
+  <div class="header-right">
+    <div class="privacy-badge">Private — data stays in your browser</div>
+    <button class="upload-btn" onclick="toggleUploadPanel()">Update Data</button>
+  </div>
+</div>
+
+<!-- ── Upload Panel ── -->
+<div class="upload-panel" id="upload-panel">
+  <div class="upload-panel-title">Upload CSV Reports</div>
+  <div class="upload-panel-note">
+    <span><strong>Your data never leaves your computer.</strong> All CSV processing happens entirely in your browser. No data is sent to any server or AI service. This file can be shared freely — each user loads their own CSVs locally.</span>
+  </div>
+  <div class="upload-grid">
+    <div class="drop-zone" id="dz-unreg" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'unreg',this)">
+      <input type="file" accept=".csv" onchange="fileInput(event,'unreg','dz-unreg')" />
+      <div class="drop-label">Unregistered Students</div>
+      <div class="drop-hint">Contains students who have NOT enrolled<br>Columns: ID, Name, Email, Holds, Sport, Major, Advisor</div>
+      <div class="drop-status" id="dz-unreg-status">No file loaded</div>
+    </div>
+    <div class="drop-zone" id="dz-reg" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'reg',this)">
+      <input type="file" accept=".csv" onchange="fileInput(event,'reg','dz-reg')" />
+      <div class="drop-label">Registered Students</div>
+      <div class="drop-hint">Contains all course enrollments<br>ID may appear multiple times — counted once</div>
+      <div class="drop-status" id="dz-reg-status">No file loaded</div>
+    </div>
+    <div class="drop-zone" id="dz-new" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'new',this)">
+      <input type="file" accept=".csv" onchange="fileInput(event,'new','dz-new')" />
+      <div class="drop-label">New Students</div>
+      <div class="drop-hint">Separate report for first-time students<br>Excluded from returning registration rate</div>
+      <div class="drop-status" id="dz-new-status">No file loaded</div>
+    </div>
+    <div class="drop-zone" id="dz-withdrawals" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'withdrawals',this)">
+      <input type="file" accept=".csv" onchange="fileInput(event,'withdrawals','dz-withdrawals')" />
+      <div class="drop-label">Withdrawals</div>
+      <div class="drop-hint">Completed withdrawals<br>Filtered by Last Active Date, not processed date</div>
+      <div class="drop-status" id="dz-withdrawals-status">No file loaded</div>
+    </div>
+  </div>
+  <div class="term-settings">
+    <span class="ts-label">Term window:</span>
+    <div class="ts-field">
+      <label for="ts-current-name">Current term</label>
+      <input type="text" id="ts-current-name" placeholder="e.g. Spring 2026" style="width:140px;" />
+    </div>
+    <div class="ts-field">
+      <label for="ts-current-start">Current term starts</label>
+      <input type="date" id="ts-current-start" />
+    </div>
+    <div class="ts-field">
+      <label for="ts-next-start">Next term starts</label>
+      <input type="date" id="ts-next-start" />
+    </div>
+    <button class="nr-row-btn nr-row-btn-primary" onclick="saveTermSettings()" style="height:28px;">Save term window</button>
+    <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are surfaced in the Withdrawals tab and auto-fed into Not Returning. If "Next term starts" is blank, the upper bound is today.</span>
+  </div>
+  <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
+    <button class="nr-btn" style="width:auto;padding:8px 20px;" onclick="processAllCSVs()">Apply &amp; Refresh Dashboard</button>
+    <span style="font-size:12px;color:#888;">Drop the CSVs above, set the term window, then click Apply.</span>
+  </div>
+</div>
+
+<!-- ── Nav ── -->
+<div class="nav">
+  <div class="nav-tab active" onclick="showPage('summary',this)">Summary</div>
+  <div class="nav-tab" onclick="showPage('holds',this)">Holds Breakdown</div>
+  <div class="nav-tab" onclick="showPage('canreg',this)">Can Register</div>
+  <div class="nav-tab" onclick="showPage('new',this)">New Students</div>
+  <div class="nav-tab" onclick="showPage('withdrawals',this)">Withdrawals</div>
+  <div class="nav-tab" onclick="showPage('notreturning',this)">Not Returning</div>
+</div>
+
+<!-- ══════════════════════════ SUMMARY ══════════════════════════ -->
+<div class="page active" id="page-summary">
+  <div id="summary-empty" class="empty-state">
+    <p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Click here to upload your three CSV files</a> to populate the dashboard.</p>
+  </div>
+  <div id="summary-content" style="display:none;">
+    <div class="section-label">Returning Students</div>
+    <div class="kpi-row kpi-row-4">
+      <div class="kpi-card blue"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unique returning student IDs</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">With ≥1 enrollment</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Returning Reg. Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Registered ÷ total returning</div></div>
+    </div>
+    <div class="section-label" style="margin-top:4px;">New Students &amp; Combined Totals</div>
+    <div class="kpi-row kpi-row-5">
+      <div class="kpi-card indigo clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[3])"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">From new student report</div></div>
+      <div class="kpi-card sky"><div class="kpi-label">New Registered</div><div class="kpi-value" id="s-new-reg">—</div><div class="kpi-sub">New students enrolled</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">All Students</div><div class="kpi-value" id="s-all-total">—</div><div class="kpi-sub">Returning + new</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">Returning + new registered</div></div>
+      <div class="kpi-card teal clickable" onclick="showPage('canreg',document.querySelectorAll('.nav-tab')[2])"><div class="kpi-label">Can Register</div><div class="kpi-value" id="s-can-reg">—</div><div class="kpi-sub">No holds, not yet enrolled</div></div>
+    </div>
+    <div class="kpi-row kpi-row-3" id="s-withdrawals-row" style="display:none;">
+      <div class="kpi-card red clickable" onclick="showPage('withdrawals',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Withdrawn This Term</div><div class="kpi-value" id="s-wd-total">—</div><div class="kpi-sub" id="s-wd-window">—</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Withdrawals — Pending NR Match</div><div class="kpi-value" id="s-wd-pending-overlap">—</div><div class="kpi-sub">Auto-imported from CSV; admin can reconcile on Not Returning</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">All-Time Withdrawals on File</div><div class="kpi-value" id="s-wd-alltime">—</div><div class="kpi-sub">Includes prior terms — see term selector on Withdrawals tab</div></div>
+    </div>
+    <div class="charts-row">
+      <div class="card">
+        <div class="card-title">Returning Student Status</div>
+        <div class="card-subtitle">Each segment of the returning population at a glance</div>
+        <div id="returning-donuts-grid" class="returning-donuts-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Registration-Blocking Holds</div>
+        <div class="card-subtitle">Center number = students still likely returning · below = total with this hold</div>
+        <div id="hold-donuts-grid" class="hold-donuts-grid"></div>
+      </div>
+    </div>
+    <div class="charts-row" style="grid-template-columns: 1fr;">
+      <div class="card">
+        <div class="card-title">Reasons Not Returning</div>
+        <div class="card-subtitle">Counts across all entries on the Not Returning list. A student with multiple reasons contributes to each.</div>
+        <div id="reasons-chart"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ HOLDS BREAKDOWN ══════════════════════════ -->
+<div class="page" id="page-holds">
+  <div id="holds-empty" class="empty-state"><p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your CSV files</a> to see hold breakdowns.</p></div>
+  <div id="holds-content" style="display:none;">
+    <div class="section-label">Returning Unregistered — Students may appear in multiple hold groups · Click a hold type to filter the table</div>
+    <div class="hold-grid" id="hold-cards-container"></div>
+    <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="h-returning" onchange="holdsApply()" style="font-weight:600;">
+        <option value="returning">Returning Only</option>
+        <option value="all">Show All</option>
+      </select>
+      <select class="filter-select" id="h-class" onchange="holdsApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="h-major" onchange="holdsApply()"><option value="">All Majors</option></select>
+      <select class="filter-select" id="h-advisor" onchange="holdsApply()"><option value="">All Advisors</option></select>
+      <select class="filter-select" id="h-sport" onchange="holdsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
+      <select class="filter-select" id="h-team" onchange="holdsApply()"><option value="">All Teams</option></select>
+      <input class="table-search" type="text" id="h-search" placeholder="Search name, email, ID…" oninput="holdsApply()" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="h-title">Select a hold type above</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('holds','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('holds','all')" title="Download every student in this hold type, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <table><thead><tr>
+        <th class="sortable" onclick="holdsSort('id')">Student ID</th>
+        <th class="sortable" onclick="holdsSort('lastName')">Last Name</th>
+        <th class="sortable" onclick="holdsSort('firstName')">First Name</th>
+        <th>Email</th>
+        <th>Hold</th>
+        <th class="sortable" onclick="holdsSort('classYear')">Class</th>
+        <th class="sortable" onclick="holdsSort('major')">Major</th>
+        <th class="sortable" onclick="holdsSort('advisor')">Advisor</th>
+        <th class="sortable" onclick="holdsSort('sports')">Sport</th>
+      </tr></thead>
+      <tbody id="holds-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ CAN REGISTER ══════════════════════════ -->
+<div class="page" id="page-canreg">
+  <div id="canreg-empty" class="empty-state"><p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your CSV files</a> to see students who can register.</p></div>
+  <div id="canreg-content" style="display:none;">
+    <div class="section-label">Returning students with no blocking holds who have not yet enrolled</div>
+    <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="cr-returning" onchange="crApply()" style="font-weight:600;">
+        <option value="returning">Returning Only</option>
+        <option value="all">Show All</option>
+      </select>
+      <select class="filter-select" id="cr-class" onchange="crApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="cr-major" onchange="crApply()"><option value="">All Majors</option></select>
+      <select class="filter-select" id="cr-advisor" onchange="crApply()"><option value="">All Advisors</option></select>
+      <select class="filter-select" id="cr-sport" onchange="crApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
+      <select class="filter-select" id="cr-team" onchange="crApply()"><option value="">All Teams</option></select>
+      <input class="table-search" type="text" id="cr-search" placeholder="Search name, email, ID…" oninput="crApply()" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="cr-title">—</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('canreg','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('canreg','all')" title="Download every Can-Register student, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <table><thead><tr>
+        <th class="sortable" onclick="crSort('id')">Student ID</th>
+        <th class="sortable" onclick="crSort('lastName')">Last Name</th>
+        <th class="sortable" onclick="crSort('firstName')">First Name</th>
+        <th>Email</th>
+        <th class="sortable" onclick="crSort('classYear')">Class</th>
+        <th class="sortable" onclick="crSort('major')">Major</th>
+        <th class="sortable" onclick="crSort('advisor')">Advisor</th>
+        <th class="sortable" onclick="crSort('sports')">Sport</th>
+      </tr></thead>
+      <tbody id="cr-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ NEW STUDENTS ══════════════════════════ -->
+<div class="page" id="page-new">
+  <div id="new-empty" class="empty-state"><p>No new student data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your new student CSV</a>.</p></div>
+  <div id="new-content" style="display:none;">
+    <div class="kpi-row kpi-row-3">
+      <div class="kpi-card indigo"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="ns-total">—</div><div class="kpi-sub">From new student report</div></div>
+      <div class="kpi-card sky"><div class="kpi-label">Registered</div><div class="kpi-value" id="ns-reg">—</div><div class="kpi-sub">New students with ≥1 enrollment</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Not Yet Registered</div><div class="kpi-value" id="ns-unreg">—</div><div class="kpi-sub">New students with no enrollments</div></div>
+    </div>
+    <p style="font-size:11px;color:#888;font-style:italic;margin-bottom:14px;">New students are excluded from the returning registration rate on the Summary page.</p>
+    <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="ns-returning" onchange="nsApply()" style="font-weight:600;">
+        <option value="returning">Returning Only</option>
+        <option value="all">Show All</option>
+      </select>
+      <select class="filter-select" id="ns-status" onchange="nsApply()"><option value="">All</option><option>Registered</option><option>Not Yet Registered</option></select>
+      <select class="filter-select" id="ns-class" onchange="nsApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="ns-major" onchange="nsApply()"><option value="">All Majors</option></select>
+      <select class="filter-select" id="ns-advisor" onchange="nsApply()"><option value="">All Advisors</option></select>
+      <select class="filter-select" id="ns-sport" onchange="nsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
+      <select class="filter-select" id="ns-team" onchange="nsApply()"><option value="">All Teams</option></select>
+      <input class="table-search" type="text" id="ns-search" placeholder="Search name, email, ID…" oninput="nsApply()" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="ns-title">—</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('newstudents','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('newstudents','all')" title="Download every new student, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <table><thead><tr>
+        <th class="sortable" onclick="nsSort('id')">Student ID</th>
+        <th class="sortable" onclick="nsSort('lastName')">Last Name</th>
+        <th class="sortable" onclick="nsSort('firstName')">First Name</th>
+        <th>Email</th>
+        <th class="sortable" onclick="nsSort('status')">Status</th>
+        <th class="sortable" onclick="nsSort('classYear')">Class</th>
+        <th class="sortable" onclick="nsSort('major')">Major</th>
+        <th class="sortable" onclick="nsSort('advisor')">Advisor</th>
+        <th class="sortable" onclick="nsSort('sports')">Sport</th>
+      </tr></thead>
+      <tbody id="ns-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ WITHDRAWALS ══════════════════════════ -->
+<div class="page" id="page-withdrawals">
+  <div id="wd-empty" class="empty-state">
+    <p>No withdrawal data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your withdrawal CSV</a> and set the term window above to populate this page.</p>
+  </div>
+  <div id="wd-content" style="display:none;">
+    <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
+      <div class="kpi-card red"><div class="kpi-label">Withdrawn This Term</div><div class="kpi-value" id="wd-k-total">0</div><div class="kpi-sub" id="wd-k-window">—</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Top Reason</div><div class="kpi-value" id="wd-k-reason" style="font-size:18px;">—</div><div class="kpi-sub" id="wd-k-reason-sub">—</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Most-Affected Class</div><div class="kpi-value" id="wd-k-class" style="font-size:18px;">—</div><div class="kpi-sub" id="wd-k-class-sub">—</div></div>
+      <div class="kpi-card sky"><div class="kpi-label">Already on NR List</div><div class="kpi-value" id="wd-k-overlap">0</div><div class="kpi-sub">Withdrawals where a human NR row exists too — may need reconciliation</div></div>
+    </div>
+
+    <div class="filter-row">
+      <span class="filter-label">Term:</span>
+      <select class="filter-select" id="wd-term" onchange="wdRender()">
+        <option value="current">Current term</option>
+        <option value="all">All terms</option>
+      </select>
+      <span class="filter-label" style="margin-left:6px;">Filter:</span>
+      <select class="filter-select" id="wd-class" onchange="wdRender()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="wd-major" onchange="wdRender()"><option value="">All Majors</option></select>
+      <select class="filter-select" id="wd-advisor" onchange="wdRender()"><option value="">All Advisors</option></select>
+      <select class="filter-select" id="wd-reason" onchange="wdRender()"><option value="">All Reasons</option></select>
+      <input class="table-search" type="text" id="wd-search" placeholder="Search name or ID…" oninput="wdRender()" style="width:200px;" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="wd-title">—</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('withdrawals','visible')" title="Download the rows currently shown (filters + term selector applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('withdrawals','all')" title="Download every withdrawal record across all terms">Download all (.csv)</button>
+        </div>
+      </div>
+      <table id="wd-table"><thead><tr>
+        <th class="sortable" onclick="wdSort('id')">Student ID</th>
+        <th class="sortable" onclick="wdSort('name')">Name</th>
+        <th class="sortable" onclick="wdSort('lastActiveDate')">Last Active</th>
+        <th class="sortable" onclick="wdSort('processedDate')">Processed</th>
+        <th class="sortable" onclick="wdSort('reason')">Reason</th>
+        <th class="sortable" onclick="wdSort('type')">Type</th>
+        <th class="sortable" onclick="wdSort('classYear')">Class</th>
+        <th class="sortable" onclick="wdSort('major')">Major</th>
+        <th class="sortable" onclick="wdSort('advisor')">Advisor</th>
+        <th>NR Status</th>
+      </tr></thead>
+      <tbody id="wd-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ NOT RETURNING ══════════════════════════ -->
+<div class="page" id="page-notreturning">
+  <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
+    <div class="kpi-card red"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="nr-count">0</div><div class="kpi-sub">Students reported not returning</div></div>
+    <div class="kpi-card amber"><div class="kpi-label">Withdrawal Pending</div><div class="kpi-value" id="nr-pending">0</div><div class="kpi-sub">Formal withdrawal not processed</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Withdrawal Complete</div><div class="kpi-value" id="nr-complete">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
+    <div class="kpi-card sky"><div class="kpi-label">Registered for Courses</div><div class="kpi-value" id="nr-registered">0</div><div class="kpi-sub">On NR list AND enrolled — needs reconciliation</div></div>
+  </div>
+
+  <!-- ── Inline add row ── -->
+  <div id="nr-dup-warn" class="alert-box alert-warn" style="display:none;"></div>
+  <div class="nr-add-row">
+    <div class="nr-field sm"><label>Student ID</label><input type="text" id="nr-f-id" placeholder="e.g. 1001423" /></div>
+    <div class="nr-field wide"><label>Name</label><input type="text" id="nr-f-name" placeholder="Last, First or First Last" /></div>
+    <div class="nr-field med"><label>Major</label><input type="text" id="nr-f-major" placeholder="e.g. Psychology" /></div>
+    <div class="nr-field med">
+      <label>Reason</label>
+      <select id="nr-f-reason" onchange="nrAddReasonChange()"></select>
+      <input type="text" id="nr-f-reason-other" placeholder="Type a custom reason" style="display:none;margin-top:4px;border:1px solid #dde1ea;border-radius:6px;padding:6px 9px;font-size:12px;height:32px;outline:none;" />
+    </div>
+    <div class="nr-field med">
+      <label>Withdrawal</label>
+      <select id="nr-f-withdrawal"><option value="Pending">Pending</option><option value="Complete">Complete</option></select>
+    </div>
+    <div class="nr-field wide"><label>Notes</label><input type="text" id="nr-f-notes" placeholder="Optional notes" /></div>
+    <button class="nr-add-btn" onclick="nrAdd()">+ Add Row</button>
+  </div>
+
+  <!-- ── Filters + table ── -->
+  <div class="filter-row" style="margin-bottom:10px;">
+    <span class="filter-label">Filter:</span>
+    <select class="filter-select" id="nr-filter-withdrawal" onchange="nrRender()"><option value="">All Statuses</option><option>Pending</option><option>Complete</option></select>
+    <select class="filter-select" id="nr-filter-reason" onchange="nrRender()">
+      <option value="">All Reasons</option>
+    </select>
+    <input class="table-search" type="text" id="nr-search" placeholder="Search name or ID…" oninput="nrRender()" style="width:180px;" />
+  </div>
+  <div class="table-wrap">
+    <div class="table-header-row">
+      <h3>Not Returning Students</h3>
+      <div class="export-cluster">
+        <button class="export-btn" onclick="exportTabCSV('notreturning','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+        <button class="export-btn export-btn-all" onclick="exportTabCSV('notreturning','all')" title="Download the entire Not Returning list">Download all (.csv)</button>
+      </div>
+    </div>
+    <table><thead><tr>
+      <th class="sortable" onclick="nrSort('id')">Student ID</th>
+      <th class="sortable" onclick="nrSort('name')">Name</th>
+      <th>Registered</th>
+      <th class="sortable" onclick="nrSort('major')">Major</th>
+      <th class="sortable" onclick="nrSort('reason')">Reason</th>
+      <th>Notes</th>
+      <th class="sortable" onclick="nrSort('withdrawal')">Withdrawal</th>
+      <th class="sortable" onclick="nrSort('dateAdded')">Date Added</th>
+      <th></th>
+    </tr></thead>
+    <tbody id="nr-tbody"></tbody></table>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+const BLOCKING_HOLDS = ['advising hold','account hold','registrar office hold','missing documents hold','immunization records hold'];
+const HOLD_DISPLAY   = ['Advising Hold','Account Hold','Registrar Office Hold','Missing Documents Hold','Immunization Records Hold'];
+// Account Hold uses dark blue (not red) so it doesn't clash with the red
+// "not returning" slice in the per-hold donuts on the Summary page.
+const HOLD_COLORS    = ['#7c3aed','#1e40af','#d97706','#0891b2','#0d9488'];
+const HOLD_CHIPS     = ['chip-purple','chip-indigo','chip-amber','chip-blue','chip-teal'];
+
+// Reasons a student may be reported as not returning. Multi-select.
+// Tony's 2026-04-30 update: "Academic dismissal" → "Suspension"; "Medical / health
+// reasons" consolidated to "Medical"; new entries for academics breakdown, faculty,
+// athletic, conflict, housing.
+const NR_REASONS = [
+  'Transfer to another institution',
+  'Personal / family circumstances',
+  'Financial hardship',
+  'Medical',
+  'Suspension',
+  'Military service',
+  'Academics - Major',
+  'Academics - Performance',
+  'Faculty',
+  'Athletic',
+  'Conflict with Faculty and/or Staff',
+  'Housing',
+  'Other',
+];
+
+// Map of legacy single-value reason strings → their new equivalent so existing
+// nrList rows in localStorage migrate cleanly.
+const NR_REASON_LEGACY = {
+  'Academic dismissal':     'Suspension',
+  'Medical / health reasons': 'Medical',
+};
+
+let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [];
+let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false };
+let pendingFiles = {};
+
+// Processed data
+let returningStudents   = {}; // id -> student obj
+let registeredIds       = new Set();
+let registeredStudents  = {}; // id -> student obj (full normalized records from registered CSV; deduped by ID)
+let newStudents         = {}; // id -> student obj
+let holdGroups          = {}; // 'Advising Hold' -> [student,...]
+let canRegisterStudents = [];
+let withdrawalsList     = []; // array of normalized withdrawal records (all terms; filter at render time)
+let currentHold         = null;
+let nrEditIdx           = null; // index of NR row currently being edited inline
+
+// Sort states
+let hSort = {col:null,dir:1}, crSort_ = {col:null,dir:1}, nsSort_ = {col:null,dir:1}, nrSort_ = {col:null,dir:1};
+let wdSort_ = {col:'lastActiveDate',dir:-1}; // default: most recent LDA first
+
+// Not returning list (persisted to localStorage)
+let nrList = [];
+
+// Term settings: persisted to localStorage. Drives the current-term filter on
+// Withdrawals + the auto-NR-sync. Window is [currentStart, nextStart); if
+// nextStart is blank, upper bound is today.
+let termSettings = { currentName: '', currentStart: '', nextStart: '' };
+
+// (No external chart library needed — all charts are SVG)
+
+// ══════════════════════════════════════════════════════════════
+//  UPLOAD PANEL
+// ══════════════════════════════════════════════════════════════
+function toggleUploadPanel() {
+  const p = document.getElementById('upload-panel');
+  p.classList.toggle('open');
+}
+
+function dzDrag(e, el) { e.preventDefault(); el.classList.add('drag-over'); }
+function dzLeave(el)    { el.classList.remove('drag-over'); }
+function dzDrop(e, key, el) {
+  e.preventDefault(); el.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file, key, el.id);
+}
+function fileInput(e, key, dzId) {
+  const file = e.target.files[0];
+  if (file) loadFile(file, key, dzId);
+}
+function loadFile(file, key, dzId) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    pendingFiles[key] = e.target.result;
+    const dz = document.getElementById(dzId);
+    dz.classList.add('loaded');
+    document.getElementById(dzId + '-status').textContent = 'Loaded: ' + file.name;
+  };
+  reader.readAsText(file);
+}
+
+// ── CSV parser (handles quoted fields) ──
+function parseCSV(text) {
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
+  if (!lines.length) return [];
+  const headers = parseCSVRow(lines[0]).map(h => h.trim().toLowerCase());
+  return lines.slice(1).map(line => {
+    const vals = parseCSVRow(line);
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = (vals[i]||'').trim());
+    return obj;
+  }).filter(r => Object.values(r).some(v=>v));
+}
+function parseCSVRow(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i=0;i<line.length;i++) {
+    const c = line[i];
+    if (c==='"') { inQ=!inQ; }
+    else if (c===',' && !inQ) { result.push(cur); cur=''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CSV EXPORT (client-side; no server round-trip)
+// ══════════════════════════════════════════════════════════════
+// Escape a value for inclusion in a CSV cell. RFC 4180-aligned: wrap in
+// quotes when the value contains a comma, quote, or newline; double up any
+// embedded quotes. Arrays are joined with " | " (the same separator the
+// parser splits on for sports). Null/undefined become empty.
+function csvEscape(v) {
+  if (v == null) return '';
+  if (Array.isArray(v)) v = v.join(' | ');
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+// Build the CSV text from rows + a column spec. `columns` is
+// [{header, getter}, ...] where getter(row) returns the raw value.
+function buildCSV(columns, rows) {
+  const lines = [columns.map(c => csvEscape(c.header)).join(',')];
+  rows.forEach(r => lines.push(columns.map(c => csvEscape(c.getter(r))).join(',')));
+  return lines.join('\r\n') + '\r\n'; // trailing newline so Excel doesn't trim the last row
+}
+
+// Trigger a browser download of a CSV blob. Filename should include the date
+// for easy archiving (e.g. holds-2026-05-04.csv). Adds a UTF-8 BOM so Excel
+// on Windows opens accented characters correctly.
+function downloadCSV(filename, csvText) {
+  const blob = new Blob(['﻿' + csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+}
+
+// Today's date in YYYY-MM-DD for filenames.
+function todayStamp() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Column specs for each tab. Defined once, used by both export handlers.
+// The order here is the order of columns in the output CSV.
+const EXPORT_COLUMNS = {
+  holds: [
+    { header: 'Student ID', getter: r => r.id },
+    { header: 'Last Name',  getter: r => r.lastName },
+    { header: 'First Name', getter: r => r.firstName },
+    { header: 'Name',       getter: r => r.name },
+    { header: 'Email',      getter: r => r.email },
+    { header: 'Hold Type',  getter: r => r.__holdType },
+    { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Major',      getter: r => r.major },
+    { header: 'Advisor',    getter: r => r.advisor },
+    { header: 'Sports',     getter: r => r.sports },
+    { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
+  ],
+  canreg: [
+    { header: 'Student ID', getter: r => r.id },
+    { header: 'Last Name',  getter: r => r.lastName },
+    { header: 'First Name', getter: r => r.firstName },
+    { header: 'Name',       getter: r => r.name },
+    { header: 'Email',      getter: r => r.email },
+    { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Major',      getter: r => r.major },
+    { header: 'Advisor',    getter: r => r.advisor },
+    { header: 'Sports',     getter: r => r.sports },
+    { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
+  ],
+  newstudents: [
+    { header: 'Student ID', getter: r => r.id },
+    { header: 'Last Name',  getter: r => r.lastName },
+    { header: 'First Name', getter: r => r.firstName },
+    { header: 'Name',       getter: r => r.name },
+    { header: 'Email',      getter: r => r.email },
+    { header: 'Status',     getter: r => r.status },
+    { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Major',      getter: r => r.major },
+    { header: 'Advisor',    getter: r => r.advisor },
+    { header: 'Sports',     getter: r => r.sports },
+  ],
+  withdrawals: [
+    { header: 'Student ID',         getter: r => r.id },
+    { header: 'Name',               getter: r => r.name },
+    { header: 'Last Active Date',   getter: r => r.lastActiveDate },
+    { header: 'Processed Date',     getter: r => r.processedDate },
+    { header: 'Reason',             getter: r => r.reason },
+    { header: 'Type',               getter: r => r.type },
+    { header: 'Class Year',         getter: r => r.classYear },
+    { header: 'Major',              getter: r => r.major },
+    { header: 'Advisor',            getter: r => r.advisor },
+    { header: 'Email',              getter: r => r.email },
+  ],
+  notreturning: [
+    { header: 'Student ID',     getter: r => r.id },
+    { header: 'Name',           getter: r => r.name },
+    { header: 'Email',          getter: r => r.email },
+    { header: 'Major',          getter: r => r.major },
+    { header: 'Advisor',        getter: r => r.advisor },
+    { header: 'Sport',          getter: r => r.sport },
+    { header: 'Reason',         getter: r => r.reason },
+    { header: 'Notes',          getter: r => r.notes },
+    { header: 'Withdrawal',     getter: r => r.withdrawal },
+    { header: 'Date Added',     getter: r => r.dateAdded },
+    { header: 'Registered',     getter: r => r.isRegistered ? 'Yes' : 'No' },
+    { header: 'Source',         getter: r => r._sourceWithdrawalId ? 'CSV import' : 'Human entry' },
+    { header: 'Withdrawal LDA', getter: r => r._withdrawalLDA || '' },
+  ],
+};
+
+// Per-tab data accessors. Each returns {visible, all}. `visible` mirrors
+// what the table currently shows (filters + sort applied). `all` is the
+// full unfiltered dataset for that tab.
+function getHoldsExportData() {
+  if (!currentHold) return { visible: [], all: [] };
+  const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const all = (holdGroups[currentHold] || []).map(r => ({...r, __holdType: currentHold, __onNR: nrIds.has(r.id)}));
+  // Apply same filters as holdsApply
+  const retOnly = document.getElementById('h-returning').value === 'returning';
+  const cls     = document.getElementById('h-class').value.toLowerCase();
+  const major   = document.getElementById('h-major').value;
+  const advisor = document.getElementById('h-advisor').value;
+  const sport   = document.getElementById('h-sport').value;
+  const team    = document.getElementById('h-team').value;
+  const q       = document.getElementById('h-search').value.toLowerCase();
+  let visible = [...all];
+  if (retOnly) visible = visible.filter(r => !r.__onNR);
+  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
+  if (major)   visible = visible.filter(r => r.major === major);
+  if (advisor) visible = visible.filter(r => r.advisor === advisor);
+  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
+  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
+  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applySort(visible, hSort);
+  return { visible, all };
+}
+
+function getCanRegExportData() {
+  const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const all = canRegisterStudents.map(r => ({...r, __onNR: nrIds.has(r.id)}));
+  const retOnly = document.getElementById('cr-returning').value === 'returning';
+  const cls     = document.getElementById('cr-class').value.toLowerCase();
+  const major   = document.getElementById('cr-major').value;
+  const advisor = document.getElementById('cr-advisor').value;
+  const sport   = document.getElementById('cr-sport').value;
+  const team    = document.getElementById('cr-team').value;
+  const q       = document.getElementById('cr-search').value.toLowerCase();
+  let visible = [...all];
+  if (retOnly) visible = visible.filter(r => !r.__onNR);
+  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
+  if (major)   visible = visible.filter(r => r.major === major);
+  if (advisor) visible = visible.filter(r => r.advisor === advisor);
+  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
+  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
+  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applySort(visible, crSort_);
+  return { visible, all };
+}
+
+function getNewStudentsExportData() {
+  const all = Object.values(newStudents);
+  const retOnly = document.getElementById('ns-returning').value === 'returning';
+  const status  = document.getElementById('ns-status').value;
+  const cls     = document.getElementById('ns-class').value.toLowerCase();
+  const major   = document.getElementById('ns-major').value;
+  const advisor = document.getElementById('ns-advisor').value;
+  const sport   = document.getElementById('ns-sport').value;
+  const team    = document.getElementById('ns-team').value;
+  const q       = document.getElementById('ns-search').value.toLowerCase();
+  const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  let visible = [...all];
+  if (retOnly) visible = visible.filter(r => !nrIds.has(r.id));
+  if (status)  visible = visible.filter(r => r.status === status);
+  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
+  if (major)   visible = visible.filter(r => r.major === major);
+  if (advisor) visible = visible.filter(r => r.advisor === advisor);
+  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
+  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
+  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applySort(visible, nsSort_);
+  return { visible, all };
+}
+
+function getWithdrawalsExportData() {
+  const all = [...withdrawalsList];
+  const termFilter = document.getElementById('wd-term').value;
+  const cls     = document.getElementById('wd-class').value.toLowerCase();
+  const major   = document.getElementById('wd-major').value;
+  const advisor = document.getElementById('wd-advisor').value;
+  const reason  = document.getElementById('wd-reason').value;
+  const q       = (document.getElementById('wd-search').value || '').toLowerCase();
+  let visible = [...all];
+  if (termFilter === 'current') visible = visible.filter(w => isInCurrentTerm(w.lastActiveDate));
+  if (cls)     visible = visible.filter(w => (w.classYear||'').toLowerCase().includes(cls));
+  if (major)   visible = visible.filter(w => w.major === major);
+  if (advisor) visible = visible.filter(w => w.advisor === advisor);
+  if (reason)  visible = visible.filter(w => w.reason === reason);
+  if (q)       visible = visible.filter(w => ((w.name||'')+(w.id||'')).toLowerCase().includes(q));
+  visible = applySort(visible, wdSort_);
+  return { visible, all };
+}
+
+function getNRExportData() {
+  const all = [...nrList];
+  const wf = document.getElementById('nr-filter-withdrawal').value;
+  const rf = document.getElementById('nr-filter-reason').value;
+  const q  = document.getElementById('nr-search').value.toLowerCase();
+  let visible = [...all];
+  if (wf) visible = visible.filter(r => r.withdrawal === wf);
+  if (rf) visible = visible.filter(r => (r.reason || '') === rf);
+  if (q)  visible = visible.filter(r => ((r.name||'') + (r.id||'')).toLowerCase().includes(q));
+  visible = applySort(visible, nrSort_);
+  return { visible, all };
+}
+
+// Top-level handler — wired to the buttons. `tab` is one of the EXPORT_COLUMNS keys.
+function exportTabCSV(tab, scope /* 'visible' | 'all' */) {
+  const cols = EXPORT_COLUMNS[tab];
+  if (!cols) return;
+  let data;
+  switch (tab) {
+    case 'holds':        data = getHoldsExportData(); break;
+    case 'canreg':       data = getCanRegExportData(); break;
+    case 'newstudents':  data = getNewStudentsExportData(); break;
+    case 'withdrawals':  data = getWithdrawalsExportData(); break;
+    case 'notreturning': data = getNRExportData(); break;
+    default: return;
+  }
+  const rows = scope === 'all' ? data.all : data.visible;
+  if (!rows.length) {
+    alert('Nothing to export — the current view has 0 rows.');
+    return;
+  }
+  // For Holds 'all', include the hold type label so Tony knows which hold
+  // the export was scoped to.
+  const suffix = tab === 'holds' && currentHold
+    ? '-' + currentHold.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')
+    : '';
+  const filename = `${tab}${suffix}-${scope}-${todayStamp()}.csv`;
+  downloadCSV(filename, buildCSV(cols, rows));
+}
+
+// ── Field name resolver (flexible column matching) ──
+function findField(obj, candidates) {
+  const keys = Object.keys(obj).map(k=>k.toLowerCase());
+  for (const c of candidates) {
+    const match = keys.find(k=>k.includes(c));
+    if (match !== undefined) return obj[Object.keys(obj).find(k=>k.toLowerCase()===match)] || '';
+  }
+  return '';
+}
+
+function processAllCSVs() {
+  const keys = Object.keys(pendingFiles);
+  if (!keys.length) { alert('Please drop at least one CSV file first.'); return; }
+
+  // Parse each file that was loaded
+  if (pendingFiles.unreg)       { rawUnreg       = parseCSV(pendingFiles.unreg);       csvLoaded.unreg       = true; }
+  if (pendingFiles.reg)         { rawReg         = parseCSV(pendingFiles.reg);         csvLoaded.reg         = true; }
+  if (pendingFiles.new)         { rawNew         = parseCSV(pendingFiles.new);         csvLoaded.new         = true; }
+  if (pendingFiles.withdrawals) { rawWithdrawals = parseCSV(pendingFiles.withdrawals); csvLoaded.withdrawals = true; }
+
+  buildData();
+  // Run the auto-sync after buildData so registeredIds + students maps are populated
+  // and the NR rows we create can reconcile against them.
+  if (csvLoaded.withdrawals) syncWithdrawalsToNR();
+  renderAll();
+  toggleUploadPanel();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DATA PROCESSING
+// ══════════════════════════════════════════════════════════════
+function normalizeStudent(row) {
+  const firstName = findField(row, ['first name','firstname','first','given name']);
+  const lastName  = findField(row, ['last name','lastname','last','surname','family name']);
+  // Build display name: prefer explicit first/last columns, fall back to a single name column
+  let name = '';
+  if (firstName || lastName) {
+    name = [firstName, lastName].filter(Boolean).join(' ');
+  } else {
+    name = findField(row, ['name','student name','full name','fullname']);
+  }
+
+  // Collect up to 6 hold columns: hold_1 … hold_6 (also handles hold1, Hold_1, etc.)
+  const holdValues = [];
+  for (let i = 1; i <= 6; i++) {
+    const v = findField(row, [`hold_${i}`, `hold${i}`, `hold ${i}`]);
+    if (v) holdValues.push(v.trim());
+  }
+  // Fall back to a single holds column if none of the numbered ones matched
+  if (!holdValues.length) {
+    const single = findField(row, ['hold','holds','hold type','holdtype']);
+    if (single) holdValues.push(single);
+  }
+
+  return {
+    id:        findField(row, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,''),
+    firstName,
+    lastName,
+    name,
+    email:     findField(row, ['email','e-mail','mail']),
+    major:     findField(row, ['major','program','degree']),
+    advisor:   findField(row, ['advisor','adviser','counselor']),
+    // Sports stored as array so multi-sport athletes can be merged cleanly
+    sports:    findField(row, ['sports','sport','team','athletics'])
+                 .split(/[,;|]/).map(s=>s.trim()).filter(Boolean),
+    holds:     holdValues, // array of hold strings
+    classYear: findField(row, ['class','class status','year','class year','classification','standing','student class']),
+  };
+}
+
+// ── Withdrawal-CSV normalizer ──
+// Parses one row of the withdrawal CSV into a uniform shape. Date fields are
+// stored as YYYY-MM-DD strings (or '' if missing/unparseable) so they're cheap
+// to compare against the term window without timezone surprises.
+function normalizeWithdrawal(row) {
+  const id = findField(row, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim();
+  // Last Active Date — the field used for the current-term filter. Be flexible
+  // on header naming; prefer a column whose lowercase name CONTAINS one of
+  // these phrases. Order matters: more specific matches first.
+  const ldaRaw = findField(row, [
+    'last active date','last attendance','last date of attendance','last attended',
+    'last active','lda','attendance end',
+  ]);
+  const procRaw = findField(row, [
+    'processed date','withdrawal processed','withdrawal date','withdraw date',
+    'date processed','effective date','withdrawn on',
+  ]);
+  const reason = findField(row, ['withdrawal reason','reason','reason for withdrawal','withdraw reason']);
+  const type   = findField(row, ['withdrawal type','type','withdrawal status']);
+  const firstName = findField(row, ['first name','firstname','first','given name']);
+  const lastName  = findField(row, ['last name','lastname','last','surname','family name']);
+  let name = '';
+  if (firstName || lastName) name = [firstName, lastName].filter(Boolean).join(' ');
+  else name = findField(row, ['name','student name','full name','fullname']);
+  return {
+    id,
+    name,
+    firstName, lastName,
+    email:    findField(row, ['email','e-mail','mail']),
+    major:    findField(row, ['major','program','degree']),
+    advisor:  findField(row, ['advisor','adviser','counselor']),
+    classYear:findField(row, ['class','class status','year','class year','classification','standing','student class']),
+    lastActiveDate: parseDateLoose(ldaRaw),
+    processedDate:  parseDateLoose(procRaw),
+    reason,
+    type,
+  };
+}
+
+// Parse a date value from a CSV cell into YYYY-MM-DD. Accepts ISO, US (M/D/YYYY),
+// and 2-digit-year US dates. Returns '' if it can't make sense of the input.
+function parseDateLoose(s) {
+  if (!s) return '';
+  const t = String(s).trim();
+  if (!t) return '';
+  // ISO already
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) {
+    const [_, y, mo, d] = m;
+    return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  // US M/D/YY[YY] or M-D-YY[YY]
+  m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    let [_, mo, d, y] = m;
+    if (y.length === 2) y = (parseInt(y,10) >= 50 ? '19' : '20') + y;
+    return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  // Fall back to Date parsing
+  const dt = new Date(t);
+  if (!isNaN(dt.getTime())) {
+    const y = dt.getFullYear();
+    const mo = String(dt.getMonth()+1).padStart(2,'0');
+    const d = String(dt.getDate()).padStart(2,'0');
+    return `${y}-${mo}-${d}`;
+  }
+  return '';
+}
+
+// Compute the current-term window. Returns {start, end, name, isOpenEnded}.
+// Both bounds are YYYY-MM-DD strings; end is exclusive (less-than).
+function getCurrentTermWindow() {
+  const start = termSettings.currentStart || '';
+  let end = termSettings.nextStart || '';
+  let isOpenEnded = false;
+  if (!end) {
+    // Fall back to today as the upper bound — withdrawals dated after today
+    // are presumed to belong to whichever term the admin sets up next.
+    const today = new Date();
+    end = today.toISOString().slice(0,10);
+    isOpenEnded = true;
+  }
+  return { start, end, name: termSettings.currentName || 'current term', isOpenEnded };
+}
+
+function isInCurrentTerm(lastActiveDate) {
+  const w = getCurrentTermWindow();
+  if (!w.start || !lastActiveDate) return false;
+  return lastActiveDate >= w.start && lastActiveDate < w.end;
+}
+
+function buildData() {
+  // ── Registered IDs + full registered student records (deduped by ID) ──
+  // The registered CSV has one row per enrollment, so the same student appears
+  // many times. Collapse to one normalized record per ID for fallback lookups
+  // when an ID isn't found in the unregistered CSV.
+  registeredIds = new Set();
+  registeredStudents = {};
+  rawReg.forEach(r => {
+    const s = normalizeStudent(r);
+    if (!s.id) return;
+    registeredIds.add(s.id);
+    if (!registeredStudents[s.id]) {
+      registeredStudents[s.id] = s;
+    } else {
+      // Merge any new sports from duplicate rows
+      s.sports.forEach(sp => {
+        if (sp && !registeredStudents[s.id].sports.includes(sp)) {
+          registeredStudents[s.id].sports.push(sp);
+        }
+      });
+    }
+  });
+
+  // ── New students ──
+  newStudents = {};
+  rawNew.forEach(r => {
+    const s = normalizeStudent(r);
+    if (s.id) {
+      s.status = registeredIds.has(s.id) ? 'Registered' : 'Not Yet Registered';
+      newStudents[s.id] = s;
+    }
+  });
+  const newIds = new Set(Object.keys(newStudents));
+
+  // ── Returning (unregistered report, excluding new students) ──
+  // Step 1: one row per student — duplicate rows only exist for multi-sport athletes;
+  //         merge additional sports, keep everything else from the first row.
+  const unregById = {};
+  rawUnreg.forEach(r => {
+    const s = normalizeStudent(r);
+    if (!s.id || newIds.has(s.id)) return;
+    if (!unregById[s.id]) {
+      unregById[s.id] = s;
+    } else {
+      // Merge any new sports from the duplicate row
+      s.sports.forEach(sp => {
+        if (sp && !unregById[s.id].sports.includes(sp)) {
+          unregById[s.id].sports.push(sp);
+        }
+      });
+    }
+  });
+
+  // Step 2: build returningStudents map (each student counted exactly once)
+  returningStudents = unregById;
+
+  // Step 3: fan each student into EVERY hold group that matches their hold columns
+  holdGroups = {};
+  HOLD_DISPLAY.forEach(h => holdGroups[h] = []);
+  canRegisterStudents = [];
+
+  Object.values(returningStudents).forEach(s => {
+    let hasBlockingHold = false;
+    BLOCKING_HOLDS.forEach((bh, i) => {
+      // Check all hold_1…hold_6 values for this hold type
+      const matched = s.holds.some(h => h.toLowerCase().includes(bh));
+      if (matched) {
+        holdGroups[HOLD_DISPLAY[i]].push(s);
+        hasBlockingHold = true;
+      }
+    });
+    if (!hasBlockingHold) {
+      canRegisterStudents.push(s);
+    }
+  });
+
+  // Also add any returning students from registered report (not in unregistered report)
+  // — these are already registered, no action needed; we don't list them separately.
+
+  // ── Withdrawals ──
+  // Normalize, dedupe by (id, last_active_date), and enrich with the best-known
+  // student record (unreg → new → reg) so the table can show class/advisor/major
+  // even when those columns are absent from the withdrawal CSV.
+  const seenWd = new Set();
+  withdrawalsList = [];
+  rawWithdrawals.forEach(r => {
+    const w = normalizeWithdrawal(r);
+    if (!w.id || !w.lastActiveDate) return; // filter rows without the two required fields
+    const key = `${w.id}|${w.lastActiveDate}`;
+    if (seenWd.has(key)) return;
+    seenWd.add(key);
+    // Enrich from existing student maps. Prefer specific values from the withdrawal
+    // CSV; fall back to whichever student record is available.
+    const stu = returningStudents[w.id] || newStudents[w.id] || registeredStudents[w.id] || null;
+    if (stu) {
+      if (!w.name)      w.name      = stu.name || '';
+      if (!w.firstName) w.firstName = stu.firstName || '';
+      if (!w.lastName)  w.lastName  = stu.lastName || '';
+      if (!w.email)     w.email     = stu.email || '';
+      if (!w.major)     w.major     = stu.major || '';
+      if (!w.advisor)   w.advisor   = stu.advisor || '';
+      if (!w.classYear) w.classYear = stu.classYear || '';
+    }
+    withdrawalsList.push(w);
+  });
+
+  saveNRList();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER ALL
+// ══════════════════════════════════════════════════════════════
+function renderAll() {
+  populateDropdowns();
+  renderSummary();
+  renderHoldsPage();
+  renderCanReg();
+  renderNewStudents();
+  renderWithdrawals();
+  // Recompute NR KPIs so the "Registered for Courses" count reflects the new
+  // registeredIds set after a CSV upload (existing rows can flip status).
+  nrUpdateKpis();
+  nrRender();
+
+  // Update header subtitle
+  const now = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('header-subtitle').textContent = 'Last updated ' + now;
+}
+
+function n(num) { return num.toLocaleString(); }
+
+function renderSummary() {
+  const retTotal   = Object.keys(returningStudents).length;
+  const retUnreg   = retTotal; // all in unregistered report
+  const retReg     = [...registeredIds].filter(id => !newStudents[id]).length;
+  // We can approximate total returning = unregistered (in report) + registered returning
+  const retRegisteredCount = registeredIds.size - Object.keys(newStudents).filter(id=>newStudents[id].status==='Registered').length;
+  const totalRet   = retUnreg + retRegisteredCount;
+  const retRate    = totalRet ? Math.round(retRegisteredCount/totalRet*1000)/10 : 0;
+  const newTotal   = Object.keys(newStudents).length;
+  const newReg     = Object.values(newStudents).filter(s=>s.status==='Registered').length;
+  const allTotal   = totalRet + newTotal;
+  const allReg     = retRegisteredCount + newReg;
+  const canReg     = canRegisterStudents.length;
+
+  document.getElementById('s-total-ret').textContent  = n(totalRet);
+  document.getElementById('s-ret-reg').textContent    = n(retRegisteredCount);
+  document.getElementById('s-ret-unreg').textContent  = n(retUnreg);
+  document.getElementById('s-ret-rate').textContent   = retRate + '%';
+  document.getElementById('s-new-total').textContent  = n(newTotal);
+  document.getElementById('s-new-reg').textContent    = n(newReg);
+  document.getElementById('s-all-total').textContent  = n(allTotal);
+  document.getElementById('s-all-reg').textContent    = n(allReg);
+  document.getElementById('s-can-reg').textContent    = n(canReg);
+
+  // Show/hide
+  document.getElementById('summary-empty').style.display   = 'none';
+  document.getElementById('summary-content').style.display = 'block';
+
+  // Returning Student Status: three donuts at a glance — Registered, Has Blocking
+  // Hold, Can Register. Each shows its count in the center, % of total returning
+  // below, with the donut ring filled to the percentage in its segment color.
+  renderReturningDonuts(retRegisteredCount, Object.values(holdGroups).reduce((a,g)=>a+g.length,0), canReg, totalRet);
+
+  // Per-hold donuts: one circle graph per hold type. Center number = students
+  // with this hold who are still likely returning (i.e. NOT on the NR list).
+  // Smaller number below = total students with this hold. Ring shows the not-returning
+  // slice (red) against the returning slice (hold's accent color).
+  renderHoldDonuts();
+
+  // Reasons-not-returning bar chart. Aggregates over nrList; multi-reason rows count
+  // toward each of their reasons. Sorted desc.
+  renderReasonsChart();
+
+  // Withdrawal KPI strip — only shown when a withdrawal CSV has been loaded.
+  const wdRow = document.getElementById('s-withdrawals-row');
+  if (csvLoaded.withdrawals && withdrawalsList.length) {
+    wdRow.style.display = 'grid';
+    const window = getCurrentTermWindow();
+    const currentTermWds = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate));
+    document.getElementById('s-wd-total').textContent = n(currentTermWds.length);
+    const windowLabel = window.start
+      ? `${window.start} → ${window.end}${window.isOpenEnded ? ' (open-ended)' : ''}`
+      : 'Set term window in upload panel';
+    document.getElementById('s-wd-window').textContent = windowLabel;
+    // Pending NR Match = current-term withdrawals where a human NR row exists for the same student
+    const humanNRIds = new Set(nrList.filter(r => !r._sourceWithdrawalId && r.id).map(r => r.id));
+    const overlap = currentTermWds.filter(w => humanNRIds.has(w.id)).length;
+    document.getElementById('s-wd-pending-overlap').textContent = n(overlap);
+    document.getElementById('s-wd-alltime').textContent = n(withdrawalsList.length);
+  } else {
+    wdRow.style.display = 'none';
+  }
+}
+
+function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
+  const container = document.getElementById('returning-donuts-grid');
+  if (!container) return;
+  const segments = [
+    { label:'Registered',          count: registered,  color:'#16a34a' },
+    { label:'Has Blocking Hold',   count: hasHold,     color:'#dc2626' },
+    { label:'Can Register',        count: canRegister, color:'#0d9488' },
+  ];
+  container.innerHTML = segments.map(seg => svgSegmentDonut({
+    label: seg.label,
+    count: seg.count,
+    total: totalRet,
+    color: seg.color,
+  })).join('');
+}
+
+// SVG donut variant for the returning segments. Ring is filled to count/total
+// percentage in the segment's color. Count is shown big in the center; the raw
+// percentage shows directly underneath. We keep the two text elements well
+// separated so they don't visually clash on smaller screens.
+function svgSegmentDonut({label, count, total, color}) {
+  const size = 110, r = 42, cx = size/2, cy = size/2, sw = 12;
+  const circumference = 2 * Math.PI * r;
+  const pct = total > 0 ? count / total : 0;
+  const filled = circumference * pct;
+  const remaining = circumference - filled;
+  const pctLabel = total > 0 ? Math.round(pct * 1000) / 10 + '%' : '0%';
+  const arc = total > 0
+    ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
+              stroke-dasharray="${filled} ${remaining}" stroke-dashoffset="0"
+              transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt" />`
+    : '';
+  return `<div class="hold-donut-item">
+    <div class="hold-donut-name">${label}</div>
+    <svg class="hold-donut-svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="${sw}" />
+      ${arc}
+      <text x="${cx}" y="${cy - 6}" text-anchor="middle" dominant-baseline="central" font-size="22" font-weight="800" fill="#1a1d23">${count.toLocaleString()}</text>
+      <text x="${cx}" y="${cy + 14}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="600" fill="#6b7280">${pctLabel}</text>
+    </svg>
+  </div>`;
+}
+
+function renderReasonsChart() {
+  // Keep the filter dropdown in sync — new custom reasons appear in the
+  // "Custom reasons" optgroup automatically.
+  nrPopulateReasonFilter();
+  const container = document.getElementById('reasons-chart');
+  if (!container) return;
+  // Single reason per row. Standard reasons (NR_REASONS) get their own bar; any
+  // custom string typed via the Other → text-input swap also gets its own bar so
+  // Tony can see what people are writing in.
+  const tally = {};
+  nrList.forEach(r => {
+    const reason = (r.reason || '').trim();
+    if (!reason) return;
+    tally[reason] = (tally[reason] || 0) + 1;
+  });
+  const entries = Object.entries(tally).sort((a,b) => b[1] - a[1]);
+  if (!entries.length) {
+    container.innerHTML = '<div class="reasons-chart-empty">No Not Returning entries yet — add students on the Not Returning page to see the breakdown.</div>';
+    return;
+  }
+  const max = entries[0][1];
+  container.innerHTML = '<div class="reasons-chart">' + entries.map(([reason, count]) => {
+    const pct = Math.round((count / max) * 100);
+    const isCustom = !NR_REASONS.includes(reason);
+    const labelMarkup = isCustom
+      ? `${reason} <span style="color:#888;font-weight:400;">(custom)</span>`
+      : reason;
+    return `<div class="reason-bar-row">
+      <div class="reason-bar-label" title="${reason}">${labelMarkup}</div>
+      <div class="reason-bar-track"><div class="reason-bar-fill" style="width:${pct}%;"></div></div>
+      <div class="reason-bar-count">${count}</div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function renderHoldDonuts() {
+  const container = document.getElementById('hold-donuts-grid');
+  if (!container) return;
+  const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const shortLabels = ['Advising','Account','Registrar Office','Missing Docs','Immunization'];
+  container.innerHTML = HOLD_DISPLAY.map((h, i) => {
+    const students = holdGroups[h] || [];
+    const total = students.length;
+    const notReturning = students.filter(s => nrIds.has(s.id)).length;
+    const returning = total - notReturning;
+    return svgDonut({
+      label: shortLabels[i],
+      total,
+      returning,
+      notReturning,
+      ringColor: HOLD_COLORS[i],
+      hasNRData: nrIds.size > 0,
+      holdName: h, // full name for the navigation handler
+    });
+  }).join('');
+}
+
+// Click handler for hold donuts. Switches to the Holds Breakdown tab and applies
+// the hold filter, mirroring how clicking a hold card already works on that page.
+function holdDonutClick(holdName) {
+  const tabs = document.querySelectorAll('.nav-tab');
+  // Holds Breakdown is the second tab (index 1)
+  showPage('holds', tabs[1]);
+  holdsFilter(holdName);
+}
+
+// Small SVG donut. ringColor draws the "returning" arc; the rest of the ring
+// (representing not-returning) is drawn in red. If no NR data exists yet the
+// ring is fully ringColor and the legend collapses to just a total.
+function svgDonut({label, total, returning, notReturning, ringColor, hasNRData, holdName}) {
+  const size = 92, r = 36, cx = size/2, cy = size/2, sw = 11;
+  const circumference = 2 * Math.PI * r;
+  const pctReturning = total > 0 ? returning / total : 0;
+  const returningLen = circumference * pctReturning;
+  const remaining = circumference - returningLen;
+  // Background ring (not-returning portion = red); the returning arc is drawn on top.
+  const bgColor = hasNRData ? '#dc2626' : '#e5e7eb';
+  const arc = total > 0
+    ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${ringColor}" stroke-width="${sw}"
+              stroke-dasharray="${returningLen} ${remaining}" stroke-dashoffset="0"
+              transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt" />`
+    : '';
+  const centerNum = hasNRData ? returning : total;
+  const centerSub = hasNRData ? `of ${total}` : 'total';
+  const legend = hasNRData
+    ? `<span><span class="dot" style="background:${ringColor}"></span>${returning} returning</span> &nbsp; <span><span class="dot" style="background:#dc2626"></span>${notReturning} not</span>`
+    : `<span><span class="dot" style="background:${ringColor}"></span>${total} with hold</span>`;
+  const clickHandler = holdName ? `onclick="holdDonutClick('${holdName.replace(/'/g, "\\'")}')"` : '';
+  const clickClass = holdName ? ' hold-donut-item-clickable' : '';
+  return `<div class="hold-donut-item${clickClass}" ${clickHandler} title="View ${label} students">
+    <div class="hold-donut-name">${label}</div>
+    <svg class="hold-donut-svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${bgColor}" stroke-width="${sw}" />
+      ${arc}
+      <text x="${cx}" y="${cy - 1}" text-anchor="middle" dominant-baseline="central" font-size="20" font-weight="800" fill="#1a1d23">${centerNum}</text>
+      <text x="${cx}" y="${cy + 17}" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#888">${centerSub}</text>
+    </svg>
+    <div class="hold-donut-legend">${legend}</div>
+  </div>`;
+}
+
+function renderHoldsPage() {
+  document.getElementById('holds-empty').style.display   = 'none';
+  document.getElementById('holds-content').style.display = 'block';
+
+  const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const totalUnreg = Object.values(holdGroups).reduce((a,g)=>a+g.length,0) + canRegisterStudents.length;
+  const container = document.getElementById('hold-cards-container');
+  container.innerHTML = HOLD_DISPLAY.map((h,i) => {
+    const students = holdGroups[h];
+    const cnt = students.length;
+    const likelyRet = students.filter(s => !nrIds.has(s.id)).length;
+    const pct = totalUnreg ? Math.round(cnt/totalUnreg*1000)/10 : 0;
+    const barW = Math.round(pct);
+    return `<div class="hold-card${currentHold===h?' selected':''}" onclick="holdsFilter('${h}',this)">
+      <div class="hold-type">${h}</div>
+      <div class="hold-count">${n(cnt)}</div>
+      <div class="hold-pct">${pct}% of unregistered</div>
+      <div style="margin-top:8px;font-size:11px;display:flex;gap:10px;">
+        <span style="color:#16a34a;font-weight:600;">${n(likelyRet)} likely returning</span>
+        ${nrIds.size > 0 ? `<span style="color:#dc2626;font-weight:600;">${n(cnt - likelyRet)} not returning</span>` : ''}
+      </div>
+      <div class="hold-bar-bg"><div class="hold-bar-fill" style="width:${barW}%;background:${HOLD_COLORS[i]};"></div></div>
+    </div>`;
+  }).join('');
+
+  if (!currentHold && HOLD_DISPLAY.length) {
+    currentHold = HOLD_DISPLAY[0];
+    container.querySelector('.hold-card').classList.add('selected');
+  }
+  holdsApply();
+}
+
+function renderCanReg() {
+  document.getElementById('canreg-empty').style.display   = 'none';
+  document.getElementById('canreg-content').style.display = 'block';
+  crApply();
+}
+
+function renderNewStudents() {
+  if (!csvLoaded.new) return;
+  document.getElementById('new-empty').style.display   = 'none';
+  document.getElementById('new-content').style.display = 'block';
+  const students = Object.values(newStudents);
+  document.getElementById('ns-total').textContent = n(students.length);
+  document.getElementById('ns-reg').textContent   = n(students.filter(s=>s.status==='Registered').length);
+  document.getElementById('ns-unreg').textContent = n(students.filter(s=>s.status==='Not Yet Registered').length);
+  nsApply();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DROPDOWN POPULATION
+// ══════════════════════════════════════════════════════════════
+function populateDropdowns() {
+  const all = [...Object.values(returningStudents), ...Object.values(newStudents)];
+  const majors   = [...new Set(all.map(s=>s.major).filter(Boolean))].sort();
+  const advisors = [...new Set(all.map(s=>s.advisor).filter(Boolean))].sort();
+  // Collect all unique team names across all students
+  const teams = [...new Set(
+    all.flatMap(s => s.sports || (s.sport ? [s.sport] : []))
+       .filter(Boolean)
+  )].sort();
+
+  function fillSelect(id, items, label) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">All ${label}</option>`;
+    items.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+    if (items.includes(cur)) sel.value = cur;
+  }
+  ['h-major','cr-major','ns-major'].forEach(id=>fillSelect(id,majors,'Majors'));
+  ['h-advisor','cr-advisor','ns-advisor'].forEach(id=>fillSelect(id,advisors,'Advisors'));
+  ['h-team','cr-team','ns-team'].forEach(id=>fillSelect(id,teams,'Teams'));
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TABLE RENDERING HELPERS
+// ══════════════════════════════════════════════════════════════
+function sc(s) {
+  const sports = s.sports || (s.sport ? [s.sport] : []);
+  if (!sports.length) return '<span style="color:#bbb;font-size:11px;">—</span>';
+  return sports.map(sp => `<span class="athlete-badge" style="margin-right:3px;">${sp}</span>`).join('');
+}
+function classChip(val) {
+  if (!val) return '<span style="color:#bbb;font-size:11px;">—</span>';
+  const v = val.toLowerCase();
+  const map = {freshman:'chip-indigo',sophomore:'chip-blue',junior:'chip-teal',senior:'chip-green'};
+  const key = Object.keys(map).find(k=>v.includes(k));
+  return `<span class="chip ${key ? map[key] : 'chip-gray'}">${val}</span>`;
+}
+function applySort(rows, state) {
+  if (!state.col) return rows;
+  return [...rows].sort((a,b) => {
+    let av = a[state.col], bv = b[state.col];
+    // Arrays (sports) — sort by first value
+    if (Array.isArray(av)) av = av[0] || '';
+    if (Array.isArray(bv)) bv = bv[0] || '';
+    return ((av||'') > (bv||'') ? 1 : -1) * state.dir;
+  });
+}
+function setSortHeader(tableId, col, state) {
+  document.querySelectorAll('#'+tableId+' .sortable').forEach(th=>{th.classList.remove('asc','desc');});
+  const ths = document.querySelectorAll('#'+tableId+' .sortable');
+  // match by onclick attribute
+  ths.forEach(th => {
+    const fn = th.getAttribute('onclick')||'';
+    if (fn.includes("'"+col+"'") || fn.includes('"'+col+'"')) {
+      th.classList.add(state.dir===1?'asc':'desc');
+    }
+  });
+}
+function emptyRow(cols, msg) {
+  return `<tr><td colspan="${cols}" style="text-align:center;padding:18px;color:#888;">${msg}</td></tr>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HOLDS TAB
+// ══════════════════════════════════════════════════════════════
+function holdsFilter(holdType, el) {
+  document.querySelectorAll('#hold-cards-container .hold-card').forEach(c=>c.classList.remove('selected'));
+  // When called from a hold card click we get the element directly; when called
+  // from a Summary donut we need to look up the matching card by hold-type index.
+  let target = el;
+  if (!target) {
+    const idx = HOLD_DISPLAY.indexOf(holdType);
+    if (idx >= 0) {
+      target = document.querySelectorAll('#hold-cards-container .hold-card')[idx];
+    }
+  }
+  if (target) target.classList.add('selected');
+  currentHold = holdType;
+  hSort = {col:null,dir:1};
+  ['h-search','h-major','h-advisor','h-sport'].forEach(id=>{ const e=document.getElementById(id); if(e)e.value=''; });
+  holdsApply();
+}
+function holdsSort(col) {
+  if (hSort.col===col) hSort.dir*=-1; else { hSort.col=col; hSort.dir=1; }
+  holdsApply();
+}
+function holdsApply() {
+  if (!currentHold) return;
+  const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const retOnly = document.getElementById('h-returning').value === 'returning';
+  const cls     = document.getElementById('h-class').value.toLowerCase();
+  const major   = document.getElementById('h-major').value;
+  const advisor = document.getElementById('h-advisor').value;
+  const sport   = document.getElementById('h-sport').value;
+  const team    = document.getElementById('h-team').value;
+  const q       = document.getElementById('h-search').value.toLowerCase();
+  let rows = [...(holdGroups[currentHold]||[])];
+  if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
+  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
+  if (major)   rows=rows.filter(r=>r.major===major);
+  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
+  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
+  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  rows = applySort(rows, hSort);
+  const holdIdx = HOLD_DISPLAY.indexOf(currentHold);
+  const chip = holdIdx>=0 ? HOLD_CHIPS[holdIdx] : 'chip-blue';
+  const total = (holdGroups[currentHold]||[]).length;
+  const retCount = total - (holdGroups[currentHold]||[]).filter(r=>nrIds.has(r.id)).length;
+  document.getElementById('h-title').textContent = retOnly
+    ? `${currentHold} — ${n(retCount)} Likely Returning`
+    : `${currentHold} — ${n(total)} Students`;
+  const tbody = document.getElementById('holds-tbody');
+  tbody.innerHTML = rows.length
+    ? rows.map(r => {
+        const isNR = nrIds.has(r.id);
+        const rowStyle = isNR ? ' style="background:#fff5f5;"' : '';
+        const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
+        return `<tr${rowStyle}>
+          <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td>${r.firstName||r.name||''}</td>
+          <td style="color:#555;">${r.email}</td>
+          <td><span class="chip ${chip}">${currentHold}</span></td>
+          <td>${classChip(r.classYear)}</td>
+          <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
+        </tr>`;
+      }).join('')
+    : emptyRow(9,'No students match.');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CAN REGISTER TAB
+// ══════════════════════════════════════════════════════════════
+function crSort(col) { if(crSort_.col===col)crSort_.dir*=-1;else{crSort_.col=col;crSort_.dir=1;} crApply(); }
+function crApply() {
+  const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const retOnly = document.getElementById('cr-returning').value === 'returning';
+  const cls     = document.getElementById('cr-class').value.toLowerCase();
+  const major   = document.getElementById('cr-major').value;
+  const advisor = document.getElementById('cr-advisor').value;
+  const sport   = document.getElementById('cr-sport').value;
+  const team    = document.getElementById('cr-team').value;
+  const q       = document.getElementById('cr-search').value.toLowerCase();
+  let rows = [...canRegisterStudents];
+  if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
+  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
+  if (major)   rows=rows.filter(r=>r.major===major);
+  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
+  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
+  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  rows=applySort(rows,crSort_);
+  const retCount = canRegisterStudents.filter(r=>!nrIds.has(r.id)).length;
+  document.getElementById('cr-title').textContent = retOnly
+    ? `${n(retCount)} Likely Returning — No Blocking Holds`
+    : `${n(canRegisterStudents.length)} Students — No Blocking Holds`;
+  const tbody=document.getElementById('cr-tbody');
+  tbody.innerHTML = rows.length
+    ? rows.map(r => {
+        const isNR = nrIds.has(r.id);
+        const rowStyle = isNR ? ' style="background:#fff5f5;"' : '';
+        const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
+        return `<tr${rowStyle}>
+          <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td>${r.firstName||r.name||''}</td>
+          <td style="color:#555;">${r.email}</td>
+          <td>${classChip(r.classYear)}</td>
+          <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
+        </tr>`;
+      }).join('')
+    : emptyRow(8,'No students match.');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NEW STUDENTS TAB
+// ══════════════════════════════════════════════════════════════
+function nsSort(col) { if(nsSort_.col===col)nsSort_.dir*=-1;else{nsSort_.col=col;nsSort_.dir=1;} nsApply(); }
+function nsApply() {
+  const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const retOnly = document.getElementById('ns-returning').value === 'returning';
+  const status  = document.getElementById('ns-status').value;
+  const cls     = document.getElementById('ns-class').value.toLowerCase();
+  const major   = document.getElementById('ns-major').value;
+  const advisor = document.getElementById('ns-advisor').value;
+  const sport   = document.getElementById('ns-sport').value;
+  const team    = document.getElementById('ns-team').value;
+  const q       = document.getElementById('ns-search').value.toLowerCase();
+  let rows = Object.values(newStudents);
+  if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
+  if (status)  rows=rows.filter(r=>r.status===status);
+  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
+  if (major)   rows=rows.filter(r=>r.major===major);
+  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
+  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
+  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  rows=applySort(rows,nsSort_);
+  document.getElementById('ns-title').textContent = `${n(Object.keys(newStudents).length)} New Students`;
+  const tbody=document.getElementById('ns-tbody');
+  tbody.innerHTML = rows.length
+    ? rows.map(r => {
+        const isNR = nrIds.has(r.id);
+        const rowStyle = isNR ? ' style="background:#fff5f5;"' : '';
+        const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
+        return `<tr${rowStyle}>
+          <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td>${r.firstName||r.name||''}</td>
+          <td style="color:#555;">${r.email}</td>
+          <td><span class="chip ${r.status==='Registered'?'chip-green':'chip-amber'}">${r.status}</span></td>
+          <td>${classChip(r.classYear)}</td>
+          <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
+        </tr>`;
+      }).join('')
+    : emptyRow(9,'No students match.');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NOT RETURNING
+// ══════════════════════════════════════════════════════════════
+function loadNRList() {
+  try { nrList = JSON.parse(localStorage.getItem('nr_list')||'[]'); } catch(e) { nrList=[]; }
+  // Migrate older shapes back to a single `reason` string. Two prior shapes exist:
+  //   1. `reason` (string)            ← original
+  //   2. `reasons` (array of strings) ← multi-select experiment, now reverted
+  // Take the first non-empty value, remap legacy names, and drop the array field.
+  nrList.forEach(r => {
+    if (Array.isArray(r.reasons)) {
+      if (!r.reason && r.reasons.length) r.reason = r.reasons[0];
+      delete r.reasons;
+    }
+    if (r.reason && NR_REASON_LEGACY[r.reason]) r.reason = NR_REASON_LEGACY[r.reason];
+    if (!r.reason) r.reason = '';
+  });
+}
+function saveNRList() {
+  try { localStorage.setItem('nr_list', JSON.stringify(nrList)); } catch(e) {}
+}
+
+// Set of withdrawal-source IDs the user has explicitly removed from the NR
+// list. syncWithdrawalsToNR consults this so re-uploading the same CSV doesn't
+// re-create rows the user already moderated away.
+let nrIgnoredWithdrawalIds = new Set();
+function loadIgnoredWithdrawals() {
+  try {
+    const raw = localStorage.getItem('nr_ignored_withdrawals');
+    if (raw) nrIgnoredWithdrawalIds = new Set(JSON.parse(raw));
+  } catch(e) { nrIgnoredWithdrawalIds = new Set(); }
+}
+function saveIgnoredWithdrawals() {
+  try { localStorage.setItem('nr_ignored_withdrawals', JSON.stringify([...nrIgnoredWithdrawalIds])); } catch(e) {}
+}
+
+function nrAdd() {
+  const id         = document.getElementById('nr-f-id').value.trim();
+  const name       = document.getElementById('nr-f-name').value.trim();
+  const major      = document.getElementById('nr-f-major').value.trim();
+  // Email/advisor are no longer collected from the form (the columns were dropped
+  // from the table). They still get populated from CSV lookup when an ID matches.
+  const email = '';
+  const advisor = '';
+  // Reason: single select. If "Other" is chosen, the linked text input holds the
+  // custom string and we use that as the actual reason. Picking Other without
+  // typing falls back to the literal string "Other" so we don't lose the entry.
+  const reasonSel  = document.getElementById('nr-f-reason').value;
+  const reasonOther = document.getElementById('nr-f-reason-other').value.trim();
+  const reason     = (reasonSel === 'Other' && reasonOther) ? reasonOther : reasonSel;
+  const withdrawal = document.getElementById('nr-f-withdrawal').value;
+  const notes      = document.getElementById('nr-f-notes').value.trim();
+  const warn       = document.getElementById('nr-dup-warn');
+
+  if (!id && !name) { warn.style.display='block'; warn.textContent='Please enter at least a Student ID or Name.'; return; }
+
+  // Look up student data from CSVs. Order matters: prefer unregistered (the source we
+  // already report on), then new students, then fall back to the registered CSV so
+  // committee members can still flag students whose data only appears there.
+  // Lookup is by ID first, then by case-insensitive name when no ID was typed.
+  let csvStudent = null;
+  let foundInRegisteredOnly = false;
+  if (csvLoaded.unreg || csvLoaded.reg || csvLoaded.new) {
+    if (id) {
+      if      (returningStudents[id])  csvStudent = returningStudents[id];
+      else if (newStudents[id])        csvStudent = newStudents[id];
+      else if (registeredStudents[id]) { csvStudent = registeredStudents[id]; foundInRegisteredOnly = true; }
+    } else if (name) {
+      const nameKey = name.toLowerCase();
+      const matchByName = (map) => Object.values(map).find(s => (s.name||'').toLowerCase() === nameKey);
+      csvStudent = matchByName(returningStudents) || matchByName(newStudents) || null;
+      if (!csvStudent) {
+        const reg = matchByName(registeredStudents);
+        if (reg) { csvStudent = reg; foundInRegisteredOnly = true; }
+      }
+    }
+  }
+
+  // Resolve final ID: prefer typed ID, otherwise pull from the matched CSV record
+  const resolvedId = id || (csvStudent?.id || '');
+
+  // Check for duplicate ID
+  if (resolvedId && nrList.find(s=>s.id===resolvedId)) {
+    warn.style.display='block';
+    warn.textContent='A student with ID ' + resolvedId + ' is already on the Not Returning list.';
+    return;
+  }
+  warn.style.display='none';
+
+  // Is this student registered for at least one course? True if we found them via
+  // the registered-CSV fallback OR if their resolved ID is in registeredIds.
+  const isRegistered = foundInRegisteredOnly || (resolvedId && registeredIds.has(resolvedId));
+
+  const today = new Date().toISOString().slice(0,10);
+  nrList.unshift({
+    id:           resolvedId,
+    name:         name       || csvStudent?.name    || '',
+    email:        email      || csvStudent?.email   || '',
+    major:        major      || csvStudent?.major   || '',
+    advisor:      advisor    || csvStudent?.advisor || '',
+    sport:        csvStudent?.sports?.join(', ') || '',
+    isRegistered: !!isRegistered,
+    reason,
+    notes, withdrawal, dateAdded: today
+  });
+
+  saveNRList(); nrUpdateKpis(); nrRender();
+  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); } // refresh hold counts
+  renderReasonsChart();
+
+  // Reset form fields
+  ['nr-f-id','nr-f-name','nr-f-major','nr-f-notes'].forEach(fid=>document.getElementById(fid).value='');
+  document.getElementById('nr-f-reason').value='';
+  document.getElementById('nr-f-reason-other').value='';
+  document.getElementById('nr-f-reason-other').style.display='none';
+  document.getElementById('nr-f-withdrawal').value='Pending';
+  // Focus back to ID field for quick successive entry
+  document.getElementById('nr-f-id').focus();
+}
+
+// Allow Enter key on any add-row input to submit
+document.addEventListener('keydown', function(e) {
+  if (e.key==='Enter' && e.target.closest && e.target.closest('.nr-add-row')) nrAdd();
+});
+
+function nrRemove(idx) {
+  const row = nrList[idx];
+  const isFromCSV = !!(row && row._sourceWithdrawalId);
+  const msg = isFromCSV
+    ? 'Remove this auto-imported withdrawal from the Not Returning list? It will not be re-added on future withdrawal CSV imports.'
+    : 'Remove this student from the Not Returning list?';
+  if (!confirm(msg)) return;
+  if (isFromCSV) {
+    nrIgnoredWithdrawalIds.add(row._sourceWithdrawalId);
+    saveIgnoredWithdrawals();
+  }
+  nrList.splice(idx, 1);
+  saveNRList(); nrUpdateKpis(); nrRender();
+  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); }
+  renderReasonsChart();
+  if (csvLoaded.withdrawals) renderWithdrawals();
+}
+
+function nrSort(col) { if(nrSort_.col===col)nrSort_.dir*=-1;else{nrSort_.col=col;nrSort_.dir=1;} nrRender(); }
+
+function nrUpdateKpis() {
+  document.getElementById('nr-count').textContent    = n(nrList.length);
+  document.getElementById('nr-pending').textContent  = n(nrList.filter(s=>s.withdrawal==='Pending').length);
+  document.getElementById('nr-complete').textContent = n(nrList.filter(s=>s.withdrawal==='Complete').length);
+  // "Registered for Courses" count: students on the NR list who are also enrolled
+  // in at least one course. Surfaces the discrepancy between "flagged not returning"
+  // and "actually still registered" so the committee can reconcile.
+  const regNRCount = nrList.filter(s => isNRRegistered(s)).length;
+  const regEl = document.getElementById('nr-registered');
+  if (regEl) regEl.textContent = n(regNRCount);
+}
+
+// True if this NR entry is also registered for courses. Combines the flag set at
+// add time with a live re-check against the current registeredIds (so re-uploading
+// CSVs reconciles existing entries automatically).
+function isNRRegistered(r) {
+  if (r.isRegistered) return true;
+  if (r.id && registeredIds && registeredIds.has(r.id)) return true;
+  return false;
+}
+
+function nrRender() {
+  const wf = document.getElementById('nr-filter-withdrawal').value;
+  const rf = document.getElementById('nr-filter-reason').value;
+  const q  = document.getElementById('nr-search').value.toLowerCase();
+  // Build indexed copy so action buttons can refer back to the original nrList index
+  let indexed = nrList.map((r,i)=>({...r, _idx:i}));
+  if (wf) indexed=indexed.filter(r=>r.withdrawal===wf);
+  if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
+  if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.id||'')).toLowerCase().includes(q));
+  indexed=applySort(indexed,nrSort_);
+  const tbody=document.getElementById('nr-tbody');
+  if (!indexed.length) { tbody.innerHTML=emptyRow(9,'No students on the Not Returning list yet. Use the form above to add the first entry.'); return; }
+  tbody.innerHTML=indexed.map(r=>{
+    if (r._idx === nrEditIdx) return nrRenderEditRow(r);
+    return nrRenderStaticRow(r);
+  }).join('');
+}
+
+function nrRenderStaticRow(r) {
+  const wChip = r.withdrawal==='Complete' ? 'chip-green' : 'chip-amber';
+  const regCell = isNRRegistered(r)
+    ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
+    : '<span style="color:#bbb;font-size:11px;">—</span>';
+  const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
+  const sourceChip = r._sourceWithdrawalId
+    ? `<span class="nr-source-chip" title="Auto-imported from withdrawal CSV — Last Active ${esc(r._withdrawalLDA||'')}">From CSV</span>`
+    : '';
+  return `<tr>
+    <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
+    <td style="font-weight:600;">${r.name||'—'}${sourceChip}</td>
+    <td>${regCell}</td>
+    <td style="font-size:11px;">${r.major||'—'}</td>
+    <td>${renderReasonCell(r._idx, r.reason)}</td>
+    <td><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
+    <td><span class="chip ${wChip}">${r.withdrawal}</span></td>
+    <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
+    <td style="white-space:nowrap;">
+      <button onclick="nrEdit(${r._idx})" class="nr-row-btn" title="Edit">Edit</button>
+      <button onclick="nrRemove(${r._idx})" class="nr-row-btn nr-row-btn-danger" title="Remove">Remove</button>
+    </td>
+  </tr>`;
+}
+
+// Transient flag: true when a row's reason cell should render as a text input
+// because the user just selected "Other" and hasn't typed yet. Not persisted.
+const nrOtherMode = {};
+
+// Render the reason cell. Modes:
+//  - dropdown: when the row's reason is empty or matches a NR_REASONS value
+//  - text input: when the reason is custom (not in NR_REASONS) OR otherMode is on
+// In text-input mode, a small × revert button restores the dropdown (sets reason='').
+function renderReasonCell(idx, reason) {
+  const isStandard = !reason || NR_REASONS.includes(reason);
+  const showText = !isStandard || nrOtherMode[idx];
+  if (showText) {
+    const esc = (reason||'').replace(/"/g,'&quot;');
+    return `<span class="nr-reason-other-wrap">
+      <input type="text" class="nr-cell-input" id="nr-cell-reason-${idx}"
+             value="${esc}" placeholder="Type a custom reason"
+             onblur="nrCellReasonText(${idx}, this)"
+             onkeydown="if(event.key==='Enter')this.blur();"
+             style="width:130px;" />
+      <button class="nr-cell-revert" onclick="nrResetReason(${idx})" title="Pick a category instead">×</button>
+    </span>`;
+  }
+  const opts = ['<option value="">— Select —</option>']
+    .concat(NR_REASONS.map(o => `<option ${reason===o?'selected':''}>${o}</option>`))
+    .join('');
+  return `<select class="nr-cell-input" onchange="nrCellReason(${idx}, this)" style="width:140px;">${opts}</select>`;
+}
+
+// Inline cell handlers — update nrList in place, persist, and re-render only what's needed.
+function nrCellReason(idx, el) {
+  const v = el.value;
+  if (v === 'Other') {
+    // Swap to text input mode so the user can type a custom reason
+    nrOtherMode[idx] = true;
+    nrList[idx].reason = '';
+    saveNRList();
+    nrRender();
+    setTimeout(() => { const i = document.getElementById(`nr-cell-reason-${idx}`); if (i) i.focus(); }, 0);
+    return;
+  }
+  nrOtherMode[idx] = false;
+  nrList[idx].reason = v;
+  saveNRList();
+  nrUpdateKpis();
+  renderReasonsChart();
+}
+
+function nrCellReasonText(idx, el) {
+  const v = el.value.trim();
+  nrList[idx].reason = v;
+  if (!v) nrOtherMode[idx] = false;     // empty → revert to dropdown view
+  saveNRList();
+  nrUpdateKpis();
+  renderReasonsChart();
+  nrRender();
+}
+
+function nrResetReason(idx) {
+  nrList[idx].reason = '';
+  nrOtherMode[idx] = false;
+  saveNRList();
+  nrUpdateKpis();
+  renderReasonsChart();
+  nrRender();
+}
+
+function nrCellNotes(idx, el) {
+  nrList[idx].notes = el.value;
+  saveNRList();
+}
+
+function nrRenderEditRow(r) {
+  const withOpts = ['Pending','Complete']
+    .map(o => `<option ${r.withdrawal===o?'selected':''}>${o}</option>`)
+    .join('');
+  const isStandard = !r.reason || NR_REASONS.includes(r.reason);
+  const reasonOpts = ['<option value="">— Select —</option>']
+    .concat(NR_REASONS.map(o => `<option ${r.reason===o?'selected':''}>${o}</option>`))
+    .join('');
+  const reasonField = isStandard
+    ? `<select class="nr-edit-input" id="nr-e-reason-${r._idx}" style="width:140px;">${reasonOpts}</select>`
+    : `<input class="nr-edit-input" id="nr-e-reason-${r._idx}" value="${(r.reason||'').replace(/"/g,'&quot;')}" placeholder="Custom reason" style="width:140px;" />`;
+  const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
+  const regCell = isNRRegistered(r)
+    ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
+    : '<span style="color:#bbb;font-size:11px;">—</span>';
+  return `<tr style="background:#fffbeb;">
+    <td><input class="nr-edit-input" id="nr-e-id-${r._idx}"      value="${esc(r.id)}"      style="width:90px;font-family:monospace;" /></td>
+    <td><input class="nr-edit-input" id="nr-e-name-${r._idx}"    value="${esc(r.name)}"    style="width:140px;" /></td>
+    <td>${regCell}</td>
+    <td><input class="nr-edit-input" id="nr-e-major-${r._idx}"   value="${esc(r.major)}"   style="width:110px;" /></td>
+    <td>${reasonField}</td>
+    <td><input class="nr-edit-input" id="nr-e-notes-${r._idx}"   value="${esc(r.notes)}"   style="width:160px;" /></td>
+    <td><select class="nr-edit-input" id="nr-e-withdrawal-${r._idx}" style="width:90px;">${withOpts}</select></td>
+    <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
+    <td style="white-space:nowrap;">
+      <button onclick="nrSave(${r._idx})"     class="nr-row-btn nr-row-btn-primary" title="Save">Save</button>
+      <button onclick="nrCancelEdit()"        class="nr-row-btn" title="Cancel">Cancel</button>
+    </td>
+  </tr>`;
+}
+
+function nrEdit(idx) {
+  nrEditIdx = idx;
+  nrRender();
+}
+
+function nrCancelEdit() {
+  nrEditIdx = null;
+  nrRender();
+}
+
+function nrSave(idx) {
+  const r = nrList[idx];
+  if (!r) { nrEditIdx = null; nrRender(); return; }
+  const v = id => document.getElementById(`nr-e-${id}-${idx}`).value.trim();
+  const newId = v('id');
+  // Prevent collision with another existing row's ID
+  if (newId && newId !== r.id && nrList.some((s,i)=>i!==idx && s.id===newId)) {
+    alert('Another row already uses Student ID ' + newId + '.');
+    return;
+  }
+  r.id          = newId;
+  r.name        = v('name');
+  r.major       = v('major');
+  r.reason      = v('reason');           // works for both <select> and <input> editors
+  r.notes       = v('notes');
+  r.withdrawal  = document.getElementById(`nr-e-withdrawal-${idx}`).value;
+  // Re-evaluate isRegistered based on current CSV state
+  r.isRegistered = !!(r.id && registeredIds && registeredIds.has(r.id));
+  nrEditIdx = null;
+  saveNRList(); nrUpdateKpis(); nrRender();
+  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); }
+  renderReasonsChart();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WITHDRAWALS TAB
+// ══════════════════════════════════════════════════════════════
+function loadTermSettings() {
+  try {
+    const raw = localStorage.getItem('term_settings');
+    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:''}, JSON.parse(raw));
+  } catch(e) {}
+  // Reflect into the form
+  const cn = document.getElementById('ts-current-name');
+  const cs = document.getElementById('ts-current-start');
+  const ns = document.getElementById('ts-next-start');
+  if (cn) cn.value = termSettings.currentName || '';
+  if (cs) cs.value = termSettings.currentStart || '';
+  if (ns) ns.value = termSettings.nextStart || '';
+  updateTermWindowDisplay();
+}
+
+function saveTermSettings() {
+  termSettings = {
+    currentName:  (document.getElementById('ts-current-name').value || '').trim(),
+    currentStart: document.getElementById('ts-current-start').value || '',
+    nextStart:    document.getElementById('ts-next-start').value || '',
+  };
+  try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
+  updateTermWindowDisplay();
+  // If withdrawals are already loaded, re-sync NR + re-render so the new window takes effect
+  if (csvLoaded.withdrawals) {
+    syncWithdrawalsToNR();
+    renderAll();
+  } else {
+    // Even without withdrawal data, the current-term filter affects the Withdrawals tab empty state
+    renderWithdrawals();
+  }
+}
+
+function updateTermWindowDisplay() {
+  const el = document.getElementById('ts-window-display');
+  if (!el) return;
+  const w = getCurrentTermWindow();
+  if (!w.start) { el.textContent = '[set dates]'; return; }
+  el.textContent = `[${w.start}, ${w.end})${w.isOpenEnded ? ' — open-ended (uses today)' : ''}`;
+}
+
+// Auto-sync rule: each current-term withdrawal becomes a Not Returning row
+// tagged with _sourceWithdrawalId so re-imports are idempotent. Human-entered
+// rows for the same student are preserved as separate rows; admin reconciles.
+function syncWithdrawalsToNR() {
+  if (!withdrawalsList.length) return;
+  // Only sync withdrawals that fall in the current term window. Withdrawals
+  // dated before the term began belong to a prior term and shouldn't appear
+  // on the current NR list, even though they remain in withdrawalsList.
+  const inTerm = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate));
+  const existing = new Set(nrList.map(r => r._sourceWithdrawalId).filter(Boolean));
+  let added = 0;
+  inTerm.forEach(w => {
+    const sourceId = `wd-${w.id}-${w.lastActiveDate}`;
+    if (existing.has(sourceId)) return; // already imported, idempotent
+    if (nrIgnoredWithdrawalIds.has(sourceId)) return; // user removed this earlier — don't bring it back
+    // Map withdrawal reason onto NR vocabulary where possible
+    const mappedReason = mapWithdrawalReason(w.reason);
+    nrList.unshift({
+      id: w.id,
+      name: w.name || '',
+      email: w.email || '',
+      major: w.major || '',
+      advisor: w.advisor || '',
+      sport: '',
+      isRegistered: !!(w.id && registeredIds && registeredIds.has(w.id)),
+      reason: mappedReason,
+      notes: w.processedDate ? `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}; processed ${w.processedDate}.` : `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}.`,
+      withdrawal: 'Complete',
+      dateAdded: new Date().toISOString().slice(0,10),
+      _sourceWithdrawalId: sourceId,
+      _withdrawalLDA: w.lastActiveDate,
+    });
+    added++;
+  });
+  if (added > 0) saveNRList();
+}
+
+// Best-effort mapping of free-text withdrawal reasons → the NR_REASONS vocabulary.
+// Anything we don't recognize is passed through verbatim and surfaces as a
+// "(custom)" reason, identical to how typed Other reasons already behave.
+function mapWithdrawalReason(raw) {
+  const r = (raw || '').trim();
+  if (!r) return '';
+  const lc = r.toLowerCase();
+  if (NR_REASONS.includes(r)) return r;
+  if (lc.includes('transfer'))                        return 'Transfer to another institution';
+  if (lc.includes('financial') || lc.includes('money')|| lc.includes('cost')) return 'Financial hardship';
+  if (lc.includes('medical')  || lc.includes('health'))                       return 'Medical';
+  if (lc.includes('suspen')   || lc.includes('dismiss'))                      return 'Suspension';
+  if (lc.includes('military'))                                                return 'Military service';
+  if (lc.includes('major')    && lc.includes('change'))                       return 'Academics - Major';
+  if (lc.includes('academic') || lc.includes('grade')|| lc.includes('gpa'))  return 'Academics - Performance';
+  if (lc.includes('housing')  || lc.includes('dorm'))                         return 'Housing';
+  if (lc.includes('athletic') || lc.includes('sport'))                        return 'Athletic';
+  if (lc.includes('faculty')  || lc.includes('staff'))                        return 'Conflict with Faculty and/or Staff';
+  if (lc.includes('family')   || lc.includes('personal'))                     return 'Personal / family circumstances';
+  return r; // surface verbatim
+}
+
+function renderWithdrawals() {
+  if (!csvLoaded.withdrawals || !withdrawalsList.length) {
+    document.getElementById('wd-empty').style.display   = 'block';
+    document.getElementById('wd-content').style.display = 'none';
+    return;
+  }
+  document.getElementById('wd-empty').style.display   = 'none';
+  document.getElementById('wd-content').style.display = 'block';
+  // Populate filter dropdowns from withdrawal data
+  const majors   = [...new Set(withdrawalsList.map(w=>w.major).filter(Boolean))].sort();
+  const advisors = [...new Set(withdrawalsList.map(w=>w.advisor).filter(Boolean))].sort();
+  const reasons  = [...new Set(withdrawalsList.map(w=>w.reason).filter(Boolean))].sort();
+  fillSelectKeepValue('wd-major', majors, 'Majors');
+  fillSelectKeepValue('wd-advisor', advisors, 'Advisors');
+  fillSelectKeepValue('wd-reason', reasons, 'Reasons');
+  wdRender();
+}
+
+// Tiny helper so multiple tabs can refresh select options without trampling
+// the user's current selection. Same idea as populateDropdowns' inner fn.
+function fillSelectKeepValue(id, items, label) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">All ${label}</option>` +
+    items.map(v => `<option value="${(v+'').replace(/"/g,'&quot;')}">${v}</option>`).join('');
+  if (items.includes(cur)) sel.value = cur;
+}
+
+function wdSort(col) {
+  if (wdSort_.col === col) wdSort_.dir *= -1; else { wdSort_.col = col; wdSort_.dir = 1; }
+  wdRender();
+}
+
+function wdRender() {
+  const termFilter = document.getElementById('wd-term').value;
+  const cls     = document.getElementById('wd-class').value.toLowerCase();
+  const major   = document.getElementById('wd-major').value;
+  const advisor = document.getElementById('wd-advisor').value;
+  const reason  = document.getElementById('wd-reason').value;
+  const q       = (document.getElementById('wd-search').value || '').toLowerCase();
+
+  let rows = [...withdrawalsList];
+  if (termFilter === 'current') rows = rows.filter(w => isInCurrentTerm(w.lastActiveDate));
+  if (cls)     rows = rows.filter(w => (w.classYear||'').toLowerCase().includes(cls));
+  if (major)   rows = rows.filter(w => w.major === major);
+  if (advisor) rows = rows.filter(w => w.advisor === advisor);
+  if (reason)  rows = rows.filter(w => w.reason === reason);
+  if (q)       rows = rows.filter(w => ((w.name||'')+(w.id||'')).toLowerCase().includes(q));
+  rows = applySort(rows, wdSort_);
+
+  // KPI strip (computed off the unfiltered current-term set so the headline
+  // numbers don't shift when the user fiddles with the table filters)
+  const ctw = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate));
+  const total = ctw.length;
+  const reasonTally = {};
+  ctw.forEach(w => { const r = (w.reason||'').trim(); if (r) reasonTally[r] = (reasonTally[r]||0)+1; });
+  const reasonEntries = Object.entries(reasonTally).sort((a,b)=>b[1]-a[1]);
+  const classTally = {};
+  ctw.forEach(w => { const c = (w.classYear||'').trim(); if (c) classTally[c] = (classTally[c]||0)+1; });
+  const classEntries = Object.entries(classTally).sort((a,b)=>b[1]-a[1]);
+  const humanNRIds = new Set(nrList.filter(r => !r._sourceWithdrawalId && r.id).map(r => r.id));
+  const overlap = ctw.filter(w => humanNRIds.has(w.id)).length;
+
+  const w = getCurrentTermWindow();
+  const windowLabel = w.start
+    ? `${w.start} → ${w.end}${w.isOpenEnded ? ' (open-ended)' : ''}`
+    : 'No term window set';
+  document.getElementById('wd-k-total').textContent = n(total);
+  document.getElementById('wd-k-window').textContent = windowLabel;
+  document.getElementById('wd-k-reason').textContent = reasonEntries[0]?.[0] || '—';
+  document.getElementById('wd-k-reason-sub').textContent = reasonEntries[0] ? `${reasonEntries[0][1]} of ${total} this term` : 'No data';
+  document.getElementById('wd-k-class').textContent = classEntries[0]?.[0] || '—';
+  document.getElementById('wd-k-class-sub').textContent = classEntries[0] ? `${classEntries[0][1]} of ${total} this term` : 'No data';
+  document.getElementById('wd-k-overlap').textContent = n(overlap);
+
+  document.getElementById('wd-title').textContent = termFilter === 'current'
+    ? `${n(rows.length)} of ${n(total)} current-term withdrawals (${windowLabel})`
+    : `${n(rows.length)} of ${n(withdrawalsList.length)} all-term withdrawals`;
+
+  const nrSourceSet = new Set(nrList.filter(r => r._sourceWithdrawalId).map(r => r._sourceWithdrawalId));
+  const tbody = document.getElementById('wd-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = emptyRow(10, termFilter === 'current'
+      ? 'No withdrawals in the current term match the filters. Try switching the term selector to "All terms".'
+      : 'No withdrawals match the filters.');
+    return;
+  }
+  tbody.innerHTML = rows.map(w => {
+    const sourceId = `wd-${w.id}-${w.lastActiveDate}`;
+    const onNRViaCSV = nrSourceSet.has(sourceId);
+    const onNRViaHuman = humanNRIds.has(w.id);
+    let nrCell;
+    if (onNRViaCSV && onNRViaHuman) nrCell = '<span class="chip chip-amber">CSV + Human</span>';
+    else if (onNRViaCSV)            nrCell = '<span class="chip chip-blue">From CSV</span>';
+    else if (onNRViaHuman)          nrCell = '<span class="chip chip-purple">Human entry</span>';
+    else                            nrCell = '<span style="color:#bbb;font-size:11px;">—</span>';
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px;color:#555;">${w.id||'—'}</td>
+      <td style="font-weight:600;">${w.name||'—'}</td>
+      <td style="font-family:monospace;font-size:11px;">${w.lastActiveDate||'—'}</td>
+      <td style="font-family:monospace;font-size:11px;color:#888;">${w.processedDate||'—'}</td>
+      <td>${w.reason||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+      <td>${w.type||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+      <td>${classChip(w.classYear)}</td>
+      <td>${w.major||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+      <td>${w.advisor||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+      <td>${nrCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════════════════════════════
+function showPage(name, tab) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if (tab) tab.classList.add('active');
+}
+
+// Populate the filter dropdown with the current reasons list. Includes any custom
+// reasons currently in nrList so a user can filter to "show me everyone who said
+// 'Lost dorm room'" even though it's not a canonical category.
+function nrPopulateReasonFilter() {
+  const sel = document.getElementById('nr-filter-reason');
+  if (!sel) return;
+  const current = sel.value;
+  const customSet = new Set();
+  nrList.forEach(r => {
+    if (r.reason && !NR_REASONS.includes(r.reason)) customSet.add(r.reason);
+  });
+  const customs = [...customSet].sort();
+  let opts = '<option value="">All Reasons</option>' +
+    NR_REASONS.map(r => `<option ${current===r?'selected':''}>${r}</option>`).join('');
+  if (customs.length) {
+    opts += '<optgroup label="Custom reasons">' +
+      customs.map(r => `<option ${current===r?'selected':''}>${r}</option>`).join('') +
+      '</optgroup>';
+  }
+  sel.innerHTML = opts;
+}
+
+// Add-row form: when "Other" is picked, swap a text input in next to the dropdown
+// so the user can type a custom reason. Picking anything else hides it again.
+function nrAddReasonChange() {
+  const sel = document.getElementById('nr-f-reason');
+  const other = document.getElementById('nr-f-reason-other');
+  if (sel.value === 'Other') {
+    other.style.display = 'block';
+    other.focus();
+  } else {
+    other.style.display = 'none';
+    other.value = '';
+  }
+}
+
+// Populate the add-row reason select with NR_REASONS at startup
+function nrPopulateAddReason() {
+  const sel = document.getElementById('nr-f-reason');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select —</option>' +
+    NR_REASONS.map(r => `<option>${r}</option>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+loadNRList();
+loadIgnoredWithdrawals();
+loadTermSettings();
+nrPopulateAddReason();
+nrPopulateReasonFilter();
+nrUpdateKpis();
+nrRender();
+</script>
+</body>
+</html>
