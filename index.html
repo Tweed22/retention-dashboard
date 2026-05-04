@@ -210,6 +210,47 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 /* ── Withdrawal CSV chip on NR rows ── */
 .nr-source-chip { display: inline-block; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; font-size: 9px; font-weight: 600; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
 
+/* ── Auth UI ── */
+.auth-status { font-size: 11px; color: rgba(255,255,255,0.85); display: inline-flex; align-items: center; gap: 6px; }
+.auth-status .auth-name { font-weight: 600; color: white; }
+.auth-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: none; align-items: center; justify-content: center; z-index: 1000; }
+.auth-modal-backdrop.open { display: flex; }
+.auth-modal { background: white; border-radius: 12px; padding: 28px 32px; width: 380px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.25); }
+.auth-modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: #1a1d23; }
+.auth-modal .auth-sub { font-size: 12px; color: #666; margin-bottom: 18px; }
+.auth-modal label { display: block; font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.auth-modal input { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px 12px; font-size: 14px; outline: none; }
+.auth-modal input:focus { border-color: #2563eb; }
+.auth-modal .auth-actions { margin-top: 18px; display: flex; gap: 8px; justify-content: flex-end; }
+.auth-modal .auth-btn { background: #2563eb; color: white; border: none; border-radius: 7px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.auth-modal .auth-btn:hover { background: #1d4ed8; }
+.auth-modal .auth-btn[disabled] { opacity: 0.6; cursor: wait; }
+.auth-modal .auth-btn-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; }
+.auth-modal .auth-btn-secondary:hover { background: #f8fafc; }
+.auth-msg { font-size: 12px; padding: 9px 12px; border-radius: 6px; margin-top: 14px; }
+.auth-msg.auth-msg-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.auth-msg.auth-msg-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.auth-msg.auth-msg-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+/* Auth-driven visibility. Body gets exactly one class: auth-anon, auth-committee,
+   or auth-admin. Each class is mutually exclusive.
+   - .gated-only  visible to committee + admin (hidden under auth-anon only)
+   - .admin-only  visible to admin only (hidden under both auth-anon + auth-committee)
+   - .anon-only   visible to anon only (hidden under committee + admin)            */
+body.auth-anon       .gated-only,
+body.auth-anon       .admin-only,
+body.auth-committee  .admin-only,
+body.auth-committee  .anon-only,
+body.auth-admin      .anon-only { display: none !important; }
+
+.show-when-authed { display: none; }
+body.auth-committee .show-when-authed,
+body.auth-admin     .show-when-authed { display: inline-flex; }
+
+/* PII warning banner on gated tabs — present in hosted mode only. */
+.pii-banner { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 9px 14px; font-size: 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.pii-banner strong { font-weight: 700; }
+
 /* ── CSV export buttons ── */
 .export-cluster { display: inline-flex; gap: 6px; align-items: center; }
 .export-btn { background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 11px; font-size: 11px; font-weight: 600; color: #1e2d4f; cursor: pointer; transition: background 0.15s, border-color 0.15s; white-space: nowrap; }
@@ -224,19 +265,39 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 <div class="header">
   <div class="header-left">
     <h1>Registration Retention Dashboard</h1>
-    <div class="subtitle" id="header-subtitle">No data loaded — click "Update Data" to upload CSVs</div>
+    <div class="subtitle" id="header-subtitle">Loading…</div>
   </div>
   <div class="header-right">
-    <div class="privacy-badge">Private — data stays in your browser</div>
-    <button class="upload-btn" onclick="toggleUploadPanel()">Update Data</button>
+    <div class="privacy-badge anon-only">Public dashboard — aggregate data only</div>
+    <div class="auth-status show-when-authed" id="auth-status">
+      <span>Signed in as</span> <span class="auth-name" id="auth-name">—</span>
+      <button class="upload-btn" onclick="signOut()" style="margin-left:6px;">Sign out</button>
+    </div>
+    <button class="upload-btn anon-only" onclick="openAuthModal()">Sign in</button>
+    <button class="upload-btn admin-only" onclick="toggleUploadPanel()">Update Data</button>
   </div>
 </div>
 
-<!-- ── Upload Panel ── -->
-<div class="upload-panel" id="upload-panel">
+<!-- ── Sign-in modal ── -->
+<div class="auth-modal-backdrop" id="auth-modal-backdrop" onclick="if(event.target===this)closeAuthModal()">
+  <div class="auth-modal">
+    <h2>Sign in to view detail tabs</h2>
+    <div class="auth-sub">Committee members only. Enter your email and we'll send you a one-time login link.</div>
+    <label for="auth-email">Email address</label>
+    <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email" />
+    <div class="auth-actions">
+      <button class="auth-btn auth-btn-secondary" onclick="closeAuthModal()">Cancel</button>
+      <button class="auth-btn" id="auth-send-btn" onclick="sendMagicLink()">Send magic link</button>
+    </div>
+    <div id="auth-msg"></div>
+  </div>
+</div>
+
+<!-- ── Upload Panel (admin-only) ── -->
+<div class="upload-panel admin-only" id="upload-panel">
   <div class="upload-panel-title">Upload CSV Reports</div>
   <div class="upload-panel-note">
-    <span><strong>Your data never leaves your computer.</strong> All CSV processing happens entirely in your browser. No data is sent to any server or AI service. This file can be shared freely — each user loads their own CSVs locally.</span>
+    <span><strong>Hosted mode:</strong> CSVs are parsed in your browser and the resulting data is pushed to the shared database. All committee members will see the new data within seconds. Files themselves are not uploaded — only the parsed records.</span>
   </div>
   <div class="upload-grid">
     <div class="drop-zone" id="dz-unreg" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'unreg',this)">
@@ -290,11 +351,11 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 <!-- ── Nav ── -->
 <div class="nav">
   <div class="nav-tab active" onclick="showPage('summary',this)">Summary</div>
-  <div class="nav-tab" onclick="showPage('holds',this)">Holds Breakdown</div>
-  <div class="nav-tab" onclick="showPage('canreg',this)">Can Register</div>
-  <div class="nav-tab" onclick="showPage('new',this)">New Students</div>
-  <div class="nav-tab" onclick="showPage('withdrawals',this)">Withdrawals</div>
-  <div class="nav-tab" onclick="showPage('notreturning',this)">Not Returning</div>
+  <div class="nav-tab gated-only" onclick="showPage('holds',this)">Holds Breakdown</div>
+  <div class="nav-tab gated-only" onclick="showPage('canreg',this)">Can Register</div>
+  <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
+  <div class="nav-tab gated-only" onclick="showPage('withdrawals',this)">Withdrawals</div>
+  <div class="nav-tab gated-only" onclick="showPage('notreturning',this)">Not Returning</div>
 </div>
 
 <!-- ══════════════════════════ SUMMARY ══════════════════════════ -->
@@ -588,7 +649,40 @@ tbody td { padding: 8px 12px; color: #2d3142; }
   </div>
 </div>
 
+<!-- ── Supabase JS client (UMD bundle from CDN) ── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+// ══════════════════════════════════════════════════════════════
+//  SUPABASE CONFIG + CLIENT
+// ══════════════════════════════════════════════════════════════
+// These values are safe to expose client-side — Supabase publishable/anon
+// keys are designed for browser use; RLS policies on the database are what
+// actually enforce security.
+const SUPABASE_URL = 'https://xyissgatpbldeedhomol.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_EGxcMamBsRAXAi1inpjTqw_KZAL485m';
+
+// Detect whether we're running in hosted mode (Supabase reachable + page
+// served over http(s)) vs local-file mode (file:// — fall back to localStorage
+// + CSV upload as today). Local mode preserves the original workflow when
+// opening the HTML directly in a browser without any backend.
+const isLocalFile = location.protocol === 'file:';
+const sb = (typeof supabase !== 'undefined' && !isLocalFile)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+const HOSTED = !!sb;
+
+// Auth state. Updated by onAuthStateChange and by manual sign-in/out.
+//   currentUser:  Supabase user object (or null when anonymous)
+//   userRole:     'anon' | 'member' | 'admin'
+//   userDisplay:  pretty name to show in the header
+let currentUser = null;
+let userRole = HOSTED ? 'anon' : 'admin'; // local mode = full access (single-user fallback)
+let userDisplay = '';
+
+function isCommittee() { return userRole === 'member' || userRole === 'admin'; }
+function isAdmin()     { return userRole === 'admin'; }
+
 // ══════════════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════════════
@@ -2346,6 +2440,567 @@ function nrPopulateAddReason() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  AUTH (magic link via Supabase)
+// ══════════════════════════════════════════════════════════════
+function openAuthModal() {
+  document.getElementById('auth-msg').innerHTML = '';
+  document.getElementById('auth-email').value = '';
+  document.getElementById('auth-modal-backdrop').classList.add('open');
+  setTimeout(() => document.getElementById('auth-email').focus(), 50);
+}
+function closeAuthModal() {
+  document.getElementById('auth-modal-backdrop').classList.remove('open');
+}
+
+async function sendMagicLink() {
+  const email = document.getElementById('auth-email').value.trim();
+  const msg   = document.getElementById('auth-msg');
+  const btn   = document.getElementById('auth-send-btn');
+  if (!email || !email.includes('@')) {
+    msg.className = 'auth-msg auth-msg-error';
+    msg.textContent = 'Please enter a valid email address.';
+    return;
+  }
+  if (!sb) {
+    msg.className = 'auth-msg auth-msg-error';
+    msg.textContent = 'Sign-in is only available on the hosted dashboard. Open this page from its public URL to sign in.';
+    return;
+  }
+  btn.disabled = true;
+  msg.className = 'auth-msg auth-msg-info';
+  msg.textContent = 'Sending magic link…';
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + window.location.pathname },
+  });
+  btn.disabled = false;
+  if (error) {
+    msg.className = 'auth-msg auth-msg-error';
+    msg.textContent = 'Could not send magic link: ' + error.message;
+    return;
+  }
+  msg.className = 'auth-msg auth-msg-success';
+  msg.innerHTML = '<strong>Check your email.</strong> The link will sign you in automatically. (Look in spam if nothing arrives within a minute.)';
+}
+
+async function signOut() {
+  if (!sb) return;
+  await sb.auth.signOut();
+  // onAuthStateChange will re-render to anon UI
+}
+
+// Translate the current Supabase auth session into our role model. Looks up
+// committee_members for role + display_name.
+async function refreshAuthState(session) {
+  if (!session || !session.user) {
+    currentUser = null;
+    userRole = 'anon';
+    userDisplay = '';
+  } else {
+    currentUser = session.user;
+    const { data, error } = await sb
+      .from('committee_members')
+      .select('role, display_name')
+      .eq('email', (session.user.email || '').toLowerCase())
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error || !data) {
+      // Authenticated but not on the allowlist — sign back out.
+      await sb.auth.signOut();
+      currentUser = null;
+      userRole = 'anon';
+      userDisplay = '';
+      alert('Your email is not on the committee allowlist. Contact Tony to be added.');
+    } else {
+      userRole = data.role || 'member';
+      userDisplay = data.display_name || session.user.email;
+    }
+  }
+  applyAuthUIState();
+}
+
+function applyAuthUIState() {
+  const body = document.body;
+  body.classList.remove('auth-anon', 'auth-committee', 'auth-admin');
+  if (userRole === 'admin') body.classList.add('auth-admin');
+  else if (userRole === 'member') body.classList.add('auth-committee');
+  else body.classList.add('auth-anon');
+  const nameEl = document.getElementById('auth-name');
+  if (nameEl) nameEl.textContent = userDisplay || (currentUser?.email || '');
+  // If anon and currently on a gated tab, snap back to Summary
+  if (userRole === 'anon') {
+    const cur = document.querySelector('.page.active');
+    if (cur && cur.id !== 'page-summary') showPage('summary', document.querySelectorAll('.nav-tab')[0]);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DATA LAYER (Supabase reads + writes)
+// ══════════════════════════════════════════════════════════════
+// Fetches the most recent snapshot_metrics row. Anon-readable per RLS.
+// Returns null if no snapshots exist yet.
+async function fetchLatestMetrics() {
+  if (!sb) return null;
+  const { data, error } = await sb
+    .from('snapshot_metrics')
+    .select('*, csv_snapshots!inner(uploaded_at)')
+    .order('computed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error('fetchLatestMetrics:', error);
+    return null;
+  }
+  return data;
+}
+
+// Fetches per-student data for the gated tabs. Committee-only per RLS.
+async function fetchDashboardData() {
+  if (!sb || !isCommittee()) return null;
+  const [students, withdrawals, nrReports, terms, snapshots] = await Promise.all([
+    sb.from('students').select('*'),
+    sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }),
+    sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('created_at', { ascending: false }),
+    sb.from('terms').select('*').order('start_date', { ascending: true }),
+    sb.from('csv_snapshots').select('*').order('uploaded_at', { ascending: false }).limit(1),
+  ]);
+  if (students.error || withdrawals.error || nrReports.error) {
+    console.error('fetchDashboardData errors:', { students: students.error, withdrawals: withdrawals.error, nrReports: nrReports.error });
+    return null;
+  }
+  return {
+    students: students.data || [],
+    withdrawals: withdrawals.data || [],
+    nrReports: nrReports.data || [],
+    terms: terms.data || [],
+    latestSnapshot: snapshots.data?.[0] || null,
+  };
+}
+
+// Renders the public Summary using only snapshot_metrics. No PII fetched.
+async function renderPublicSummary() {
+  const m = await fetchLatestMetrics();
+  const empty = document.getElementById('summary-empty');
+  const content = document.getElementById('summary-content');
+  if (!m) {
+    empty.style.display = 'block';
+    content.style.display = 'none';
+    empty.innerHTML = '<p>No retention data has been published yet. Check back after the first upload.</p>';
+    return;
+  }
+  empty.style.display = 'none';
+  content.style.display = 'block';
+  // Set the simple count widgets directly from snapshot_metrics
+  document.getElementById('s-total-ret').textContent  = n(m.total_returning || 0);
+  document.getElementById('s-ret-reg').textContent    = n(m.total_registered || 0);
+  document.getElementById('s-ret-unreg').textContent  = n((m.total_returning || 0) - (m.total_registered || 0));
+  document.getElementById('s-ret-rate').textContent   = (m.registration_rate != null ? Math.round(m.registration_rate * 10)/10 : 0) + '%';
+  document.getElementById('s-new-total').textContent  = n(m.total_new || 0);
+  document.getElementById('s-new-reg').textContent    = n(m.new_registered || 0);
+  document.getElementById('s-all-total').textContent  = n((m.total_returning || 0) + (m.total_new || 0));
+  document.getElementById('s-all-reg').textContent    = n((m.total_registered || 0) + (m.new_registered || 0));
+  document.getElementById('s-can-reg').textContent    = n(m.can_register || 0);
+  if (m.withdrawals_this_term != null) {
+    document.getElementById('s-withdrawals-row').style.display = 'grid';
+    document.getElementById('s-wd-total').textContent  = n(m.withdrawals_this_term);
+    document.getElementById('s-wd-window').textContent = 'Current term';
+  }
+  // Hide widgets that need raw student data when we're on the public side
+  document.getElementById('returning-donuts-grid').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the per-segment breakdown.</div>';
+  document.getElementById('hold-donuts-grid').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the per-hold breakdown.</div>';
+  document.getElementById('reasons-chart').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the reasons-not-returning chart.</div>';
+  // Header subtitle
+  const ts = m.csv_snapshots?.uploaded_at;
+  if (ts) {
+    document.getElementById('header-subtitle').textContent =
+      'Last updated ' + new Date(ts).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+  }
+}
+
+// Loads the full dataset for committee viewers and routes through the
+// existing render pipeline. Maps Supabase column names (snake_case) back
+// to the in-memory shape the existing code uses (camelCase).
+async function loadHostedDashboardData() {
+  const data = await fetchDashboardData();
+  if (!data) return;
+  // Adapter — Supabase rows → existing in-memory shape
+  function toClient(s) {
+    return {
+      id: s.id,
+      firstName: s.first_name || '',
+      lastName: s.last_name || '',
+      name: [s.first_name, s.last_name].filter(Boolean).join(' '),
+      email: s.email || '',
+      major: s.major || '',
+      advisor: s.advisor || '',
+      sports: s.sports || [],
+      classYear: s.class_year || '',
+      holds: s.holds || [],
+    };
+  }
+  // Returning + new + registered maps
+  returningStudents = {};
+  newStudents = {};
+  registeredIds = new Set();
+  registeredStudents = {};
+  data.students.forEach(s => {
+    const c = toClient(s);
+    if (s.is_registered) {
+      registeredIds.add(s.id);
+      registeredStudents[s.id] = c;
+    }
+    if (s.is_new_student) {
+      c.status = s.is_registered ? 'Registered' : 'Not Yet Registered';
+      newStudents[s.id] = c;
+    } else if (!s.is_registered) {
+      // Returning unregistered = appears in students with neither registered nor new
+      returningStudents[s.id] = c;
+    }
+  });
+  // Hold groups + can-register fan-out (mirror buildData logic)
+  holdGroups = {};
+  HOLD_DISPLAY.forEach(h => holdGroups[h] = []);
+  canRegisterStudents = [];
+  Object.values(returningStudents).forEach(s => {
+    let hasBlocking = false;
+    BLOCKING_HOLDS.forEach((bh, i) => {
+      if (s.holds.some(h => (h || '').toLowerCase().includes(bh))) {
+        holdGroups[HOLD_DISPLAY[i]].push(s);
+        hasBlocking = true;
+      }
+    });
+    if (!hasBlocking) canRegisterStudents.push(s);
+  });
+  // Withdrawals — Supabase → existing shape
+  withdrawalsList = data.withdrawals.map(w => ({
+    id: w.student_id,
+    name: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    major: '',
+    advisor: '',
+    classYear: '',
+    lastActiveDate: w.last_active_date,
+    processedDate: w.processed_date,
+    reason: w.withdrawal_reason || '',
+    type: w.withdrawal_type || '',
+  }));
+  // Enrich withdrawals with student fields, since the registrar's CSV often omits them
+  withdrawalsList.forEach(w => {
+    const s = returningStudents[w.id] || newStudents[w.id] || registeredStudents[w.id];
+    if (s) {
+      w.name = s.name; w.firstName = s.firstName; w.lastName = s.lastName;
+      w.email = s.email; w.major = s.major; w.advisor = s.advisor; w.classYear = s.classYear;
+    }
+  });
+  // NR list — Supabase → existing shape
+  nrList = data.nrReports.map(r => ({
+    id: r.student_id || '',
+    name: r.student_name || '',
+    email: '',
+    major: '',
+    advisor: '',
+    sport: '',
+    isRegistered: !!(r.student_id && registeredIds.has(r.student_id)),
+    reason: r.reason || '',
+    notes: r.notes || '',
+    withdrawal: r.withdrawal_status || 'Pending',
+    dateAdded: r.created_at ? r.created_at.slice(0,10) : '',
+    _supabaseId: r.id,
+    _sourceWithdrawalId: r.source_withdrawal_id ? `wd-${r.id}` : null,
+    _withdrawalLDA: null,
+    _isFromCSV: !!r.source_withdrawal_id,
+  }));
+  // Enrich NR rows from student lookups (for major / email display)
+  nrList.forEach(r => {
+    const s = returningStudents[r.id] || newStudents[r.id] || registeredStudents[r.id];
+    if (s) {
+      r.email = s.email; r.major = s.major; r.advisor = s.advisor;
+      if (!r.name) r.name = s.name;
+    }
+  });
+  // Term settings — pick "current" + "next"
+  if (data.terms.length) {
+    const today = new Date().toISOString().slice(0,10);
+    const past = data.terms.filter(t => t.start_date <= today);
+    const future = data.terms.filter(t => t.start_date > today);
+    const cur = past[past.length - 1];
+    const nxt = future[0];
+    if (cur) {
+      termSettings.currentName = cur.name;
+      termSettings.currentStart = cur.start_date;
+    }
+    if (nxt) termSettings.nextStart = nxt.start_date;
+  }
+  // Mark CSV-loaded flags so existing render code shows the data
+  csvLoaded.unreg = csvLoaded.reg = csvLoaded.new = csvLoaded.withdrawals = (data.students.length > 0);
+  // Header subtitle
+  const ts = data.latestSnapshot?.uploaded_at;
+  if (ts) {
+    document.getElementById('header-subtitle').textContent =
+      'Last updated ' + new Date(ts).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+  }
+  renderAll();
+}
+
+// Pushes the parsed CSV data + computed metrics to Supabase. Called from
+// processAllCSVs in hosted mode after the local parse succeeds.
+async function pushDataToSupabase() {
+  if (!sb || !isAdmin()) return false;
+  const subtitle = document.getElementById('header-subtitle');
+  subtitle.textContent = 'Uploading to database…';
+  try {
+    // 1) Create the snapshot row
+    const { data: snap, error: snapErr } = await sb.from('csv_snapshots').insert({
+      uploaded_by: currentUser?.id,
+      source_files: {
+        unreg: csvLoaded.unreg ? 'unregistered.csv' : null,
+        reg: csvLoaded.reg ? 'registered.csv' : null,
+        new: csvLoaded.new ? 'new.csv' : null,
+        withdrawals: csvLoaded.withdrawals ? 'withdrawals.csv' : null,
+      },
+      student_count: Object.keys(returningStudents).length + Object.keys(newStudents).length,
+    }).select().single();
+    if (snapErr) throw snapErr;
+    const snapshotId = snap.id;
+
+    // 2) Wipe existing students (delete-and-replace per-snapshot model)
+    //    Then upsert the freshly-parsed records.
+    await sb.from('students').delete().neq('id', '__sentinel__');
+    const allStudents = [
+      ...Object.values(returningStudents).map(s => ({...s, _isReg: false, _isNew: false})),
+      ...Object.values(newStudents).map(s => ({...s, _isReg: registeredIds.has(s.id), _isNew: true})),
+      ...Object.values(registeredStudents)
+        .filter(s => !returningStudents[s.id] && !newStudents[s.id])
+        .map(s => ({...s, _isReg: true, _isNew: false})),
+    ];
+    const studentRows = allStudents.map(s => ({
+      id: s.id,
+      first_name: s.firstName || null,
+      last_name: s.lastName || null,
+      email: s.email || null,
+      major: s.major || null,
+      advisor: s.advisor || null,
+      sports: s.sports || [],
+      class_year: s.classYear || null,
+      holds: s.holds || [],
+      is_new_student: s._isNew,
+      is_registered: s._isReg || registeredIds.has(s.id),
+      snapshot_id: snapshotId,
+      updated_at: new Date().toISOString(),
+    }));
+    if (studentRows.length) {
+      const chunks = chunk(studentRows, 500);
+      for (const c of chunks) {
+        const { error } = await sb.from('students').upsert(c, { onConflict: 'id' });
+        if (error) throw error;
+      }
+    }
+
+    // 3) Sync `terms` table from local termSettings (so other admins see same window)
+    if (termSettings.currentStart) {
+      await sb.from('terms').upsert({
+        name: termSettings.currentName || 'Current term',
+        start_date: termSettings.currentStart,
+      }, { onConflict: 'start_date' });
+    }
+    if (termSettings.nextStart) {
+      await sb.from('terms').upsert({
+        name: 'Next term',
+        start_date: termSettings.nextStart,
+      }, { onConflict: 'start_date' });
+    }
+    // Find the term_id for "current" so we can stamp it onto withdrawals
+    let currentTermId = null;
+    if (termSettings.currentStart) {
+      const { data: tt } = await sb.from('terms').select('id').eq('start_date', termSettings.currentStart).maybeSingle();
+      currentTermId = tt?.id || null;
+    }
+
+    // 4) Upsert withdrawals
+    if (withdrawalsList.length) {
+      const wdRows = withdrawalsList.map(w => ({
+        student_id: w.id,
+        last_active_date: w.lastActiveDate,
+        processed_date: w.processedDate || null,
+        withdrawal_reason: w.reason || null,
+        withdrawal_type: w.type || null,
+        term_id: isInCurrentTerm(w.lastActiveDate) ? currentTermId : null,
+        snapshot_id: snapshotId,
+        source_filename: 'withdrawals.csv',
+      }));
+      const wdChunks = chunk(wdRows, 500);
+      for (const c of wdChunks) {
+        const { error } = await sb.from('withdrawals').upsert(c, { onConflict: 'student_id,last_active_date' });
+        if (error) throw error;
+      }
+    }
+
+    // 5) Compute + insert snapshot_metrics aggregate row
+    const metrics = computeSnapshotMetrics();
+    metrics.snapshot_id = snapshotId;
+    const { error: metricsErr } = await sb.from('snapshot_metrics').upsert(metrics);
+    if (metricsErr) throw metricsErr;
+
+    // 6) Auto-feed current-term withdrawals into not_returning_reports
+    //    (RLS allows committee insert; admin = committee.)
+    const { data: existingNR } = await sb.from('not_returning_reports').select('source_withdrawal_id').not('source_withdrawal_id', 'is', null);
+    const existingSet = new Set((existingNR || []).map(r => r.source_withdrawal_id));
+    const { data: wdRowsBack } = await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason').eq('term_id', currentTermId);
+    const newNR = (wdRowsBack || []).filter(w => !existingSet.has(w.id)).map(w => ({
+      student_id: w.student_id,
+      student_name: '',
+      reason: mapWithdrawalReason(w.withdrawal_reason),
+      withdrawal_status: 'Complete',
+      submitter_name: '[CSV import]',
+      submitter_uid: currentUser?.id,
+      source_withdrawal_id: w.id,
+      notes: `Auto-imported. Last active ${w.last_active_date}.`,
+    }));
+    if (newNR.length) {
+      const { error: nrErr } = await sb.from('not_returning_reports').insert(newNR);
+      if (nrErr) console.warn('NR auto-sync error:', nrErr);
+    }
+
+    subtitle.textContent = 'Upload complete. Refreshing…';
+    return true;
+  } catch (e) {
+    console.error('pushDataToSupabase failed:', e);
+    alert('Upload to database failed: ' + (e.message || e));
+    return false;
+  }
+}
+
+// Compute a snapshot_metrics row from current in-memory data.
+function computeSnapshotMetrics() {
+  const totalRet = Object.keys(returningStudents).length + [...registeredIds].filter(id => !newStudents[id]).length;
+  const retRegistered = [...registeredIds].filter(id => !newStudents[id]).length;
+  const totalNew = Object.keys(newStudents).length;
+  const newReg = Object.values(newStudents).filter(s => s.status === 'Registered').length;
+  const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
+  const holdsBy = HOLD_DISPLAY.map(h => (holdGroups[h] || []).length);
+  const wdThisTerm = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate)).length;
+  // Slice breakdowns
+  function tally(getter) {
+    const t = {};
+    Object.values(returningStudents).forEach(s => {
+      const v = getter(s); if (!v) return;
+      t[v] = t[v] || { total: 0, registered: 0 };
+      t[v].total++;
+      if (registeredIds.has(s.id)) t[v].registered++;
+    });
+    return t;
+  }
+  return {
+    total_returning: totalRet,
+    total_registered: retRegistered,
+    registration_rate: totalRet ? (retRegistered / totalRet) * 100 : 0,
+    total_new: totalNew,
+    new_registered: newReg,
+    total_holds: totalHolds,
+    holds_advising: holdsBy[0] || 0,
+    holds_account: holdsBy[1] || 0,
+    holds_registrar: holdsBy[2] || 0,
+    holds_missing_docs: holdsBy[3] || 0,
+    holds_immunization: holdsBy[4] || 0,
+    can_register: canRegisterStudents.length,
+    not_returning_count: nrList.filter(r => !r.is_hidden).length,
+    withdrawals_this_term: wdThisTerm,
+    high_risk_count: 0,
+    critical_risk_count: 0,
+    by_class_year: tally(s => s.classYear),
+    by_advisor: tally(s => s.advisor),
+    by_major: tally(s => s.major),
+    by_sport: (() => {
+      const t = {};
+      Object.values(returningStudents).forEach(s => {
+        (s.sports || []).forEach(sp => {
+          if (!sp) return;
+          t[sp] = t[sp] || { total: 0, registered: 0 };
+          t[sp].total++;
+          if (registeredIds.has(s.id)) t[sp].registered++;
+        });
+      });
+      return t;
+    })(),
+  };
+}
+
+// Tiny chunker so big upserts don't exceed Postgres / API limits.
+function chunk(arr, n) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
+// Wraps the existing local processAllCSVs so that in hosted+admin mode we
+// also push the parsed data to Supabase, then re-read it (so other clients
+// pick up the same canonical rows via realtime).
+const _origProcessAll = processAllCSVs;
+processAllCSVs = async function processAllCSVsWithSupabase() {
+  _origProcessAll();
+  if (HOSTED && isAdmin()) {
+    const ok = await pushDataToSupabase();
+    if (ok) await loadHostedDashboardData();
+  }
+};
+
+// Intercept NR add/remove writes so they go to Supabase in hosted mode.
+const _origNrAdd    = nrAdd;
+const _origNrRemove = nrRemove;
+nrAdd = async function nrAddWithSupabase() {
+  _origNrAdd();
+  if (HOSTED && isCommittee()) {
+    const fresh = nrList[0]; // _origNrAdd unshifts the new entry
+    if (!fresh || fresh._supabaseId) return;
+    const { data, error } = await sb.from('not_returning_reports').insert({
+      student_id: fresh.id || null,
+      student_name: fresh.name,
+      reason: fresh.reason,
+      withdrawal_status: fresh.withdrawal,
+      notes: fresh.notes,
+      submitter_name: userDisplay,
+      submitter_email: currentUser?.email,
+      submitter_uid: currentUser?.id,
+    }).select().single();
+    if (error) {
+      alert('Failed to save NR entry: ' + error.message);
+      return;
+    }
+    fresh._supabaseId = data.id;
+    saveNRList(); // local cache for offline resilience
+  }
+};
+nrRemove = async function nrRemoveWithSupabase(idx) {
+  const row = nrList[idx];
+  if (!row) return;
+  const supabaseId = row._supabaseId;
+  _origNrRemove(idx);
+  if (HOSTED && isCommittee() && supabaseId) {
+    // Soft delete via is_hidden so the audit trail survives. Admin-only by RLS.
+    const { error } = await sb.from('not_returning_reports').update({ is_hidden: true }).eq('id', supabaseId);
+    if (error) console.warn('NR hide failed:', error);
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  REALTIME — auto-refresh on new uploads
+// ══════════════════════════════════════════════════════════════
+let realtimeChannel = null;
+function startRealtime() {
+  if (!sb || realtimeChannel) return;
+  realtimeChannel = sb
+    .channel('csv_snapshots_changes')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'csv_snapshots' }, () => {
+      // New upload — refetch + rerender for whichever role the user has
+      if (isCommittee()) loadHostedDashboardData();
+      else renderPublicSummary();
+    })
+    .subscribe();
+}
+
+// ══════════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════════
 loadNRList();
@@ -2355,6 +3010,35 @@ nrPopulateAddReason();
 nrPopulateReasonFilter();
 nrUpdateKpis();
 nrRender();
+
+if (HOSTED) {
+  // Wait for the auth state, then load. onAuthStateChange fires once
+  // immediately with INITIAL_SESSION, so we don't need a separate getSession().
+  sb.auth.onAuthStateChange(async (_event, session) => {
+    await refreshAuthState(session);
+    if (isCommittee()) {
+      await loadHostedDashboardData();
+    } else {
+      await renderPublicSummary();
+    }
+    startRealtime();
+  });
+} else {
+  // Local file mode — single-user fallback. Mark body as admin so the
+  // upload panel + all tabs stay visible without auth.
+  document.body.classList.add('auth-admin');
+  userDisplay = 'Local mode';
+  document.getElementById('auth-name').textContent = userDisplay;
+  // No backend, so the Sign out button doesn't make sense — hide it.
+  document.querySelector('#auth-status button')?.remove();
+  document.getElementById('header-subtitle').textContent =
+    'Local-file mode — data stays in your browser';
+}
+
+// Allow Enter on the auth modal email field to submit
+document.getElementById('auth-email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendMagicLink();
+});
 </script>
 </body>
 </html>
