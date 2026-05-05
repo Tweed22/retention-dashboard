@@ -722,11 +722,21 @@ function loadFile(file, key, dzId) {
 }
 
 // ── CSV parser (handles quoted fields) ──
+// Skips leading rows whose cells are all blank (e.g. ",,,,,," that some
+// registrar exports prepend before the real header row). The first row
+// containing at least one non-empty cell is treated as the header.
 function parseCSV(text) {
   const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
   if (!lines.length) return [];
-  const headers = parseCSVRow(lines[0]).map(h => h.trim().toLowerCase());
-  return lines.slice(1).map(line => {
+  let headerIdx = 0;
+  while (headerIdx < lines.length) {
+    const cells = parseCSVRow(lines[headerIdx]).map(c => c.trim());
+    if (cells.some(c => c.length > 0)) break;
+    headerIdx++;
+  }
+  if (headerIdx >= lines.length) return [];
+  const headers = parseCSVRow(lines[headerIdx]).map(h => h.trim().toLowerCase());
+  return lines.slice(headerIdx + 1).map(line => {
     const vals = parseCSVRow(line);
     const obj = {};
     headers.forEach((h,i) => obj[h] = (vals[i]||'').trim());
