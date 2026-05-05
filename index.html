@@ -352,7 +352,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div class="nav-tab gated-only" onclick="showPage('holds',this)">Holds Breakdown</div>
   <div class="nav-tab gated-only" onclick="showPage('canreg',this)">Can Register</div>
   <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
-  <div class="nav-tab gated-only" onclick="showPage('withdrawals',this)">Withdrawals</div>
   <div class="nav-tab gated-only" onclick="showPage('notreturning',this)">Not Returning</div>
 </div>
 
@@ -376,11 +375,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card blue"><div class="kpi-label">All Students</div><div class="kpi-value" id="s-all-total">—</div><div class="kpi-sub">Returning + new</div></div>
       <div class="kpi-card green"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">Returning + new registered</div></div>
       <div class="kpi-card teal clickable" onclick="showPage('canreg',document.querySelectorAll('.nav-tab')[2])"><div class="kpi-label">Can Register</div><div class="kpi-value" id="s-can-reg">—</div><div class="kpi-sub">No holds, not yet enrolled</div></div>
-    </div>
-    <div class="kpi-row kpi-row-3" id="s-withdrawals-row" style="display:none;">
-      <div class="kpi-card red clickable" onclick="showPage('withdrawals',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Withdrawn This Term</div><div class="kpi-value" id="s-wd-total">—</div><div class="kpi-sub" id="s-wd-window">—</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Withdrawals — Pending NR Match</div><div class="kpi-value" id="s-wd-pending-overlap">—</div><div class="kpi-sub">Auto-imported from CSV; admin can reconcile on Not Returning</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">All-Time Withdrawals on File</div><div class="kpi-value" id="s-wd-alltime">—</div><div class="kpi-sub">Includes prior terms — see term selector on Withdrawals tab</div></div>
     </div>
     <div class="charts-row">
       <div class="card">
@@ -536,56 +530,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
 </div>
 
-<!-- ══════════════════════════ WITHDRAWALS ══════════════════════════ -->
-<div class="page" id="page-withdrawals">
-  <div id="wd-empty" class="empty-state">
-    <p>No withdrawal data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your withdrawal CSV</a> and set the term window above to populate this page.</p>
-  </div>
-  <div id="wd-content" style="display:none;">
-    <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
-      <div class="kpi-card red"><div class="kpi-label">Withdrawn This Term</div><div class="kpi-value" id="wd-k-total">0</div><div class="kpi-sub" id="wd-k-window">—</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Top Reason</div><div class="kpi-value" id="wd-k-reason" style="font-size:18px;">—</div><div class="kpi-sub" id="wd-k-reason-sub">—</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Most-Affected Class</div><div class="kpi-value" id="wd-k-class" style="font-size:18px;">—</div><div class="kpi-sub" id="wd-k-class-sub">—</div></div>
-      <div class="kpi-card sky"><div class="kpi-label">Already on NR List</div><div class="kpi-value" id="wd-k-overlap">0</div><div class="kpi-sub">Withdrawals where a human NR row exists too — may need reconciliation</div></div>
-    </div>
-
-    <div class="filter-row">
-      <span class="filter-label">Term:</span>
-      <select class="filter-select" id="wd-term" onchange="wdRender()">
-        <option value="current">Current term</option>
-        <option value="all">All terms</option>
-      </select>
-      <span class="filter-label" style="margin-left:6px;">Filter:</span>
-      <select class="filter-select" id="wd-class" onchange="wdRender()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
-      <select class="filter-select" id="wd-major" onchange="wdRender()"><option value="">All Majors</option></select>
-      <select class="filter-select" id="wd-advisor" onchange="wdRender()"><option value="">All Advisors</option></select>
-      <select class="filter-select" id="wd-reason" onchange="wdRender()"><option value="">All Reasons</option></select>
-      <input class="table-search" type="text" id="wd-search" placeholder="Search name or ID…" oninput="wdRender()" style="width:200px;" />
-    </div>
-    <div class="table-wrap">
-      <div class="table-header-row">
-        <h3 id="wd-title">—</h3>
-        <div class="export-cluster">
-          <button class="export-btn" onclick="exportTabCSV('withdrawals','visible')" title="Download the rows currently shown (filters + term selector applied)">Download visible (.csv)</button>
-          <button class="export-btn export-btn-all" onclick="exportTabCSV('withdrawals','all')" title="Download every withdrawal record across all terms">Download all (.csv)</button>
-        </div>
-      </div>
-      <table id="wd-table"><thead><tr>
-        <th class="sortable" onclick="wdSort('id')">Student ID</th>
-        <th class="sortable" onclick="wdSort('name')">Name</th>
-        <th class="sortable" onclick="wdSort('lastActiveDate')">Last Active</th>
-        <th class="sortable" onclick="wdSort('processedDate')">Processed</th>
-        <th class="sortable" onclick="wdSort('reason')">Reason</th>
-        <th class="sortable" onclick="wdSort('type')">Type</th>
-        <th class="sortable" onclick="wdSort('classYear')">Class</th>
-        <th class="sortable" onclick="wdSort('major')">Major</th>
-        <th class="sortable" onclick="wdSort('advisor')">Advisor</th>
-        <th>NR Status</th>
-      </tr></thead>
-      <tbody id="wd-tbody"></tbody></table>
-    </div>
-  </div>
-</div>
 
 <!-- ══════════════════════════ NOT RETURNING ══════════════════════════ -->
 <div class="page" id="page-notreturning">
@@ -1419,25 +1363,6 @@ function renderSummary() {
   // toward each of their reasons. Sorted desc.
   renderReasonsChart();
 
-  // Withdrawal KPI strip — only shown when a withdrawal CSV has been loaded.
-  const wdRow = document.getElementById('s-withdrawals-row');
-  if (csvLoaded.withdrawals && withdrawalsList.length) {
-    wdRow.style.display = 'grid';
-    const window = getCurrentTermWindow();
-    const currentTermWds = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate));
-    document.getElementById('s-wd-total').textContent = n(currentTermWds.length);
-    const windowLabel = window.start
-      ? `${window.start} → ${window.end}${window.isOpenEnded ? ' (open-ended)' : ''}`
-      : 'Set term window in upload panel';
-    document.getElementById('s-wd-window').textContent = windowLabel;
-    // Pending NR Match = current-term withdrawals where a human NR row exists for the same student
-    const humanNRIds = new Set(nrList.filter(r => !r._sourceWithdrawalId && r.id).map(r => r.id));
-    const overlap = currentTermWds.filter(w => humanNRIds.has(w.id)).length;
-    document.getElementById('s-wd-pending-overlap').textContent = n(overlap);
-    document.getElementById('s-wd-alltime').textContent = n(withdrawalsList.length);
-  } else {
-    wdRow.style.display = 'none';
-  }
 }
 
 function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
@@ -2307,22 +2232,12 @@ function mapWithdrawalReason(raw) {
   return r; // surface verbatim
 }
 
+// renderWithdrawals is a no-op now that the dedicated Withdrawals tab is
+// removed (Tony 2026-05-05). Withdrawal data still flows: upload still pushes
+// to Supabase, auto-sync still creates Not Returning rows. The data just
+// isn't surfaced in its own tab.
 function renderWithdrawals() {
-  if (!csvLoaded.withdrawals || !withdrawalsList.length) {
-    document.getElementById('wd-empty').style.display   = 'block';
-    document.getElementById('wd-content').style.display = 'none';
-    return;
-  }
-  document.getElementById('wd-empty').style.display   = 'none';
-  document.getElementById('wd-content').style.display = 'block';
-  // Populate filter dropdowns from withdrawal data
-  const majors   = [...new Set(withdrawalsList.map(w=>w.major).filter(Boolean))].sort();
-  const advisors = [...new Set(withdrawalsList.map(w=>w.advisor).filter(Boolean))].sort();
-  const reasons  = [...new Set(withdrawalsList.map(w=>w.reason).filter(Boolean))].sort();
-  fillSelectKeepValue('wd-major', majors, 'Majors');
-  fillSelectKeepValue('wd-advisor', advisors, 'Advisors');
-  fillSelectKeepValue('wd-reason', reasons, 'Reasons');
-  wdRender();
+  // intentionally empty
 }
 
 // Tiny helper so multiple tabs can refresh select options without trampling
@@ -2336,12 +2251,14 @@ function fillSelectKeepValue(id, items, label) {
   if (items.includes(cur)) sel.value = cur;
 }
 
-function wdSort(col) {
-  if (wdSort_.col === col) wdSort_.dir *= -1; else { wdSort_.col = col; wdSort_.dir = 1; }
-  wdRender();
-}
+// wdSort / wdRender: dead code now that the Withdrawals tab is removed
+// (Tony 2026-05-05). Kept as no-ops in case any cached HTML still references
+// them via inline handlers.
+function wdSort() {}
+function wdRender() {}
 
-function wdRender() {
+// Old withdrawal-tab render kept below for reference but never called:
+function _wdRenderLegacy_DEAD() {
   const termFilter = document.getElementById('wd-term').value;
   const cls     = document.getElementById('wd-class').value.toLowerCase();
   const major   = document.getElementById('wd-major').value;
@@ -2664,11 +2581,6 @@ async function renderPublicSummary() {
   document.getElementById('s-all-total').textContent  = n((m.total_returning || 0) + (m.total_new || 0));
   document.getElementById('s-all-reg').textContent    = n((m.total_registered || 0) + (m.new_registered || 0));
   document.getElementById('s-can-reg').textContent    = n(m.can_register || 0);
-  if (m.withdrawals_this_term != null) {
-    document.getElementById('s-withdrawals-row').style.display = 'grid';
-    document.getElementById('s-wd-total').textContent  = n(m.withdrawals_this_term);
-    document.getElementById('s-wd-window').textContent = 'Current term';
-  }
   // Hide widgets that need raw student data when we're on the public side
   document.getElementById('returning-donuts-grid').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the per-segment breakdown.</div>';
   document.getElementById('hold-donuts-grid').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the per-hold breakdown.</div>';
