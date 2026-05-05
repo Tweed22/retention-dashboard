@@ -149,13 +149,23 @@ create table if not exists snapshot_metrics (
 -- Authoritative completed withdrawals from the registrar's CSV.
 -- The current-term filter uses last_active_date — NOT processed_date.
 -- Re-uploads upsert by (student_id, last_active_date); duplicates collapse.
+-- student_id is intentionally NOT a FK because withdrawal records often
+-- reference students who are no longer in the active students snapshot
+-- (they've withdrawn). Self-contained name/contact columns let us render
+-- withdrawal data without joining to students.
 create table if not exists withdrawals (
   id                uuid primary key default gen_random_uuid(),
-  student_id        text references students(id) on delete set null,
+  student_id        text,
   last_active_date  date not null,
   processed_date    date,
   withdrawal_reason text,
   withdrawal_type   text,
+  first_name        text,
+  last_name         text,
+  email             text,
+  major             text,
+  advisor           text,
+  class_year        text,
   term_id           uuid references terms(id) on delete set null,
   snapshot_id       uuid references csv_snapshots(id) on delete set null,
   source_filename   text,
@@ -196,7 +206,7 @@ create table if not exists not_returning_reports (
   student_id           text,
   student_name         text,
   reason               text,
-  withdrawal_status    text check (withdrawal_status in ('Pending','Complete')),
+  withdrawal_status    text check (withdrawal_status in ('Pending','Withdrawn')),
   notes                text,
   submitter_name       text,
   submitter_email      text,

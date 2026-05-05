@@ -594,7 +594,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
     <div class="kpi-card red"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="nr-count">0</div><div class="kpi-sub">Students reported not returning</div></div>
     <div class="kpi-card amber"><div class="kpi-label">Withdrawal Pending</div><div class="kpi-value" id="nr-pending">0</div><div class="kpi-sub">Formal withdrawal not processed</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Withdrawal Complete</div><div class="kpi-value" id="nr-complete">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="nr-withdrawn">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
     <div class="kpi-card sky"><div class="kpi-label">Registered for Courses</div><div class="kpi-value" id="nr-registered">0</div><div class="kpi-sub">On NR list AND enrolled — needs reconciliation</div></div>
   </div>
 
@@ -611,7 +611,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     </div>
     <div class="nr-field med">
       <label>Withdrawal</label>
-      <select id="nr-f-withdrawal"><option value="Pending">Pending</option><option value="Complete">Complete</option></select>
+      <select id="nr-f-withdrawal"><option value="Pending">Pending</option><option value="Withdrawn">Withdrawn</option></select>
     </div>
     <div class="nr-field wide"><label>Notes</label><input type="text" id="nr-f-notes" placeholder="Optional notes" /></div>
     <button class="nr-add-btn" onclick="nrAdd()">+ Add Row</button>
@@ -620,7 +620,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <!-- ── Filters + table ── -->
   <div class="filter-row" style="margin-bottom:10px;">
     <span class="filter-label">Filter:</span>
-    <select class="filter-select" id="nr-filter-withdrawal" onchange="nrRender()"><option value="">All Statuses</option><option>Pending</option><option>Complete</option></select>
+    <select class="filter-select" id="nr-filter-withdrawal" onchange="nrRender()"><option value="">All Statuses</option><option>Pending</option><option>Withdrawn</option></select>
     <select class="filter-select" id="nr-filter-reason" onchange="nrRender()">
       <option value="">All Reasons</option>
     </select>
@@ -2009,7 +2009,7 @@ function nrSort(col) { if(nrSort_.col===col)nrSort_.dir*=-1;else{nrSort_.col=col
 function nrUpdateKpis() {
   document.getElementById('nr-count').textContent    = n(nrList.length);
   document.getElementById('nr-pending').textContent  = n(nrList.filter(s=>s.withdrawal==='Pending').length);
-  document.getElementById('nr-complete').textContent = n(nrList.filter(s=>s.withdrawal==='Complete').length);
+  document.getElementById('nr-withdrawn').textContent = n(nrList.filter(s=>s.withdrawal==='Withdrawn').length);
   // "Registered for Courses" count: students on the NR list who are also enrolled
   // in at least one course. Surfaces the discrepancy between "flagged not returning"
   // and "actually still registered" so the committee can reconcile.
@@ -2046,7 +2046,7 @@ function nrRender() {
 }
 
 function nrRenderStaticRow(r) {
-  const wChip = r.withdrawal==='Complete' ? 'chip-green' : 'chip-amber';
+  const wChip = r.withdrawal==='Withdrawn' ? 'chip-red' : 'chip-amber';
   const regCell = isNRRegistered(r)
     ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
     : '<span style="color:#bbb;font-size:11px;">—</span>';
@@ -2142,7 +2142,7 @@ function nrCellNotes(idx, el) {
 }
 
 function nrRenderEditRow(r) {
-  const withOpts = ['Pending','Complete']
+  const withOpts = ['Pending','Withdrawn']
     .map(o => `<option ${r.withdrawal===o?'selected':''}>${o}</option>`)
     .join('');
   const isStandard = !r.reason || NR_REASONS.includes(r.reason);
@@ -2277,7 +2277,7 @@ function syncWithdrawalsToNR() {
       isRegistered: !!(w.id && registeredIds && registeredIds.has(w.id)),
       reason: mappedReason,
       notes: w.processedDate ? `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}; processed ${w.processedDate}.` : `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}.`,
-      withdrawal: 'Complete',
+      withdrawal: 'Withdrawn',
       dateAdded: new Date().toISOString().slice(0,10),
       _sourceWithdrawalId: sourceId,
       _withdrawalLDA: w.lastActiveDate,
@@ -2730,28 +2730,34 @@ async function loadHostedDashboardData() {
     });
     if (!hasBlocking) canRegisterStudents.push(s);
   });
-  // Withdrawals — Supabase → existing shape
+  // Withdrawals — Supabase → existing shape. Prefer self-contained columns
+  // on the withdrawal row; fall back to the linked student record only when
+  // the withdrawal CSV didn't supply that field.
   withdrawalsList = data.withdrawals.map(w => ({
     id: w.student_id,
-    name: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    major: '',
-    advisor: '',
-    classYear: '',
+    firstName: w.first_name || '',
+    lastName: w.last_name || '',
+    name: [w.first_name, w.last_name].filter(Boolean).join(' '),
+    email: w.email || '',
+    major: w.major || '',
+    advisor: w.advisor || '',
+    classYear: w.class_year || '',
     lastActiveDate: w.last_active_date,
     processedDate: w.processed_date,
     reason: w.withdrawal_reason || '',
     type: w.withdrawal_type || '',
   }));
-  // Enrich withdrawals with student fields, since the registrar's CSV often omits them
+  // Enrich any field that's still empty from the linked student record.
   withdrawalsList.forEach(w => {
     const s = returningStudents[w.id] || newStudents[w.id] || registeredStudents[w.id];
-    if (s) {
-      w.name = s.name; w.firstName = s.firstName; w.lastName = s.lastName;
-      w.email = s.email; w.major = s.major; w.advisor = s.advisor; w.classYear = s.classYear;
-    }
+    if (!s) return;
+    if (!w.name)      w.name      = s.name      || '';
+    if (!w.firstName) w.firstName = s.firstName || '';
+    if (!w.lastName)  w.lastName  = s.lastName  || '';
+    if (!w.email)     w.email     = s.email     || '';
+    if (!w.major)     w.major     = s.major     || '';
+    if (!w.advisor)   w.advisor   = s.advisor   || '';
+    if (!w.classYear) w.classYear = s.classYear || '';
   });
   // NR list — Supabase → existing shape
   nrList = data.nrReports.map(r => ({
@@ -2917,6 +2923,12 @@ async function pushDataToSupabase() {
         processed_date: w.processedDate || null,
         withdrawal_reason: w.reason || null,
         withdrawal_type: w.type || null,
+        first_name: w.firstName || null,
+        last_name: w.lastName || null,
+        email: w.email || null,
+        major: w.major || null,
+        advisor: w.advisor || null,
+        class_year: w.classYear || null,
         term_id: isInCurrentTerm(w.lastActiveDate) ? currentTermId : null,
         snapshot_id: snapshotId,
         source_filename: 'withdrawals.csv',
@@ -2944,14 +2956,14 @@ async function pushDataToSupabase() {
     expect('NR existing select', existingNRRes);
     const existingSet = new Set((existingNRRes.data || []).map(r => r.source_withdrawal_id));
     const wdRowsBackRes = currentTermId
-      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason').eq('term_id', currentTermId)
+      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason, first_name, last_name').eq('term_id', currentTermId)
       : { data: [], error: null };
     expect('withdrawals select for sync', wdRowsBackRes);
     const newNR = (wdRowsBackRes.data || []).filter(w => !existingSet.has(w.id)).map(w => ({
       student_id: w.student_id,
-      student_name: '',
+      student_name: [w.first_name, w.last_name].filter(Boolean).join(' '),
       reason: mapWithdrawalReason(w.withdrawal_reason),
-      withdrawal_status: 'Complete',
+      withdrawal_status: 'Withdrawn',
       submitter_name: '[CSV import]',
       submitter_uid: currentUser?.id,
       source_withdrawal_id: w.id,
