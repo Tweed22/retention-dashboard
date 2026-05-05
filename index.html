@@ -3019,13 +3019,47 @@ processAllCSVs = async function processAllCSVsWithSupabase() {
   }
 };
 
-// Intercept NR add/remove/save writes so they go to Supabase in hosted mode.
-// The length-comparison guards detect when the inner function bailed (failed
-// validation, user clicked Cancel on the confirm dialog) so we don't issue
-// a stray Supabase write for an action the user actually cancelled.
-const _origNrAdd    = nrAdd;
-const _origNrRemove = nrRemove;
-const _origNrSave   = nrSave;
+// Persist a single NR row's editable fields to Supabase. Called from every
+// inline cell handler (reason dropdown, custom-reason text input, notes
+// input, etc.) so changes survive a page reload. Fire-and-forget — we
+// don't await the result inside synchronous handlers, but errors surface
+// as console warnings (and one alert per error) so silent persistence
+// failures don't go unnoticed.
+async function persistNRRowToSupabase(idx) {
+  if (!HOSTED || !isCommittee()) return;
+  const row = nrList[idx];
+  if (!row || !row._supabaseId) return;
+  const { error } = await sb.from('not_returning_reports').update({
+    student_id: row.id || null,
+    student_name: row.name,
+    reason: row.reason,
+    withdrawal_status: row.withdrawal,
+    notes: row.notes,
+  }).eq('id', row._supabaseId);
+  if (error) {
+    console.warn('NR row persist failed:', error);
+    // Avoid alert spam — only first error per session
+    if (!persistNRRowToSupabase._hasWarned) {
+      persistNRRowToSupabase._hasWarned = true;
+      alert('Could not save your edit to the database: ' + error.message +
+        '\n\nYour change is shown locally but will not survive a refresh. ' +
+        'Most likely cause: RLS policy or auth state. Check console for details.');
+    }
+  }
+}
+
+// Intercept NR add/remove/save/inline-cell writes so they go to Supabase
+// in hosted mode. The length-comparison guards on add/remove detect when
+// the inner function bailed (failed validation, user clicked Cancel on the
+// confirm dialog) so we don't issue a stray Supabase write for an action
+// the user actually cancelled.
+const _origNrAdd          = nrAdd;
+const _origNrRemove       = nrRemove;
+const _origNrSave         = nrSave;
+const _origNrCellReason   = nrCellReason;
+const _origNrCellReasonText = nrCellReasonText;
+const _origNrResetReason  = nrResetReason;
+const _origNrCellNotes    = nrCellNotes;
 nrAdd = async function nrAddWithSupabase() {
   const lenBefore = nrList.length;
   _origNrAdd();
@@ -3092,6 +3126,28 @@ nrSave = async function nrSaveWithSupabase(idx) {
         '\n\nYour changes will revert on refresh.');
     }
   }
+};
+
+// Inline cell handlers — wrap so changes persist to Supabase too, not
+// just localStorage. The "Other" branch of nrCellReason intentionally
+// triggers a Supabase write with reason='' (transient state) which is
+// then immediately superseded by the user's typed value via
+// nrCellReasonText — two cheap writes, last one wins.
+nrCellReason = function(idx, el) {
+  _origNrCellReason(idx, el);
+  persistNRRowToSupabase(idx);
+};
+nrCellReasonText = function(idx, el) {
+  _origNrCellReasonText(idx, el);
+  persistNRRowToSupabase(idx);
+};
+nrResetReason = function(idx) {
+  _origNrResetReason(idx);
+  persistNRRowToSupabase(idx);
+};
+nrCellNotes = function(idx, el) {
+  _origNrCellNotes(idx, el);
+  persistNRRowToSupabase(idx);
 };
 
 // Escape key dismisses the NR edit form. Belt-and-suspenders alongside the
