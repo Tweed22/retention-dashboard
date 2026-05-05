@@ -642,7 +642,7 @@ const HOLD_CHIPS     = ['chip-purple','chip-indigo','chip-amber','chip-blue','ch
 const NR_REASONS = [
   'Transfer to another institution',
   'Personal / family circumstances',
-  'Financial hardship',
+  'Financial',
   'Medical',
   'Suspension',
   'Military service',
@@ -652,14 +652,17 @@ const NR_REASONS = [
   'Athletic',
   'Conflict with Faculty and/or Staff',
   'Housing',
+  'Graduating',
+  'Unknown',
   'Other',
 ];
 
 // Map of legacy single-value reason strings → their new equivalent so existing
 // nrList rows in localStorage migrate cleanly.
 const NR_REASON_LEGACY = {
-  'Academic dismissal':     'Suspension',
+  'Academic dismissal':       'Suspension',
   'Medical / health reasons': 'Medical',
+  'Financial hardship':       'Financial',  // 2026-05-05 rename
 };
 
 let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [];
@@ -2229,16 +2232,18 @@ function mapWithdrawalReason(raw) {
   const lc = r.toLowerCase();
   if (NR_REASONS.includes(r)) return r;
   if (lc.includes('transfer'))                        return 'Transfer to another institution';
-  if (lc.includes('financial') || lc.includes('money')|| lc.includes('cost')) return 'Financial hardship';
+  // Affordability / financial / cost / money all roll up to the Financial bucket.
+  if (lc.includes('financial') || lc.includes('afford') || lc.includes('money') || lc.includes('cost')) return 'Financial';
   if (lc.includes('medical')  || lc.includes('health'))                       return 'Medical';
   if (lc.includes('suspen')   || lc.includes('dismiss'))                      return 'Suspension';
   if (lc.includes('military'))                                                return 'Military service';
   if (lc.includes('major')    && lc.includes('change'))                       return 'Academics - Major';
-  if (lc.includes('academic') || lc.includes('grade')|| lc.includes('gpa'))  return 'Academics - Performance';
+  if (lc.includes('academic') || lc.includes('grade')|| lc.includes('gpa'))   return 'Academics - Performance';
   if (lc.includes('housing')  || lc.includes('dorm'))                         return 'Housing';
   if (lc.includes('athletic') || lc.includes('sport'))                        return 'Athletic';
   if (lc.includes('faculty')  || lc.includes('staff'))                        return 'Conflict with Faculty and/or Staff';
   if (lc.includes('family')   || lc.includes('personal'))                     return 'Personal / family circumstances';
+  if (lc.includes('graduat')  || lc.includes('completion'))                   return 'Graduating';
   return r; // surface verbatim
 }
 
@@ -2699,24 +2704,30 @@ async function loadHostedDashboardData() {
     if (!w.advisor)   w.advisor   = s.advisor   || '';
     if (!w.classYear) w.classYear = s.classYear || '';
   });
-  // NR list — Supabase → existing shape
-  nrList = data.nrReports.map(r => ({
-    id: r.student_id || '',
-    name: r.student_name || '',
-    email: '',
-    major: '',
-    advisor: '',
-    sport: '',
-    isRegistered: !!(r.student_id && registeredIds.has(r.student_id)),
-    reason: r.reason || '',
-    notes: r.notes || '',
-    withdrawal: r.withdrawal_status || 'Pending',
-    dateAdded: r.created_at ? r.created_at.slice(0,10) : '',
-    _supabaseId: r.id,
-    _sourceWithdrawalId: r.source_withdrawal_id ? `wd-${r.id}` : null,
-    _withdrawalLDA: null,
-    _isFromCSV: !!r.source_withdrawal_id,
-  }));
+  // NR list — Supabase → existing shape. Legacy reason names ('Financial
+  // hardship', 'Academic dismissal', etc.) get remapped on the fly so old
+  // rows still in the DB display under the current vocabulary.
+  nrList = data.nrReports.map(r => {
+    let reason = r.reason || '';
+    if (reason && NR_REASON_LEGACY[reason]) reason = NR_REASON_LEGACY[reason];
+    return {
+      id: r.student_id || '',
+      name: r.student_name || '',
+      email: '',
+      major: '',
+      advisor: '',
+      sport: '',
+      isRegistered: !!(r.student_id && registeredIds.has(r.student_id)),
+      reason,
+      notes: r.notes || '',
+      withdrawal: r.withdrawal_status || 'Pending',
+      dateAdded: r.created_at ? r.created_at.slice(0,10) : '',
+      _supabaseId: r.id,
+      _sourceWithdrawalId: r.source_withdrawal_id ? `wd-${r.id}` : null,
+      _withdrawalLDA: null,
+      _isFromCSV: !!r.source_withdrawal_id,
+    };
+  });
   // Enrich NR rows from student lookups (for major / email display)
   nrList.forEach(r => {
     const s = returningStudents[r.id] || newStudents[r.id] || registeredStudents[r.id];
