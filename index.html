@@ -213,35 +213,37 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 /* ── Auth UI ── */
 .auth-status { font-size: 11px; color: rgba(255,255,255,0.85); display: inline-flex; align-items: center; gap: 6px; }
 .auth-status .auth-name { font-weight: 600; color: white; }
-.auth-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: none; align-items: center; justify-content: center; z-index: 1000; }
-.auth-modal-backdrop.open { display: flex; }
-.auth-modal { background: white; border-radius: 12px; padding: 28px 32px; width: 380px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.25); }
-.auth-modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: #1a1d23; }
-.auth-modal .auth-sub { font-size: 12px; color: #666; margin-bottom: 18px; }
-.auth-modal label { display: block; font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
-.auth-modal input { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px 12px; font-size: 14px; outline: none; }
-.auth-modal input:focus { border-color: #2563eb; }
-.auth-modal .auth-actions { margin-top: 18px; display: flex; gap: 8px; justify-content: flex-end; }
-.auth-modal .auth-btn { background: #2563eb; color: white; border: none; border-radius: 7px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
-.auth-modal .auth-btn:hover { background: #1d4ed8; }
-.auth-modal .auth-btn[disabled] { opacity: 0.6; cursor: wait; }
-.auth-modal .auth-btn-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; }
-.auth-modal .auth-btn-secondary:hover { background: #f8fafc; }
-.auth-msg { font-size: 12px; padding: 9px 12px; border-radius: 6px; margin-top: 14px; }
-.auth-msg.auth-msg-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
-.auth-msg.auth-msg-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
-.auth-msg.auth-msg-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 
-/* Auth-driven visibility. Body gets exactly one class: auth-anon, auth-committee,
-   or auth-admin. Each class is mutually exclusive.
-   - .gated-only  visible to committee + admin (hidden under auth-anon only)
-   - .admin-only  visible to admin only (hidden under both auth-anon + auth-committee)
-   - .anon-only   visible to anon only (hidden under committee + admin)            */
-body.auth-anon       .gated-only,
-body.auth-anon       .admin-only,
+/* Full-screen auth gate. Anon users see only this — the rest of the dashboard
+   (header, nav, all pages) is hidden under body.auth-anon. After sign-in the
+   body class flips and the gate disappears. */
+.auth-gate { display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #1e2d4f 0%, #2563eb 100%); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
+body.auth-anon .auth-gate { display: flex; }
+body.auth-anon .header,
+body.auth-anon .nav,
+body.auth-anon .page,
+body.auth-anon .upload-panel { display: none !important; }
+.auth-gate-card { background: white; border-radius: 16px; padding: 40px 44px; width: 460px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
+.auth-gate-title { font-size: 22px; font-weight: 700; color: #1a1d23; margin-bottom: 6px; }
+.auth-gate-sub { font-size: 13px; color: #666; margin-bottom: 22px; line-height: 1.5; }
+.auth-gate-card label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #555; margin-bottom: 8px; }
+.auth-gate-card input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 11px 14px; font-size: 14px; outline: none; margin-bottom: 14px; box-sizing: border-box; }
+.auth-gate-card input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+.auth-gate-card button { width: 100%; background: #2563eb; color: white; border: none; border-radius: 8px; padding: 12px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.auth-gate-card button:hover { background: #1d4ed8; }
+.auth-gate-card button[disabled] { opacity: 0.6; cursor: wait; }
+.auth-gate-msg { font-size: 13px; padding: 10px 14px; border-radius: 7px; margin-top: 14px; line-height: 1.4; }
+.auth-gate-msg.auth-gate-msg-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.auth-gate-msg.auth-gate-msg-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.auth-gate-msg.auth-gate-msg-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+/* Auth-driven visibility for elements that ARE shown to authed users but
+   not all of them. Body gets exactly one class: auth-anon, auth-committee,
+   or auth-admin (mutually exclusive).                                     */
 body.auth-committee  .admin-only,
-body.auth-committee  .anon-only,
-body.auth-admin      .anon-only { display: none !important; }
+body.auth-admin      .anon-only,
+body.auth-committee  .anon-only { display: none !important; }
+/* (auth-anon is fully covered by the .header/.nav/.page hiding above)     */
 
 .show-when-authed { display: none; }
 body.auth-committee .show-when-authed,
@@ -268,28 +270,24 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="subtitle" id="header-subtitle">Loading…</div>
   </div>
   <div class="header-right">
-    <div class="privacy-badge anon-only">Public dashboard — aggregate data only</div>
     <div class="auth-status show-when-authed" id="auth-status">
       <span>Signed in as</span> <span class="auth-name" id="auth-name">—</span>
+      <span class="auth-name" id="auth-role" style="background:rgba(255,255,255,0.15);padding:2px 7px;border-radius:10px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;"></span>
       <button class="upload-btn" onclick="signOut()" style="margin-left:6px;">Sign out</button>
     </div>
-    <button class="upload-btn anon-only" onclick="openAuthModal()">Sign in</button>
     <button class="upload-btn admin-only" onclick="toggleUploadPanel()">Update Data</button>
   </div>
 </div>
 
-<!-- ── Sign-in modal ── -->
-<div class="auth-modal-backdrop" id="auth-modal-backdrop" onclick="if(event.target===this)closeAuthModal()">
-  <div class="auth-modal">
-    <h2>Sign in to view detail tabs</h2>
-    <div class="auth-sub">Committee members only. Enter your email and we'll send you a one-time login link.</div>
-    <label for="auth-email">Email address</label>
-    <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email" />
-    <div class="auth-actions">
-      <button class="auth-btn auth-btn-secondary" onclick="closeAuthModal()">Cancel</button>
-      <button class="auth-btn" id="auth-send-btn" onclick="sendMagicLink()">Send magic link</button>
-    </div>
-    <div id="auth-msg"></div>
+<!-- ── Auth Gate (full-screen, shown only when not signed in) ── -->
+<div class="auth-gate anon-only" id="auth-gate">
+  <div class="auth-gate-card">
+    <div class="auth-gate-title">Retention Dashboard</div>
+    <div class="auth-gate-sub">Committee members only. Sign in with your authorized email and we'll send you a one-time login link.</div>
+    <label for="auth-gate-email">Email address</label>
+    <input type="email" id="auth-gate-email" placeholder="you@example.com" autocomplete="email" />
+    <button id="auth-gate-send" onclick="sendMagicLinkFromGate()">Send magic link</button>
+    <div id="auth-gate-msg"></div>
   </div>
 </div>
 
@@ -2478,46 +2476,51 @@ function nrPopulateAddReason() {
 // ══════════════════════════════════════════════════════════════
 //  AUTH (magic link via Supabase)
 // ══════════════════════════════════════════════════════════════
-function openAuthModal() {
-  document.getElementById('auth-msg').innerHTML = '';
-  document.getElementById('auth-email').value = '';
-  document.getElementById('auth-modal-backdrop').classList.add('open');
-  setTimeout(() => document.getElementById('auth-email').focus(), 50);
-}
-function closeAuthModal() {
-  document.getElementById('auth-modal-backdrop').classList.remove('open');
+// The auth UX is a full-screen gate (not a modal): anon visitors see ONLY
+// the sign-in card. After successful sign-in the body class flips and the
+// dashboard reveals itself.
+
+function authGateMsg(kind, html) {
+  const m = document.getElementById('auth-gate-msg');
+  if (!m) return;
+  m.className = 'auth-gate-msg auth-gate-msg-' + kind;
+  m.innerHTML = html;
 }
 
-async function sendMagicLink() {
-  const email = document.getElementById('auth-email').value.trim();
-  const msg   = document.getElementById('auth-msg');
-  const btn   = document.getElementById('auth-send-btn');
+async function sendMagicLinkFromGate() {
+  const emailEl = document.getElementById('auth-gate-email');
+  const btnEl   = document.getElementById('auth-gate-send');
+  const email = (emailEl?.value || '').trim();
   if (!email || !email.includes('@')) {
-    msg.className = 'auth-msg auth-msg-error';
-    msg.textContent = 'Please enter a valid email address.';
+    authGateMsg('error', 'Please enter a valid email address.');
     return;
   }
   if (!sb) {
-    msg.className = 'auth-msg auth-msg-error';
-    msg.textContent = 'Sign-in is only available on the hosted dashboard. Open this page from its public URL to sign in.';
+    authGateMsg('error', 'Sign-in is only available on the hosted dashboard.');
     return;
   }
-  btn.disabled = true;
-  msg.className = 'auth-msg auth-msg-info';
-  msg.textContent = 'Sending magic link…';
+  btnEl.disabled = true;
+  authGateMsg('info', 'Sending magic link…');
+  // Strip any pre-existing hash (from a prior magic-link redirect) so the
+  // emailRedirectTo is always the clean URL the user is currently looking at.
+  const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
   const { error } = await sb.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: window.location.origin + window.location.pathname },
+    options: { emailRedirectTo: cleanUrl },
   });
-  btn.disabled = false;
+  btnEl.disabled = false;
   if (error) {
-    msg.className = 'auth-msg auth-msg-error';
-    msg.textContent = 'Could not send magic link: ' + error.message;
+    authGateMsg('error', '<strong>Error:</strong> ' + error.message);
     return;
   }
-  msg.className = 'auth-msg auth-msg-success';
-  msg.innerHTML = '<strong>Check your email.</strong> The link will sign you in automatically. (Look in spam if nothing arrives within a minute.)';
+  authGateMsg('success', '<strong>Check your email.</strong> The link will sign you in automatically. (If nothing arrives in 60 seconds, check spam.)');
 }
+
+// Legacy modal helpers — kept as no-ops in case any leftover handler
+// still references them. The modal HTML is gone.
+function openAuthModal() {}
+function closeAuthModal() {}
+async function sendMagicLink() { return sendMagicLinkFromGate(); }
 
 async function signOut() {
   if (!sb) return;
@@ -2526,31 +2529,44 @@ async function signOut() {
 }
 
 // Translate the current Supabase auth session into our role model. Looks up
-// committee_members for role + display_name.
+// committee_members for role + display_name. Failures are surfaced visibly
+// on the auth gate so they can't disappear into the console.
 async function refreshAuthState(session) {
-  if (!session || !session.user) {
-    currentUser = null;
-    userRole = 'anon';
-    userDisplay = '';
-  } else {
-    currentUser = session.user;
-    const { data, error } = await sb
-      .from('committee_members')
-      .select('role, display_name')
-      .eq('email', (session.user.email || '').toLowerCase())
-      .eq('is_active', true)
-      .maybeSingle();
-    if (error || !data) {
-      // Authenticated but not on the allowlist — sign back out.
-      await sb.auth.signOut();
+  try {
+    if (!session || !session.user) {
       currentUser = null;
       userRole = 'anon';
       userDisplay = '';
-      alert('Your email is not on the committee allowlist. Contact Tony to be added.');
     } else {
-      userRole = data.role || 'member';
-      userDisplay = data.display_name || session.user.email;
+      currentUser = session.user;
+      const lookup = await sb
+        .from('committee_members')
+        .select('role, display_name')
+        .eq('email', (session.user.email || '').toLowerCase())
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (lookup.error) {
+        authGateMsg('error',
+          `<strong>Sign-in succeeded</strong>, but role lookup failed: ${lookup.error.message}.<br>` +
+          `Check that the committee_members table exists and RLS allows committee SELECT. ` +
+          `Email being checked: <code>${session.user.email}</code>.`);
+        await sb.auth.signOut();
+        currentUser = null; userRole = 'anon'; userDisplay = '';
+      } else if (!lookup.data) {
+        authGateMsg('error',
+          `<strong>${session.user.email}</strong> is not on the committee allowlist. ` +
+          `Ask Tony to add a row in committee_members with this exact email and is_active=true.`);
+        await sb.auth.signOut();
+        currentUser = null; userRole = 'anon'; userDisplay = '';
+      } else {
+        userRole = lookup.data.role || 'member';
+        userDisplay = lookup.data.display_name || session.user.email;
+      }
     }
+  } catch (e) {
+    console.error('refreshAuthState exception:', e);
+    authGateMsg('error', 'Auth state error: ' + (e.message || e));
   }
   applyAuthUIState();
 }
@@ -2562,7 +2578,9 @@ function applyAuthUIState() {
   else if (userRole === 'member') body.classList.add('auth-committee');
   else body.classList.add('auth-anon');
   const nameEl = document.getElementById('auth-name');
+  const roleEl = document.getElementById('auth-role');
   if (nameEl) nameEl.textContent = userDisplay || (currentUser?.email || '');
+  if (roleEl) roleEl.textContent = userRole === 'admin' ? 'Admin' : userRole === 'member' ? 'Committee' : '';
   // If anon and currently on a gated tab, snap back to Summary
   if (userRole === 'anon') {
     const cur = document.querySelector('.page.active');
@@ -3219,20 +3237,24 @@ nrUpdateKpis();
 nrRender();
 
 if (HOSTED) {
-  // Default to anon BEFORE the auth callback fires, so admin-only and
-  // gated-only elements are hidden during the brief window between page
-  // load and Supabase confirming the session. Without this default, the
-  // body has no auth class and the CSS rules that hide those elements
-  // don't trigger, leaking the Update Data button to anonymous viewers.
+  // Default to anon BEFORE the auth callback fires, so the auth gate
+  // shows immediately on page load and the dashboard content stays hidden
+  // until Supabase confirms the session.
   document.body.classList.add('auth-anon');
   // Wait for the auth state, then load. onAuthStateChange fires once
   // immediately with INITIAL_SESSION, so we don't need a separate getSession().
-  sb.auth.onAuthStateChange(async (_event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
+    // After a magic-link redirect, the URL has #access_token=... params.
+    // Once Supabase has consumed them and stored the session, strip the
+    // hash so the access token isn't shareable / browser-history-leaky.
+    if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
     await refreshAuthState(session);
     if (isCommittee()) {
       await loadHostedDashboardData();
     } else {
-      await renderPublicSummary();
+      // Anon users see only the gate now — nothing to render.
     }
     startRealtime();
   });
@@ -3248,10 +3270,13 @@ if (HOSTED) {
     'Local-file mode — data stays in your browser';
 }
 
-// Allow Enter on the auth modal email field to submit
-document.getElementById('auth-email').addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendMagicLink();
-});
+// Allow Enter on the auth gate email field to submit
+const _authGateInput = document.getElementById('auth-gate-email');
+if (_authGateInput) {
+  _authGateInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMagicLinkFromGate();
+  });
+}
 </script>
 </body>
 </html>
