@@ -602,7 +602,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="nr-dup-warn" class="alert-box alert-warn" style="display:none;"></div>
   <div class="nr-add-row">
     <div class="nr-field sm"><label>Student ID</label><input type="text" id="nr-f-id" placeholder="e.g. 1001423" /></div>
-    <div class="nr-field wide"><label>Name</label><input type="text" id="nr-f-name" placeholder="Last, First or First Last" /></div>
+    <div class="nr-field wide"><label>Name</label><input type="text" id="nr-f-name" placeholder="Last, First or First Last" oninput="nrNameInputAutofill()" /></div>
     <div class="nr-field med"><label>Major</label><input type="text" id="nr-f-major" placeholder="e.g. Psychology" /></div>
     <div class="nr-field med">
       <label>Reason</label>
@@ -2591,17 +2591,27 @@ async function fetchLatestMetrics() {
 }
 
 // Fetches per-student data for the gated tabs. Committee-only per RLS.
+// Surface specific errors so RLS misconfig / network issues are visible.
 async function fetchDashboardData() {
   if (!sb || !isCommittee()) return null;
   const [students, withdrawals, nrReports, terms, snapshots] = await Promise.all([
-    sb.from('students').select('*'),
-    sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }),
-    sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('created_at', { ascending: false }),
+    sb.from('students').select('*').limit(10000),
+    sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }).limit(10000),
+    sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('created_at', { ascending: false }).limit(10000),
     sb.from('terms').select('*').order('start_date', { ascending: true }),
     sb.from('csv_snapshots').select('*').order('uploaded_at', { ascending: false }).limit(1),
   ]);
-  if (students.error || withdrawals.error || nrReports.error) {
-    console.error('fetchDashboardData errors:', { students: students.error, withdrawals: withdrawals.error, nrReports: nrReports.error });
+  const errs = [];
+  if (students.error)    errs.push(`students: ${students.error.message}`);
+  if (withdrawals.error) errs.push(`withdrawals: ${withdrawals.error.message}`);
+  if (nrReports.error)   errs.push(`not_returning_reports: ${nrReports.error.message}`);
+  if (terms.error)       errs.push(`terms: ${terms.error.message}`);
+  if (snapshots.error)   errs.push(`csv_snapshots: ${snapshots.error.message}`);
+  if (errs.length) {
+    console.error('fetchDashboardData errors:', errs);
+    alert('Could not read from the database. Errors:\n\n' + errs.join('\n') +
+      '\n\nMost common cause: your account is signed in but RLS policies are blocking reads. ' +
+      'Check that your email is in committee_members with is_active=true.');
     return null;
   }
   return {
@@ -2657,8 +2667,21 @@ async function renderPublicSummary() {
 // existing render pipeline. Maps Supabase column names (snake_case) back
 // to the in-memory shape the existing code uses (camelCase).
 async function loadHostedDashboardData() {
+  const setStatus = msg => {
+    const s = document.getElementById('header-subtitle');
+    if (s) s.textContent = msg;
+  };
+  setStatus('Loading from database…');
   const data = await fetchDashboardData();
-  if (!data) return;
+  if (!data) {
+    setStatus('Failed to load from database. Check your connection or RLS policies.');
+    return;
+  }
+  // Diagnostic that survives even if everything else is fine — at a glance
+  // Tony can confirm whether the DB has the data he expects.
+  if (data.students.length === 0 && data.withdrawals.length === 0 && data.nrReports.length === 0) {
+    setStatus('Database is empty — no data has been uploaded yet, OR your RLS policies are blocking reads.');
+  }
   // Adapter — Supabase rows → existing in-memory shape
   function toClient(s) {
     return {
@@ -2771,24 +2794,51 @@ async function loadHostedDashboardData() {
   }
   // Mark CSV-loaded flags so existing render code shows the data
   csvLoaded.unreg = csvLoaded.reg = csvLoaded.new = csvLoaded.withdrawals = (data.students.length > 0);
-  // Header subtitle
+  // Header subtitle: show data summary so Tony can confirm at a glance that
+  // his upload made it to Supabase. If a snapshot exists, show its timestamp;
+  // otherwise show counts.
   const ts = data.latestSnapshot?.uploaded_at;
+  const summary = `${data.students.length} students · ${data.withdrawals.length} withdrawals · ${data.nrReports.length} NR rows`;
   if (ts) {
     document.getElementById('header-subtitle').textContent =
-      'Last updated ' + new Date(ts).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+      `Last updated ${new Date(ts).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})} · ${summary}`;
+  } else {
+    document.getElementById('header-subtitle').textContent =
+      `Loaded: ${summary}`;
   }
   renderAll();
 }
 
 // Pushes the parsed CSV data + computed metrics to Supabase. Called from
 // processAllCSVs in hosted mode after the local parse succeeds.
+// Granular error handling per step + visible header status so failures are
+// never silent — a previous version was eating errors on the un-awaited
+// delete()/upsert() calls and the data wasn't actually persisting.
 async function pushDataToSupabase() {
-  if (!sb || !isAdmin()) return false;
-  const subtitle = document.getElementById('header-subtitle');
-  subtitle.textContent = 'Uploading to database…';
+  if (!sb || !isAdmin()) {
+    if (HOSTED && !isAdmin()) {
+      alert('Only admins can upload data. Your account does not have admin role in committee_members.');
+    }
+    return false;
+  }
+  const status = msg => {
+    const s = document.getElementById('header-subtitle');
+    if (s) s.textContent = msg;
+  };
+  // Helper that throws a tagged error so the catch block reports the step
+  // that actually failed (instead of a generic "upload failed").
+  function expect(step, { error }) {
+    if (error) {
+      const e = new Error(`[${step}] ${error.message || error}`);
+      e._step = step; e._supabase = error;
+      throw e;
+    }
+  }
+  status('Uploading to database…');
   try {
     // 1) Create the snapshot row
-    const { data: snap, error: snapErr } = await sb.from('csv_snapshots').insert({
+    status('Step 1/6: creating snapshot record…');
+    const snapResult = await sb.from('csv_snapshots').insert({
       uploaded_by: currentUser?.id,
       source_files: {
         unreg: csvLoaded.unreg ? 'unregistered.csv' : null,
@@ -2798,12 +2848,13 @@ async function pushDataToSupabase() {
       },
       student_count: Object.keys(returningStudents).length + Object.keys(newStudents).length,
     }).select().single();
-    if (snapErr) throw snapErr;
-    const snapshotId = snap.id;
+    expect('snapshot insert', snapResult);
+    const snapshotId = snapResult.data.id;
 
     // 2) Wipe existing students (delete-and-replace per-snapshot model)
-    //    Then upsert the freshly-parsed records.
-    await sb.from('students').delete().neq('id', '__sentinel__');
+    //    then upsert freshly-parsed records.
+    status('Step 2/6: clearing previous student data…');
+    expect('students delete', await sb.from('students').delete().neq('id', '__sentinel__'));
     const allStudents = [
       ...Object.values(returningStudents).map(s => ({...s, _isReg: false, _isNew: false})),
       ...Object.values(newStudents).map(s => ({...s, _isReg: registeredIds.has(s.id), _isNew: true})),
@@ -2826,35 +2877,39 @@ async function pushDataToSupabase() {
       snapshot_id: snapshotId,
       updated_at: new Date().toISOString(),
     }));
+    status(`Step 2/6: uploading ${studentRows.length} students…`);
     if (studentRows.length) {
       const chunks = chunk(studentRows, 500);
-      for (const c of chunks) {
-        const { error } = await sb.from('students').upsert(c, { onConflict: 'id' });
-        if (error) throw error;
+      for (let i = 0; i < chunks.length; i++) {
+        expect(`students upsert chunk ${i+1}/${chunks.length}`,
+          await sb.from('students').upsert(chunks[i], { onConflict: 'id' }));
       }
     }
 
     // 3) Sync `terms` table from local termSettings (so other admins see same window)
+    status('Step 3/6: syncing term window…');
     if (termSettings.currentStart) {
-      await sb.from('terms').upsert({
+      expect('terms upsert (current)', await sb.from('terms').upsert({
         name: termSettings.currentName || 'Current term',
         start_date: termSettings.currentStart,
-      }, { onConflict: 'start_date' });
+      }, { onConflict: 'start_date' }));
     }
     if (termSettings.nextStart) {
-      await sb.from('terms').upsert({
+      expect('terms upsert (next)', await sb.from('terms').upsert({
         name: 'Next term',
         start_date: termSettings.nextStart,
-      }, { onConflict: 'start_date' });
+      }, { onConflict: 'start_date' }));
     }
     // Find the term_id for "current" so we can stamp it onto withdrawals
     let currentTermId = null;
     if (termSettings.currentStart) {
-      const { data: tt } = await sb.from('terms').select('id').eq('start_date', termSettings.currentStart).maybeSingle();
-      currentTermId = tt?.id || null;
+      const tt = await sb.from('terms').select('id').eq('start_date', termSettings.currentStart).maybeSingle();
+      expect('terms select (current id)', tt);
+      currentTermId = tt.data?.id || null;
     }
 
     // 4) Upsert withdrawals
+    status(`Step 4/6: uploading ${withdrawalsList.length} withdrawals…`);
     if (withdrawalsList.length) {
       const wdRows = withdrawalsList.map(w => ({
         student_id: w.id,
@@ -2867,24 +2922,32 @@ async function pushDataToSupabase() {
         source_filename: 'withdrawals.csv',
       }));
       const wdChunks = chunk(wdRows, 500);
-      for (const c of wdChunks) {
-        const { error } = await sb.from('withdrawals').upsert(c, { onConflict: 'student_id,last_active_date' });
-        if (error) throw error;
+      for (let i = 0; i < wdChunks.length; i++) {
+        expect(`withdrawals upsert chunk ${i+1}/${wdChunks.length}`,
+          await sb.from('withdrawals').upsert(wdChunks[i], { onConflict: 'student_id,last_active_date' }));
       }
     }
 
     // 5) Compute + insert snapshot_metrics aggregate row
+    status('Step 5/6: computing aggregate metrics…');
     const metrics = computeSnapshotMetrics();
     metrics.snapshot_id = snapshotId;
-    const { error: metricsErr } = await sb.from('snapshot_metrics').upsert(metrics);
-    if (metricsErr) throw metricsErr;
+    expect('snapshot_metrics upsert', await sb.from('snapshot_metrics').upsert(metrics));
 
     // 6) Auto-feed current-term withdrawals into not_returning_reports
     //    (RLS allows committee insert; admin = committee.)
-    const { data: existingNR } = await sb.from('not_returning_reports').select('source_withdrawal_id').not('source_withdrawal_id', 'is', null);
-    const existingSet = new Set((existingNR || []).map(r => r.source_withdrawal_id));
-    const { data: wdRowsBack } = await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason').eq('term_id', currentTermId);
-    const newNR = (wdRowsBack || []).filter(w => !existingSet.has(w.id)).map(w => ({
+    status('Step 6/6: syncing Not Returning list…');
+    const existingNRRes = await sb.from('not_returning_reports')
+      .select('source_withdrawal_id')
+      .not('source_withdrawal_id', 'is', null)
+      .limit(10000);
+    expect('NR existing select', existingNRRes);
+    const existingSet = new Set((existingNRRes.data || []).map(r => r.source_withdrawal_id));
+    const wdRowsBackRes = currentTermId
+      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason').eq('term_id', currentTermId)
+      : { data: [], error: null };
+    expect('withdrawals select for sync', wdRowsBackRes);
+    const newNR = (wdRowsBackRes.data || []).filter(w => !existingSet.has(w.id)).map(w => ({
       student_id: w.student_id,
       student_name: '',
       reason: mapWithdrawalReason(w.withdrawal_reason),
@@ -2895,15 +2958,26 @@ async function pushDataToSupabase() {
       notes: `Auto-imported. Last active ${w.last_active_date}.`,
     }));
     if (newNR.length) {
-      const { error: nrErr } = await sb.from('not_returning_reports').insert(newNR);
-      if (nrErr) console.warn('NR auto-sync error:', nrErr);
+      const nrInsertRes = await sb.from('not_returning_reports').insert(newNR);
+      // Don't hard-fail the whole upload on auto-sync failure — the rest is saved,
+      // and the user can manually add NR rows. But surface it visibly.
+      if (nrInsertRes.error) {
+        console.warn('NR auto-sync error:', nrInsertRes.error);
+        alert('Warning: Withdrawal data uploaded, but auto-syncing the Not Returning list failed: ' + nrInsertRes.error.message);
+      }
     }
 
-    subtitle.textContent = 'Upload complete. Refreshing…';
+    status(`Upload complete: ${studentRows.length} students, ${withdrawalsList.length} withdrawals, ${newNR.length} NR auto-imported. Refreshing…`);
     return true;
   } catch (e) {
     console.error('pushDataToSupabase failed:', e);
-    alert('Upload to database failed: ' + (e.message || e));
+    const detail = e._step ? `\n\nFailed at: ${e._step}` : '';
+    const supdetail = e._supabase ? `\n\nDatabase error: ${JSON.stringify(e._supabase, null, 2)}` : '';
+    alert('Upload to database FAILED.' + detail + '\n\n' + (e.message || e) + supdetail +
+      '\n\nMost common causes:\n' +
+      '• Your account isn\'t marked as admin in committee_members.\n' +
+      '• The migration didn\'t run cleanly (RLS policies missing).\n' +
+      '• Network interruption mid-upload (try again).');
     return false;
   }
 }
@@ -2982,13 +3056,19 @@ processAllCSVs = async function processAllCSVsWithSupabase() {
   }
 };
 
-// Intercept NR add/remove writes so they go to Supabase in hosted mode.
+// Intercept NR add/remove/save writes so they go to Supabase in hosted mode.
+// The length-comparison guards detect when the inner function bailed (failed
+// validation, user clicked Cancel on the confirm dialog) so we don't issue
+// a stray Supabase write for an action the user actually cancelled.
 const _origNrAdd    = nrAdd;
 const _origNrRemove = nrRemove;
+const _origNrSave   = nrSave;
 nrAdd = async function nrAddWithSupabase() {
+  const lenBefore = nrList.length;
   _origNrAdd();
+  if (nrList.length <= lenBefore) return; // validation failed inside _origNrAdd
   if (HOSTED && isCommittee()) {
-    const fresh = nrList[0]; // _origNrAdd unshifts the new entry
+    const fresh = nrList[0]; // _origNrAdd unshifted the new entry
     if (!fresh || fresh._supabaseId) return;
     const { data, error } = await sb.from('not_returning_reports').insert({
       student_id: fresh.id || null,
@@ -3001,7 +3081,9 @@ nrAdd = async function nrAddWithSupabase() {
       submitter_uid: currentUser?.id,
     }).select().single();
     if (error) {
-      alert('Failed to save NR entry: ' + error.message);
+      alert('Failed to save NR entry to database: ' + error.message +
+        '\n\nThe row is shown locally but will disappear on refresh. ' +
+        'Likely cause: RLS policy or network issue.');
       return;
     }
     fresh._supabaseId = data.id;
@@ -3012,13 +3094,90 @@ nrRemove = async function nrRemoveWithSupabase(idx) {
   const row = nrList[idx];
   if (!row) return;
   const supabaseId = row._supabaseId;
-  _origNrRemove(idx);
+  const lenBefore = nrList.length;
+  _origNrRemove(idx); // pops a confirm() — user can cancel
+  if (nrList.length >= lenBefore) return; // user cancelled the confirm
   if (HOSTED && isCommittee() && supabaseId) {
     // Soft delete via is_hidden so the audit trail survives. Admin-only by RLS.
     const { error } = await sb.from('not_returning_reports').update({ is_hidden: true }).eq('id', supabaseId);
-    if (error) console.warn('NR hide failed:', error);
+    if (error) {
+      alert('Removed from view, but failed to delete from database: ' + error.message +
+        '\n\nThe row will reappear on refresh. ' +
+        'Most common cause: your account does not have admin role (only admins can delete NR rows per RLS policy).');
+    }
   }
 };
+nrSave = async function nrSaveWithSupabase(idx) {
+  // Capture the row reference BEFORE _origNrSave runs, since nrEditIdx
+  // gets cleared by it.
+  const row = nrList[idx];
+  const supabaseId = row?._supabaseId;
+  _origNrSave(idx);
+  if (HOSTED && isCommittee() && supabaseId) {
+    // Push the edited row's fields back to Supabase.
+    const updated = nrList[idx]; // same row, mutated by _origNrSave
+    if (!updated) return;
+    const { error } = await sb.from('not_returning_reports').update({
+      student_id: updated.id || null,
+      student_name: updated.name,
+      reason: updated.reason,
+      withdrawal_status: updated.withdrawal,
+      notes: updated.notes,
+    }).eq('id', supabaseId);
+    if (error) {
+      alert('Edits saved locally but failed to persist to database: ' + error.message +
+        '\n\nYour changes will revert on refresh.');
+    }
+  }
+};
+
+// Escape key dismisses the NR edit form. Belt-and-suspenders alongside the
+// Cancel button — if the row is wide enough that the buttons scroll off
+// screen, Esc still works.
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && nrEditIdx !== null) {
+    nrCancelEdit();
+  }
+});
+
+// As the user types in the NR add-row Name field, look up their CSV records
+// and pre-populate ID + Major when there's a confident match. Match strategy:
+//   1. Exact case-insensitive match against student.name → autofill
+//   2. "Last, First" or "Last First" partial match if exact fails
+// Triggers on input (not blur) so the form fills in real time.
+function nrNameInputAutofill() {
+  const nameInput = document.getElementById('nr-f-name');
+  const idInput   = document.getElementById('nr-f-id');
+  const majorInput = document.getElementById('nr-f-major');
+  if (!nameInput) return;
+  const typed = nameInput.value.trim().toLowerCase();
+  if (typed.length < 3) return; // wait for enough characters to be useful
+  // Search across all student maps. Don't autofill if user already typed a value.
+  const candidates = [
+    ...Object.values(returningStudents),
+    ...Object.values(newStudents),
+    ...Object.values(registeredStudents),
+  ];
+  // Exact match first
+  let match = candidates.find(s => (s.name || '').toLowerCase() === typed);
+  if (!match) {
+    // Try "Last, First" → "First Last" reorder
+    if (typed.includes(',')) {
+      const [last, first] = typed.split(',').map(p => p.trim());
+      const reordered = `${first} ${last}`;
+      match = candidates.find(s => (s.name || '').toLowerCase() === reordered);
+    }
+  }
+  if (!match) {
+    // Substring match — only autofill when it's unambiguous (exactly one match)
+    const subs = candidates.filter(s => (s.name || '').toLowerCase().includes(typed));
+    if (subs.length === 1) match = subs[0];
+  }
+  if (!match) return;
+  // Fill only fields that the user hasn't typed into themselves.
+  if (!idInput.value)    idInput.value    = match.id    || '';
+  if (!majorInput.value) majorInput.value = match.major || '';
+}
 
 // ══════════════════════════════════════════════════════════════
 //  REALTIME — auto-refresh on new uploads
