@@ -3207,6 +3207,12 @@ nrUpdateKpis();
 nrRender();
 
 if (HOSTED) {
+  // Default to anon BEFORE the auth callback fires, so admin-only and
+  // gated-only elements are hidden during the brief window between page
+  // load and Supabase confirming the session. Without this default, the
+  // body has no auth class and the CSS rules that hide those elements
+  // don't trigger, leaking the Update Data button to anonymous viewers.
+  document.body.classList.add('auth-anon');
   // Wait for the auth state, then load. onAuthStateChange fires once
   // immediately with INITIAL_SESSION, so we don't need a separate getSession().
   sb.auth.onAuthStateChange(async (_event, session) => {
