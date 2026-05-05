@@ -1128,17 +1128,28 @@ function normalizeWithdrawal(row) {
   const id = findField(row, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim();
   // Last Active Date — the field used for the current-term filter. Be flexible
   // on header naming; prefer a column whose lowercase name CONTAINS one of
-  // these phrases. Order matters: more specific matches first.
+  // these phrases. Order matters: more specific matches first. The registrar's
+  // actual export uses `exit_dte` for last-active and `withdrawal_dte` for
+  // when paperwork was processed — both are recognized below.
   const ldaRaw = findField(row, [
     'last active date','last attendance','last date of attendance','last attended',
-    'last active','lda','attendance end',
+    'last active','lda','attendance end','exit_dte','exit dte','exit_dt',
   ]);
   const procRaw = findField(row, [
+    'withdrawal_dte','withdrawal dte','withdrawal_date',
     'processed date','withdrawal processed','withdrawal date','withdraw date',
     'date processed','effective date','withdrawn on',
   ]);
-  const reason = findField(row, ['withdrawal reason','reason','reason for withdrawal','withdraw reason']);
-  const type   = findField(row, ['withdrawal type','type','withdrawal status']);
+  // `description` is the registrar export's human-readable reason column;
+  // we also accept the conventional names used by other systems.
+  const reason = findField(row, [
+    'description','withdrawal reason','reason for withdrawal','withdraw reason','reason',
+  ]);
+  // The short code (NR, NW, T, P, AT, M1, AF, S, CP, O, D1) lives in
+  // `exit_reason` in the registrar's export; other systems may use `type`.
+  const type   = findField(row, [
+    'exit_reason','exit reason','withdrawal type','withdrawal status','type',
+  ]);
   const firstName = findField(row, ['first name','firstname','first','given name']);
   const lastName  = findField(row, ['last name','lastname','last','surname','family name']);
   let name = '';
@@ -1209,6 +1220,30 @@ function isInCurrentTerm(lastActiveDate) {
   const w = getCurrentTermWindow();
   if (!w.start || !lastActiveDate) return false;
   return lastActiveDate >= w.start && lastActiveDate < w.end;
+}
+
+// Decide whether a withdrawal row should be EXCLUDED from withdrawalsList.
+// Two categories are filtered out per Tony's 2026-05-04 direction:
+//   • Non Return (exit_reason='NR' / description='Non Return')
+//       — the exit_dte for these is the last day of a prior term and the
+//         registrar is just processing the paperwork now. Including them
+//         double-counts students who were already gone before the term began.
+//   • New Student -WD prior to attendance (exit_reason='NW')
+//       — these students never showed up to class. They aren't real
+//         withdrawals; including them inflates the current-term metric with
+//         no-shows.
+// Implemented as a helper so future categories (e.g. completions) can be
+// added by extending one place. Match on BOTH the short code and the
+// human-readable description so a typo or format drift in either field
+// doesn't sneak excluded rows back in.
+function shouldExcludeWithdrawal(w) {
+  const code = (w.type || '').trim().toUpperCase();
+  const desc = (w.reason || '').toLowerCase();
+  if (code === 'NR') return true;
+  if (code === 'NW') return true;
+  if (desc.includes('non return') || desc.includes('non-return') || desc.includes('nonreturn')) return true;
+  if (desc.includes('prior to attendance')) return true;
+  return false;
 }
 
 function buildData() {
@@ -1299,6 +1334,7 @@ function buildData() {
   rawWithdrawals.forEach(r => {
     const w = normalizeWithdrawal(r);
     if (!w.id || !w.lastActiveDate) return; // filter rows without the two required fields
+    if (shouldExcludeWithdrawal(w)) return; // omit Non-Return + New-Student-WD-prior-to-attendance per Tony 2026-05-04
     const key = `${w.id}|${w.lastActiveDate}`;
     if (seenWd.has(key)) return;
     seenWd.add(key);
