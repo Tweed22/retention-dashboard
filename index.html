@@ -578,7 +578,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     </div>
     <table><thead><tr>
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
-      <th class="sortable" onclick="nrSort('name')">Name</th>
+      <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
+      <th class="sortable" onclick="nrSort('firstName')">First Name</th>
       <th>Registered</th>
       <th class="sortable" onclick="nrSort('major')">Major</th>
       <th class="sortable" onclick="nrSort('reason')">Reason</th>
@@ -1800,6 +1801,49 @@ function nsApply() {
 // ══════════════════════════════════════════════════════════════
 //  NOT RETURNING
 // ══════════════════════════════════════════════════════════════
+// Split a combined name into firstName/lastName. Handles "Last, First",
+// "First Last", and "First Middle Last" (last word treated as last name).
+function splitName(fullName) {
+  const s = (fullName || '').trim();
+  if (!s) return { firstName: '', lastName: '' };
+  if (s.includes(',')) {
+    const parts = s.split(',').map(p => p.trim());
+    return { firstName: parts[1] || '', lastName: parts[0] || '' };
+  }
+  const parts = s.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  const last = parts[parts.length - 1];
+  const first = parts.slice(0, -1).join(' ');
+  return { firstName: first, lastName: last };
+}
+
+// Backfill firstName/lastName on a NR row from the combined `name` if the
+// structured fields are missing. Mutates and returns the row for chaining.
+function ensureNRNameFields(row) {
+  if (!row.firstName && !row.lastName && row.name) {
+    const { firstName, lastName } = splitName(row.name);
+    row.firstName = firstName;
+    row.lastName  = lastName;
+  }
+  return row;
+}
+
+// Dedupe NR rows by student_id, keeping the row with the most filled-in
+// fields. Rows without a student_id are kept as-is (can't reliably match).
+// Used at render time only — the underlying nrList is left untouched so
+// the user can still remove specific duplicates if they want.
+function dedupeNRForDisplay(rows) {
+  const score = r => (r.reason ? 2 : 0) + (r.notes ? 1 : 0) + (r.withdrawal === 'Withdrawn' ? 1 : 0);
+  const byId = new Map();
+  const noId = [];
+  for (const r of rows) {
+    if (!r.id) { noId.push(r); continue; }
+    const prev = byId.get(r.id);
+    if (!prev || score(r) > score(prev)) byId.set(r.id, r);
+  }
+  return [...byId.values(), ...noId];
+}
+
 function loadNRList() {
   try { nrList = JSON.parse(localStorage.getItem('nr_list')||'[]'); } catch(e) { nrList=[]; }
   // Migrate older shapes back to a single `reason` string. Two prior shapes exist:
@@ -1813,6 +1857,7 @@ function loadNRList() {
     }
     if (r.reason && NR_REASON_LEGACY[r.reason]) r.reason = NR_REASON_LEGACY[r.reason];
     if (!r.reason) r.reason = '';
+    ensureNRNameFields(r);
   });
 }
 function saveNRList() {
@@ -1891,9 +1936,11 @@ function nrAdd() {
   const isRegistered = foundInRegisteredOnly || (resolvedId && registeredIds.has(resolvedId));
 
   const today = new Date().toISOString().slice(0,10);
-  nrList.unshift({
+  const newRow = {
     id:           resolvedId,
     name:         name       || csvStudent?.name    || '',
+    firstName:    csvStudent?.firstName || '',
+    lastName:     csvStudent?.lastName  || '',
     email:        email      || csvStudent?.email   || '',
     major:        major      || csvStudent?.major   || '',
     advisor:      advisor    || csvStudent?.advisor || '',
@@ -1901,7 +1948,9 @@ function nrAdd() {
     isRegistered: !!isRegistered,
     reason,
     notes, withdrawal, dateAdded: today
-  });
+  };
+  ensureNRNameFields(newRow); // backfill firstName/lastName from typed name if needed
+  nrList.unshift(newRow);
 
   saveNRList(); nrUpdateKpis(); nrRender();
   if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); } // refresh hold counts
@@ -1967,14 +2016,17 @@ function nrRender() {
   const wf = document.getElementById('nr-filter-withdrawal').value;
   const rf = document.getElementById('nr-filter-reason').value;
   const q  = document.getElementById('nr-search').value.toLowerCase();
-  // Build indexed copy so action buttons can refer back to the original nrList index
+  // Index FIRST so action buttons map back to the original nrList row, then
+  // dedupe so a student doesn't appear twice (e.g. when both auto-import
+  // and human-entered rows exist for the same ID — keep the better-filled one).
   let indexed = nrList.map((r,i)=>({...r, _idx:i}));
+  indexed = dedupeNRForDisplay(indexed);
   if (wf) indexed=indexed.filter(r=>r.withdrawal===wf);
   if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
-  if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.id||'')).toLowerCase().includes(q));
+  if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.firstName||'')+(r.lastName||'')+(r.id||'')).toLowerCase().includes(q));
   indexed=applySort(indexed,nrSort_);
   const tbody=document.getElementById('nr-tbody');
-  if (!indexed.length) { tbody.innerHTML=emptyRow(9,'No students on the Not Returning list yet. Use the form above to add the first entry.'); return; }
+  if (!indexed.length) { tbody.innerHTML=emptyRow(10,'No students on the Not Returning list yet. Use the form above to add the first entry.'); return; }
   tbody.innerHTML=indexed.map(r=>{
     if (r._idx === nrEditIdx) return nrRenderEditRow(r);
     return nrRenderStaticRow(r);
@@ -1990,9 +2042,15 @@ function nrRenderStaticRow(r) {
   const sourceChip = r._sourceWithdrawalId
     ? `<span class="nr-source-chip" title="Auto-imported from withdrawal CSV — Last Active ${esc(r._withdrawalLDA||'')}">From CSV</span>`
     : '';
+  // Display the structured first/last fields if present; fall back to the
+  // single combined name (rendering it whole in the Last Name column) when
+  // we can't tell them apart.
+  const lastCell  = r.lastName  || (r.firstName ? '' : (r.name || '—'));
+  const firstCell = r.firstName || '';
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
-    <td style="font-weight:600;">${r.name||'—'}${sourceChip}</td>
+    <td style="font-weight:600;">${lastCell}${sourceChip}</td>
+    <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td>${regCell}</td>
     <td style="font-size:11px;">${r.major||'—'}</td>
     <td>${renderReasonCell(r._idx, r.reason)}</td>
@@ -2093,12 +2151,13 @@ function nrRenderEditRow(r) {
     ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
     : '<span style="color:#bbb;font-size:11px;">—</span>';
   return `<tr style="background:#fffbeb;">
-    <td><input class="nr-edit-input" id="nr-e-id-${r._idx}"      value="${esc(r.id)}"      style="width:90px;font-family:monospace;" /></td>
-    <td><input class="nr-edit-input" id="nr-e-name-${r._idx}"    value="${esc(r.name)}"    style="width:140px;" /></td>
+    <td><input class="nr-edit-input" id="nr-e-id-${r._idx}"        value="${esc(r.id)}"        style="width:90px;font-family:monospace;" /></td>
+    <td><input class="nr-edit-input" id="nr-e-lastName-${r._idx}"  value="${esc(r.lastName)}"  style="width:120px;" /></td>
+    <td><input class="nr-edit-input" id="nr-e-firstName-${r._idx}" value="${esc(r.firstName)}" style="width:110px;" /></td>
     <td>${regCell}</td>
-    <td><input class="nr-edit-input" id="nr-e-major-${r._idx}"   value="${esc(r.major)}"   style="width:110px;" /></td>
+    <td><input class="nr-edit-input" id="nr-e-major-${r._idx}"     value="${esc(r.major)}"     style="width:110px;" /></td>
     <td>${reasonField}</td>
-    <td><input class="nr-edit-input" id="nr-e-notes-${r._idx}"   value="${esc(r.notes)}"   style="width:160px;" /></td>
+    <td><input class="nr-edit-input" id="nr-e-notes-${r._idx}"     value="${esc(r.notes)}"     style="width:160px;" /></td>
     <td><select class="nr-edit-input" id="nr-e-withdrawal-${r._idx}" style="width:90px;">${withOpts}</select></td>
     <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td style="white-space:nowrap;">
@@ -2129,7 +2188,9 @@ function nrSave(idx) {
     return;
   }
   r.id          = newId;
-  r.name        = v('name');
+  r.lastName    = v('lastName');
+  r.firstName   = v('firstName');
+  r.name        = [r.firstName, r.lastName].filter(Boolean).join(' ');
   r.major       = v('major');
   r.reason      = v('reason');           // works for both <select> and <input> editors
   r.notes       = v('notes');
@@ -2203,9 +2264,11 @@ function syncWithdrawalsToNR() {
     if (nrIgnoredWithdrawalIds.has(sourceId)) return; // user removed this earlier — don't bring it back
     // Map withdrawal reason onto NR vocabulary where possible
     const mappedReason = mapWithdrawalReason(w.reason);
-    nrList.unshift({
+    const nrRow = {
       id: w.id,
       name: w.name || '',
+      firstName: w.firstName || '',
+      lastName: w.lastName || '',
       email: w.email || '',
       major: w.major || '',
       advisor: w.advisor || '',
@@ -2217,7 +2280,9 @@ function syncWithdrawalsToNR() {
       dateAdded: new Date().toISOString().slice(0,10),
       _sourceWithdrawalId: sourceId,
       _withdrawalLDA: w.lastActiveDate,
-    });
+    };
+    ensureNRNameFields(nrRow);
+    nrList.unshift(nrRow);
     added++;
   });
   if (added > 0) saveNRList();
@@ -2706,13 +2771,17 @@ async function loadHostedDashboardData() {
   });
   // NR list — Supabase → existing shape. Legacy reason names ('Financial
   // hardship', 'Academic dismissal', etc.) get remapped on the fly so old
-  // rows still in the DB display under the current vocabulary.
+  // rows still in the DB display under the current vocabulary. firstName /
+  // lastName are derived from the stored combined name for the split-column
+  // display added 2026-05-05.
   nrList = data.nrReports.map(r => {
     let reason = r.reason || '';
     if (reason && NR_REASON_LEGACY[reason]) reason = NR_REASON_LEGACY[reason];
-    return {
+    const row = {
       id: r.student_id || '',
       name: r.student_name || '',
+      firstName: '',
+      lastName: '',
       email: '',
       major: '',
       advisor: '',
@@ -2727,6 +2796,8 @@ async function loadHostedDashboardData() {
       _withdrawalLDA: null,
       _isFromCSV: !!r.source_withdrawal_id,
     };
+    ensureNRNameFields(row);
+    return row;
   });
   // Enrich NR rows from student lookups (for major / email display)
   nrList.forEach(r => {
