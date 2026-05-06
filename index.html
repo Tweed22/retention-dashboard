@@ -1363,7 +1363,10 @@ function renderSummary() {
   const allRegistered         = registeredIds.size;
   const returningRegistered   = allRegistered - newReg;          // raw R_returning
   const returningUnregistered = Object.keys(returningStudents).length;
-  const notReturning          = nrList.length;                    // pending + withdrawn
+  // Tony 2026-05-05: Graduating students aren't "returning" or "not returning" —
+  // they're completing their degree. Exclude them from the Total Not Returning
+  // count and from the Eligible to Return denominator.
+  const notReturning          = nrList.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
 
   // Dedupe: students who are both returning-registered AND on NR list count
   // once (in the NR bucket, not in the registered bucket).
@@ -1489,6 +1492,9 @@ function renderReasonsChart() {
   nrList.forEach(r => {
     const reason = (r.reason || '').trim();
     if (!reason) return;
+    // Graduating students aren't "not returning" in the retention sense
+    // (Tony 2026-05-05) — exclude them from this chart.
+    if (reason.toLowerCase() === 'graduating') return;
     tally[reason] = (tally[reason] || 0) + 1;
   });
   const entries = Object.entries(tally).sort((a,b) => b[1] - a[1]);
