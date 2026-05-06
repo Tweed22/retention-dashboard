@@ -351,6 +351,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <!-- ── Nav ── -->
 <div class="nav">
   <div class="nav-tab active" onclick="showPage('summary',this)">Summary</div>
+  <div class="nav-tab gated-only" onclick="showPage('registered',this)">Registered</div>
   <div class="nav-tab gated-only" onclick="showPage('holds',this)">Holds Breakdown</div>
   <div class="nav-tab gated-only" onclick="showPage('canreg',this)">Can Register</div>
   <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
@@ -368,7 +369,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning</div></div>
       <div class="kpi-card red"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
-      <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[3])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
+      <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
     </div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
@@ -394,6 +395,43 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       </div>
     </div>
     <div id="trend-historical-container"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ REGISTERED ══════════════════════════ -->
+<div class="page" id="page-registered">
+  <div id="registered-empty" class="empty-state"><p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your CSV files</a> to see registered returning students.</p></div>
+  <div id="registered-content" style="display:none;">
+    <div class="section-label">Returning students with at least one enrollment</div>
+    <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="reg-major" onchange="regApply()"><option value="">All Majors</option></select>
+      <select class="filter-select" id="reg-advisor" onchange="regApply()"><option value="">All Advisors</option></select>
+      <select class="filter-select" id="reg-sport" onchange="regApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
+      <select class="filter-select" id="reg-team" onchange="regApply()"><option value="">All Teams</option></select>
+      <input class="table-search" type="text" id="reg-search" placeholder="Search name, email, ID…" oninput="regApply()" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="reg-title">—</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('registered','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('registered','all')" title="Download every returning registered student, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <table><thead><tr>
+        <th class="sortable" onclick="regSort('id')">Student ID</th>
+        <th class="sortable" onclick="regSort('lastName')">Last Name</th>
+        <th class="sortable" onclick="regSort('firstName')">First Name</th>
+        <th>Email</th>
+        <th class="sortable" onclick="regSort('classYear')">Class</th>
+        <th class="sortable" onclick="regSort('major')">Major</th>
+        <th class="sortable" onclick="regSort('advisor')">Advisor</th>
+        <th class="sortable" onclick="regSort('sports')">Sport</th>
+      </tr></thead>
+      <tbody id="reg-tbody"></tbody></table>
+    </div>
   </div>
 </div>
 
@@ -681,7 +719,7 @@ let currentHold         = null;
 let nrEditIdx           = null; // index of NR row currently being edited inline
 
 // Sort states
-let hSort = {col:null,dir:1}, crSort_ = {col:null,dir:1}, nsSort_ = {col:null,dir:1}, nrSort_ = {col:null,dir:1};
+let hSort = {col:null,dir:1}, crSort_ = {col:null,dir:1}, nsSort_ = {col:null,dir:1}, nrSort_ = {col:null,dir:1}, regSort_ = {col:null,dir:1};
 let wdSort_ = {col:'lastActiveDate',dir:-1}; // default: most recent LDA first
 
 // Not returning list (persisted to localStorage)
@@ -829,6 +867,18 @@ const EXPORT_COLUMNS = {
     { header: 'Sports',     getter: r => r.sports },
     { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
   ],
+  registered: [
+    { header: 'Student ID', getter: r => r.id },
+    { header: 'Last Name',  getter: r => r.lastName },
+    { header: 'First Name', getter: r => r.firstName },
+    { header: 'Name',       getter: r => r.name },
+    { header: 'Email',      getter: r => r.email },
+    { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Major',      getter: r => r.major },
+    { header: 'Advisor',    getter: r => r.advisor },
+    { header: 'Sports',     getter: r => r.sports },
+    { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
+  ],
   newstudents: [
     { header: 'Student ID', getter: r => r.id },
     { header: 'Last Name',  getter: r => r.lastName },
@@ -895,6 +945,27 @@ function getHoldsExportData() {
   if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
   if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   visible = applySort(visible, hSort);
+  return { visible, all };
+}
+
+function getRegisteredExportData() {
+  const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const all = returningRegisteredList().map(r => ({...r, __onNR: nrIds.has(r.id)}));
+  const cls     = document.getElementById('reg-class').value.toLowerCase();
+  const major   = document.getElementById('reg-major').value;
+  const advisor = document.getElementById('reg-advisor').value;
+  const sport   = document.getElementById('reg-sport').value;
+  const team    = document.getElementById('reg-team').value;
+  const q       = document.getElementById('reg-search').value.toLowerCase();
+  let visible = [...all];
+  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
+  if (major)   visible = visible.filter(r => r.major === major);
+  if (advisor) visible = visible.filter(r => r.advisor === advisor);
+  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
+  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
+  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applySort(visible, regSort_);
   return { visible, all };
 }
 
@@ -986,6 +1057,7 @@ function exportTabCSV(tab, scope /* 'visible' | 'all' */) {
   switch (tab) {
     case 'holds':        data = getHoldsExportData(); break;
     case 'canreg':       data = getCanRegExportData(); break;
+    case 'registered':   data = getRegisteredExportData(); break;
     case 'newstudents':  data = getNewStudentsExportData(); break;
     case 'withdrawals':  data = getWithdrawalsExportData(); break;
     case 'notreturning': data = getNRExportData(); break;
@@ -1335,6 +1407,7 @@ function renderAll() {
   renderHoldsPage();
   renderCanReg();
   renderNewStudents();
+  renderRegistered();
   renderWithdrawals();
   // Recompute NR KPIs so the "Registered for Courses" count reflects the new
   // registeredIds set after a CSV upload (existing rows can flip status).
@@ -1445,24 +1518,29 @@ function renderSummary() {
 function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
   const container = document.getElementById('returning-donuts-grid');
   if (!container) return;
+  // Click handlers route to the corresponding gated tab. Tab order: Summary=0,
+  // Registered=1, Holds=2, CanReg=3, NewStudents=4, NotReturning=5.
   const segments = [
-    { label:'Registered',          count: registered,  color:'#16a34a' },
-    { label:'Has Blocking Hold',   count: hasHold,     color:'#dc2626' },
-    { label:'Can Register',        count: canRegister, color:'#0d9488' },
+    { label:'Registered',        count: registered,  color:'#16a34a',
+      onclick: "showPage('registered', document.querySelectorAll('.nav-tab')[1])" },
+    { label:'Has Blocking Hold', count: hasHold,     color:'#dc2626',
+      onclick: "showPage('holds', document.querySelectorAll('.nav-tab')[2])" },
+    { label:'Can Register',      count: canRegister, color:'#0d9488',
+      onclick: "showPage('canreg', document.querySelectorAll('.nav-tab')[3])" },
   ];
   container.innerHTML = segments.map(seg => svgSegmentDonut({
     label: seg.label,
     count: seg.count,
     total: totalRet,
     color: seg.color,
+    onclick: seg.onclick,
   })).join('');
 }
 
-// SVG donut variant for the returning segments. Ring is filled to count/total
-// percentage in the segment's color. Count is shown big in the center; the raw
-// percentage shows directly underneath. We keep the two text elements well
-// separated so they don't visually clash on smaller screens.
-function svgSegmentDonut({label, count, total, color}) {
+// SVG donut variant for the returning segments. Optional onclick makes the
+// donut behave like the per-hold donuts — clickable to navigate to the
+// corresponding tab.
+function svgSegmentDonut({label, count, total, color, onclick}) {
   const size = 110, r = 42, cx = size/2, cy = size/2, sw = 12;
   const circumference = 2 * Math.PI * r;
   const pct = total > 0 ? count / total : 0;
@@ -1474,7 +1552,10 @@ function svgSegmentDonut({label, count, total, color}) {
               stroke-dasharray="${filled} ${remaining}" stroke-dashoffset="0"
               transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt" />`
     : '';
-  return `<div class="hold-donut-item">
+  const clickAttr = onclick ? ` onclick="${onclick}"` : '';
+  const clickClass = onclick ? ' hold-donut-item-clickable' : '';
+  const titleAttr = onclick ? ` title="View ${label} students"` : '';
+  return `<div class="hold-donut-item${clickClass}"${clickAttr}${titleAttr}>
     <div class="hold-donut-name">${label}</div>
     <svg class="hold-donut-svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="${sw}" />
@@ -1556,9 +1637,29 @@ async function renderTrendChart() {
   const currentLabel = getNextTermLabel();
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
-  // Current term chart (if matching)
+  // Current term chart (if matching). Append a synthetic "today" point to
+  // the historical series if one isn't already present, so the curve ends
+  // at the same rate as the dashed "Today" reference line — otherwise the
+  // line stops at the date of the most recent CSV upload, which is
+  // confusing if the user hasn't uploaded yet today.
   if (currentLabel && byTerm[currentLabel]) {
-    currentEl.innerHTML = renderTrendCard(currentLabel, byTerm[currentLabel], currentRate, true);
+    let pts = byTerm[currentLabel];
+    const todayStr = todayLocalISO();
+    const hasToday = pts.some(d => d.snapshot_date === todayStr);
+    if (!hasToday && currentRate != null) {
+      const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
+      const allReg = registeredIds.size;
+      const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered').length;
+      const retReg = allReg - newRegCount;
+      pts = [...pts, {
+        snapshot_date: todayStr,
+        term_label: currentLabel,
+        registered_count: retReg,
+        holds_count: totalHolds,
+        registration_rate: currentRate,
+      }];
+    }
+    currentEl.innerHTML = renderTrendCard(currentLabel, pts, currentRate, true);
   } else {
     currentEl.innerHTML = '';
   }
@@ -1619,13 +1720,19 @@ function renderTrendCard(label, data, currentRate, isCurrent) {
         const tip = `${fmtMDY(d.snapshot_date)}: ${d.registration_rate}% · ${d.registered_count} registered${d.holds_count != null ? ', ' + d.holds_count + ' holds' : ''}`;
         return `<g><circle cx="${cx}" cy="${cy}" r="3.5" fill="#2563eb" /><title>${tip}</title></g>`;
       }).join('')}
-      ${tickIdx.map(i => {
+      ${tickIdx.map((i, idx) => {
         const d = data[i];
         const tx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
-        return `<text x="${tx}" y="${H-MB+22}" text-anchor="middle" font-size="11" fill="#666">${fmtMDY(d.snapshot_date)}</text>`;
+        // Anchor first label to start, last to end, middle to middle so the
+        // text doesn't get clipped at the chart's edges as new dates extend
+        // the x-axis.
+        const isFirst = idx === 0;
+        const isLast = idx === tickIdx.length - 1;
+        const anchor = isFirst ? 'start' : isLast ? 'end' : 'middle';
+        return `<text x="${tx}" y="${H-MB+22}" text-anchor="${anchor}" font-size="11" fill="#666">${fmtMDY(d.snapshot_date)}</text>`;
       }).join('')}
       <text x="${ML-32}" y="${MT-6}" font-size="10" fill="#888">Reg %</text>
-      ${currentRate != null ? `
+      ${(isCurrent && currentRate != null) ? `
         <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
         <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="11" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
       ` : ''}
@@ -1714,8 +1821,8 @@ function renderHoldDonuts() {
 // the hold filter, mirroring how clicking a hold card already works on that page.
 function holdDonutClick(holdName) {
   const tabs = document.querySelectorAll('.nav-tab');
-  // Holds Breakdown is the second tab (index 1)
-  showPage('holds', tabs[1]);
+  // Tab order: Summary=0, Registered=1, Holds=2, CanReg=3, NewStudents=4, NotReturning=5
+  showPage('holds', tabs[2]);
   holdsFilter(holdName);
 }
 
@@ -1832,9 +1939,9 @@ function populateDropdowns() {
     items.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
     if (items.includes(cur)) sel.value = cur;
   }
-  ['h-major','cr-major','ns-major'].forEach(id=>fillSelect(id,majors,'Majors'));
-  ['h-advisor','cr-advisor','ns-advisor'].forEach(id=>fillSelect(id,advisors,'Advisors'));
-  ['h-team','cr-team','ns-team'].forEach(id=>fillSelect(id,teams,'Teams'));
+  ['h-major','cr-major','ns-major','reg-major'].forEach(id=>fillSelect(id,majors,'Majors'));
+  ['h-advisor','cr-advisor','ns-advisor','reg-advisor'].forEach(id=>fillSelect(id,advisors,'Advisors'));
+  ['h-team','cr-team','ns-team','reg-team'].forEach(id=>fillSelect(id,teams,'Teams'));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1987,6 +2094,65 @@ function crApply() {
           <td style="color:#555;">${r.email}</td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
+        </tr>`;
+      }).join('')
+    : emptyRow(8,'No students match.');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  REGISTERED TAB (returning students with ≥1 enrollment)
+// ══════════════════════════════════════════════════════════════
+function regSort(col) { if(regSort_.col===col)regSort_.dir*=-1;else{regSort_.col=col;regSort_.dir=1;} regApply(); }
+
+// Returns the list of returning students who are registered (in registeredIds
+// but not in newStudents). Source: registeredStudents map enriched at build time.
+function returningRegisteredList() {
+  return Object.values(registeredStudents).filter(s => !newStudents[s.id]);
+}
+
+function renderRegistered() {
+  const list = returningRegisteredList();
+  if (!list.length) {
+    document.getElementById('registered-empty').style.display   = 'block';
+    document.getElementById('registered-content').style.display = 'none';
+    return;
+  }
+  document.getElementById('registered-empty').style.display   = 'none';
+  document.getElementById('registered-content').style.display = 'block';
+  regApply();
+}
+
+function regApply() {
+  const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const cls     = document.getElementById('reg-class').value.toLowerCase();
+  const major   = document.getElementById('reg-major').value;
+  const advisor = document.getElementById('reg-advisor').value;
+  const sport   = document.getElementById('reg-sport').value;
+  const team    = document.getElementById('reg-team').value;
+  const q       = document.getElementById('reg-search').value.toLowerCase();
+  let rows = returningRegisteredList();
+  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
+  if (major)   rows=rows.filter(r=>r.major===major);
+  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
+  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
+  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
+  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  rows=applySort(rows,regSort_);
+  document.getElementById('reg-title').textContent = `${n(rows.length)} of ${n(returningRegisteredList().length)} Returning Students Registered`;
+  const tbody=document.getElementById('reg-tbody');
+  tbody.innerHTML = rows.length
+    ? rows.map(r => {
+        const isNR = nrIds.has(r.id);
+        const rowStyle = isNR ? ' style="background:#fff5f5;"' : '';
+        const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
+        return `<tr${rowStyle}>
+          <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td>${r.firstName||r.name||''}</td>
+          <td style="color:#555;">${r.email||''}</td>
+          <td>${classChip(r.classYear)}</td>
+          <td>${r.major||''}</td><td>${r.advisor||''}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
     : emptyRow(8,'No students match.');
