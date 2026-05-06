@@ -361,20 +361,21 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Click here to upload your three CSV files</a> to populate the dashboard.</p>
   </div>
   <div id="summary-content" style="display:none;">
-    <div class="section-label">Returning Students</div>
-    <div class="kpi-row kpi-row-4">
-      <div class="kpi-card blue"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unreg + Returning Reg − Not Returning</div></div>
-      <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">All registered − new students</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments yet</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ (Returning Reg + Not Returning)</div></div>
-    </div>
-    <div class="section-label" style="margin-top:4px;">New Students &amp; Combined Totals</div>
+    <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-5">
-      <div class="kpi-card indigo clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[3])"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">From new student report</div></div>
-      <div class="kpi-card sky"><div class="kpi-label">New Registered</div><div class="kpi-value" id="s-new-reg">—</div><div class="kpi-sub">New students enrolled</div></div>
-      <div class="kpi-card blue"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning (pending + withdrawn)</div></div>
-      <div class="kpi-card green"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students</div></div>
-      <div class="kpi-card teal clickable" onclick="showPage('canreg',document.querySelectorAll('.nav-tab')[2])"><div class="kpi-label">Can Register</div><div class="kpi-value" id="s-can-reg">—</div><div class="kpi-sub">No holds, not yet enrolled</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Grand Total</div><div class="kpi-value" id="s-grand-total">—</div><div class="kpi-sub">Returning + Not Returning + New</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unique returning IDs not on NR list</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
+      <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[3])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning</div></div>
+    </div>
+    <div class="section-label" style="margin-top:4px;">Returning Detail</div>
+    <div class="kpi-row kpi-row-5">
+      <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">Registered − new students − NR overlap</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments yet</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
+      <div class="kpi-card teal clickable" onclick="showPage('canreg',document.querySelectorAll('.nav-tab')[2])"><div class="kpi-label">Can Register</div><div class="kpi-value" id="s-can-reg">—</div><div class="kpi-sub">Returning, no holds, not yet enrolled</div></div>
     </div>
     <div class="charts-row">
       <div class="card">
@@ -1207,58 +1208,73 @@ function buildData() {
   // The registered CSV has one row per enrollment, so the same student appears
   // many times. Collapse to one normalized record per ID for fallback lookups
   // when an ID isn't found in the unregistered CSV.
-  registeredIds = new Set();
-  registeredStudents = {};
-  rawReg.forEach(r => {
-    const s = normalizeStudent(r);
-    if (!s.id) return;
-    registeredIds.add(s.id);
-    if (!registeredStudents[s.id]) {
-      registeredStudents[s.id] = s;
-    } else {
-      // Merge any new sports from duplicate rows
-      s.sports.forEach(sp => {
-        if (sp && !registeredStudents[s.id].sports.includes(sp)) {
-          registeredStudents[s.id].sports.push(sp);
-        }
-      });
-    }
-  });
+  // Per Tony 2026-05-05: only rebuild from rawReg if it has data — otherwise
+  // preserve the registeredStudents already loaded (e.g. from Supabase).
+  if (rawReg.length > 0) {
+    registeredStudents = {};
+    rawReg.forEach(r => {
+      const s = normalizeStudent(r);
+      if (!s.id) return;
+      if (!registeredStudents[s.id]) {
+        registeredStudents[s.id] = s;
+      } else {
+        s.sports.forEach(sp => {
+          if (sp && !registeredStudents[s.id].sports.includes(sp)) {
+            registeredStudents[s.id].sports.push(sp);
+          }
+        });
+      }
+    });
+  }
+  // Always derive registeredIds from current registeredStudents (even on partial uploads)
+  registeredIds = new Set(Object.keys(registeredStudents));
 
   // ── New students ──
-  newStudents = {};
-  rawNew.forEach(r => {
-    const s = normalizeStudent(r);
-    if (s.id) {
-      s.status = registeredIds.has(s.id) ? 'Registered' : 'Not Yet Registered';
-      newStudents[s.id] = s;
-    }
-  });
+  // Per Tony 2026-05-05: every entry in new_students.csv represents a
+  // registered new student. Total = Registered for new students always.
+  // Only rebuild if rawNew has data; otherwise preserve previously loaded
+  // newStudents (e.g. from Supabase on a fresh page load).
+  if (rawNew.length > 0) {
+    newStudents = {};
+    rawNew.forEach(r => {
+      const s = normalizeStudent(r);
+      if (s.id) {
+        s.status = 'Registered';
+        newStudents[s.id] = s;
+      }
+    });
+  } else {
+    Object.values(newStudents).forEach(s => { s.status = 'Registered'; });
+  }
   const newIds = new Set(Object.keys(newStudents));
 
   // ── Returning (unregistered report, excluding new students) ──
-  // Step 1: one row per student — duplicate rows only exist for multi-sport athletes;
-  //         merge additional sports, keep everything else from the first row.
-  const unregById = {};
-  rawUnreg.forEach(r => {
-    const s = normalizeStudent(r);
-    if (!s.id || newIds.has(s.id)) return;
-    if (!unregById[s.id]) {
-      unregById[s.id] = s;
-    } else {
-      // Merge any new sports from the duplicate row
-      s.sports.forEach(sp => {
-        if (sp && !unregById[s.id].sports.includes(sp)) {
-          unregById[s.id].sports.push(sp);
-        }
-      });
-    }
-  });
+  // Only rebuild if rawUnreg has fresh data; otherwise preserve previously
+  // loaded returningStudents (e.g. from Supabase load on a fresh page).
+  // Per Tony 2026-05-05: partial uploads should preserve the data that
+  // wasn't part of the upload.
+  if (rawUnreg.length > 0) {
+    const unregById = {};
+    rawUnreg.forEach(r => {
+      const s = normalizeStudent(r);
+      if (!s.id || newIds.has(s.id)) return;
+      if (!unregById[s.id]) {
+        unregById[s.id] = s;
+      } else {
+        // Merge any new sports from the duplicate row
+        s.sports.forEach(sp => {
+          if (sp && !unregById[s.id].sports.includes(sp)) {
+            unregById[s.id].sports.push(sp);
+          }
+        });
+      }
+    });
+    returningStudents = unregById;
+  }
+  // Always re-exclude any IDs that are in newStudents (in case they shifted)
+  newIds.forEach(id => { if (returningStudents[id]) delete returningStudents[id]; });
 
-  // Step 2: build returningStudents map (each student counted exactly once)
-  returningStudents = unregById;
-
-  // Step 3: fan each student into EVERY hold group that matches their hold columns
+  // Always rebuild hold groups + can-register from current returningStudents
   holdGroups = {};
   HOLD_DISPLAY.forEach(h => holdGroups[h] = []);
   canRegisterStudents = [];
@@ -1282,9 +1298,8 @@ function buildData() {
   // — these are already registered, no action needed; we don't list them separately.
 
   // ── Withdrawals ──
-  // Normalize, dedupe by (id, last_active_date), and enrich with the best-known
-  // student record (unreg → new → reg) so the table can show class/advisor/major
-  // even when those columns are absent from the withdrawal CSV.
+  // Same partial-upload preservation: only rebuild if rawWithdrawals has data.
+  if (rawWithdrawals.length > 0) {
   const seenWd = new Set();
   withdrawalsList = [];
   rawWithdrawals.forEach(r => {
@@ -1308,6 +1323,7 @@ function buildData() {
     }
     withdrawalsList.push(w);
   });
+  } // end if (rawWithdrawals.length > 0)
 
   saveNRList();
 }
@@ -1335,45 +1351,75 @@ function renderAll() {
 function n(num) { return num.toLocaleString(); }
 
 function renderSummary() {
-  // ── Tony's clarified retention formulas (2026-05-05) ──────────────────
-  //   returningRegistered = all registered − new students who registered
+  // ── Tony's clarified retention formulas (2026-05-05, deduped) ─────────
+  //   returningRegistered = all registered − new students (raw R_returning)
   //   returningUnregistered = students in unreg.csv (already excludes new)
   //   notReturning = nrList.length (Pending + Withdrawn)
+  //   overlapRegNR = students in registered AND on NR list
+  //                  (deduped so they're counted once, in the NR bucket)
   //
-  //   Total Returning Students = returningUnreg + returningReg − notReturning
-  //   Eligible to Return       = returningReg + notReturning
-  //   Persistence Rate         = returningReg / Eligible to Return
+  //   Effective Returning Reg = returningReg − overlapRegNR
+  //   Total Returning Students = unique returning IDs not on NR
+  //   Eligible to Return       = effectiveReturningReg + notReturning
+  //   Persistence Rate         = effectiveReturningReg / Eligible to Return
   //   Total Registered         = all registered students
   // ──────────────────────────────────────────────────────────────────────
-  const newReg                = Object.values(newStudents).filter(s=>s.status==='Registered').length;
   const newTotal              = Object.keys(newStudents).length;
+  const newReg                = newTotal;  // Tony 2026-05-05: new students CSV always represents registered ones
   const allRegistered         = registeredIds.size;
-  const returningRegistered   = allRegistered - newReg;          // R_returning
+  const returningRegistered   = allRegistered - newReg;          // raw R_returning
   const returningUnregistered = Object.keys(returningStudents).length;
   const notReturning          = nrList.length;                    // pending + withdrawn
 
-  const totalReturning  = returningUnregistered + returningRegistered - notReturning;  // #4
-  const eligibleReturn  = returningRegistered + notReturning;                          // #1
-  const totalRegistered = allRegistered;                                                // #3
-  const retRate         = eligibleReturn                                                 // #2
-    ? Math.round(returningRegistered / eligibleReturn * 1000) / 10
-    : 0;
-  const canReg          = canRegisterStudents.length;
+  // Dedupe: students who are both returning-registered AND on NR list count
+  // once (in the NR bucket, not in the registered bucket).
+  const nrIdSet = new Set(nrList.map(s => s.id).filter(Boolean));
+  const overlapRegNR = [...registeredIds]
+    .filter(id => !newStudents[id] && nrIdSet.has(id)).length;
+  const effectiveReturningReg = returningRegistered - overlapRegNR;
 
-  document.getElementById('s-total-ret').textContent  = n(totalReturning);
-  document.getElementById('s-ret-reg').textContent    = n(returningRegistered);
-  document.getElementById('s-ret-unreg').textContent  = n(returningUnregistered);
-  document.getElementById('s-ret-rate').textContent   = retRate + '%';
-  document.getElementById('s-new-total').textContent  = n(newTotal);
-  document.getElementById('s-new-reg').textContent    = n(newReg);
-  document.getElementById('s-eligible').textContent   = n(eligibleReturn);
-  document.getElementById('s-all-reg').textContent    = n(totalRegistered);
-  document.getElementById('s-can-reg').textContent    = n(canReg);
+  // Total Returning: unique returning IDs (unreg ∪ registered_returning) NOT on NR
+  const returningIdSet = new Set([
+    ...Object.keys(returningStudents),
+    ...[...registeredIds].filter(id => !newStudents[id]),
+  ]);
+  const totalReturning  = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  const eligibleReturn  = effectiveReturningReg + notReturning;
+  const totalRegistered = allRegistered;
+  const retRate = eligibleReturn
+    ? Math.round(effectiveReturningReg / eligibleReturn * 1000) / 10
+    : 0;
+  const canReg = canRegisterStudents.length;
+
+  // Grand Total = students who are still returning + students declared NR + new students.
+  // These three categories are conceptually disjoint in Tony's framing
+  // (totalReturning already excludes anyone on NR list).
+  const grandTotal = totalReturning + notReturning + newTotal;
+
+  // ── Verification of the five "Total" calculations Tony asked about ────
+  // Grand Total          = totalReturning + notReturning + newTotal
+  // Total Returning      = unique returning IDs (unreg ∪ registered_returning) NOT on NR
+  // Total Not Returning  = nrList.length (every row, pending + withdrawn, with or without ID)
+  // Total New            = Object.keys(newStudents).length (all are registered by Tony's model)
+  // Eligible to Return   = effectiveReturningReg + notReturning
+  //                        (deduped: a student on NR + registered counts once, in NR)
+  // ──────────────────────────────────────────────────────────────────────
+
+  document.getElementById('s-grand-total').textContent = n(grandTotal);
+  document.getElementById('s-total-ret').textContent   = n(totalReturning);
+  document.getElementById('s-not-ret').textContent     = n(notReturning);
+  document.getElementById('s-new-total').textContent   = n(newTotal);
+  document.getElementById('s-eligible').textContent    = n(eligibleReturn);
+  document.getElementById('s-ret-reg').textContent     = n(effectiveReturningReg);
+  document.getElementById('s-ret-unreg').textContent   = n(returningUnregistered);
+  document.getElementById('s-ret-rate').textContent    = retRate + '%';
+  document.getElementById('s-all-reg').textContent     = n(totalRegistered);
+  document.getElementById('s-can-reg').textContent     = n(canReg);
 
   // Variables the donuts and existing computation expect; alias to current
   // values so existing render code keeps working.
   const totalRet = totalReturning;
-  const retRegisteredCount = returningRegistered;
+  const retRegisteredCount = effectiveReturningReg;
 
   // Show/hide
   document.getElementById('summary-empty').style.display   = 'none';
