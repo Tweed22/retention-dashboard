@@ -392,6 +392,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <div id="reasons-chart"></div>
       </div>
     </div>
+    <div class="charts-row" style="grid-template-columns: 1fr;">
+      <div class="card">
+        <div class="card-title">Registration Rate Trend</div>
+        <div class="card-subtitle" id="trend-subtitle">Historical registration rate over the registration window.</div>
+        <div id="trend-chart"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1436,6 +1443,8 @@ function renderSummary() {
   // toward each of their reasons. Sorted desc.
   renderReasonsChart();
 
+  // Registration rate trend chart (hosted mode only — reads term_history table)
+  renderTrendChart();
 }
 
 function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
@@ -1479,6 +1488,92 @@ function svgSegmentDonut({label, count, total, color}) {
       <text x="${cx}" y="${cy + 14}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="600" fill="#6b7280">${pctLabel}</text>
     </svg>
   </div>`;
+}
+
+// Registration rate trend chart, fed by the term_history Supabase table.
+// Plain SVG so we don't pull in a charting library. Re-renders whenever
+// renderSummary is called (mainly on auth state change + post-upload).
+async function renderTrendChart() {
+  const container = document.getElementById('trend-chart');
+  if (!container) return;
+  if (!sb) {
+    container.innerHTML = '<div style="color:#888;font-size:12px;padding:18px;text-align:center;">Trend chart only available in hosted mode.</div>';
+    return;
+  }
+  const { data, error } = await sb
+    .from('term_history')
+    .select('snapshot_date, term_label, registered_count, holds_count, registration_rate')
+    .order('snapshot_date', { ascending: true });
+  if (error) {
+    container.innerHTML = `<div style="color:#888;font-size:12px;padding:18px;text-align:center;">Could not load history: ${error.message}</div>`;
+    return;
+  }
+  if (!data || !data.length) {
+    container.innerHTML = '<div style="color:#888;font-size:12px;padding:18px;text-align:center;">No historical data yet. Add rows to <code>term_history</code> in Supabase.</div>';
+    return;
+  }
+  // Update subtitle with the term span
+  const sub = document.getElementById('trend-subtitle');
+  if (sub) {
+    const first = data[0].snapshot_date, last = data[data.length-1].snapshot_date;
+    const label = data[0].term_label || 'Historical';
+    sub.textContent = `${label} · ${first} → ${last} (${data.length} data points)`;
+  }
+  // Compute scales
+  const W = 1000, H = 280, ML = 48, MR = 16, MT = 22, MB = 42;
+  const innerW = W - ML - MR;
+  const innerH = H - MT - MB;
+  const dates = data.map(d => new Date(d.snapshot_date + 'T12:00:00Z').getTime());
+  const minD = Math.min(...dates);
+  const maxD = Math.max(...dates);
+  const span = maxD - minD || 1;
+  const x = t => ML + ((t - minD) / span) * innerW;
+  const y = pct => MT + innerH - (Math.max(0, Math.min(100, pct)) / 100) * innerH;
+
+  const points = data.map(d => `${x(new Date(d.snapshot_date + 'T12:00:00Z').getTime())},${y(d.registration_rate || 0)}`).join(' ');
+
+  // X-axis ticks: ~5 dates evenly across the range
+  const tickIdx = [0, Math.floor(data.length*0.25), Math.floor(data.length*0.5), Math.floor(data.length*0.75), data.length-1].filter((v,i,a)=>a.indexOf(v)===i);
+
+  // Y-axis gridlines: 0, 25, 50, 75, 100
+  const yTicks = [0, 25, 50, 75, 100];
+
+  // Latest current-term snapshot — overlay as a horizontal reference line
+  // showing where we are now relative to the historical curve.
+  const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;">
+      <!-- Y gridlines -->
+      ${yTicks.map(v => `
+        <line x1="${ML}" y1="${y(v)}" x2="${W-MR}" y2="${y(v)}" stroke="#e5e7eb" stroke-width="1" />
+        <text x="${ML-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#888">${v}%</text>
+      `).join('')}
+      <!-- X axis baseline -->
+      <line x1="${ML}" y1="${y(0)}" x2="${W-MR}" y2="${y(0)}" stroke="#cbd5e1" stroke-width="1" />
+      <!-- Trend line (filled area below for emphasis) -->
+      <polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="${points}" />
+      <!-- Data points -->
+      ${data.map(d => {
+        const cx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
+        const cy = y(d.registration_rate || 0);
+        return `<g><circle cx="${cx}" cy="${cy}" r="3.5" fill="#2563eb" /><title>${d.snapshot_date}: ${d.registration_rate}% (${d.registered_count} registered, ${d.holds_count != null ? d.holds_count + ' holds' : 'holds —'})</title></g>`;
+      }).join('')}
+      <!-- X-axis date labels -->
+      ${tickIdx.map(i => {
+        const d = data[i];
+        const tx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
+        return `<text x="${tx}" y="${H-MB+22}" text-anchor="middle" font-size="11" fill="#666">${d.snapshot_date}</text>`;
+      }).join('')}
+      <!-- Y axis label -->
+      <text x="${ML-32}" y="${MT-6}" font-size="10" fill="#888">Reg %</text>
+      <!-- Current rate reference line -->
+      ${currentRate != null ? `
+        <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
+        <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="11" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
+      ` : ''}
+    </svg>
+  `;
 }
 
 function renderReasonsChart() {
