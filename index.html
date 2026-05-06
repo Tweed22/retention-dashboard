@@ -111,8 +111,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .hold-type { font-size: 12px; font-weight: 700; color: #1a1d23; margin-bottom: 3px; }
 .hold-count { font-size: 22px; font-weight: 800; color: #2563eb; }
 .hold-pct { font-size: 11px; color: #888; margin-top: 2px; }
-.hold-bar-bg { height: 4px; background: #e8eaf0; border-radius: 2px; margin-top: 9px; }
-.hold-bar-fill { height: 4px; border-radius: 2px; }
+.hold-bar-bg { height: 6px; background: #e8eaf0; border-radius: 3px; margin-top: 9px; overflow: hidden; display: flex; }
+.hold-bar-fill { height: 6px; }
+.hold-bar-fill-green { background: #16a34a; }
+.hold-bar-fill-red   { background: #dc2626; }
 
 /* ── Filter row ── */
 .filter-row { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -1594,17 +1596,25 @@ function renderHoldsPage() {
     const students = holdGroups[h];
     const cnt = students.length;
     const likelyRet = students.filter(s => !nrIds.has(s.id)).length;
+    const notRet    = cnt - likelyRet;
     const pct = totalUnreg ? Math.round(cnt/totalUnreg*1000)/10 : 0;
-    const barW = Math.round(pct);
+    // Stacked bar: of students with this hold, how many are likely to come
+    // back (green) vs declared NR (red). Width is always 100% of the card;
+    // the proportions show actionability — green = potential save.
+    const greenPct = cnt > 0 ? (likelyRet / cnt) * 100 : 0;
+    const redPct   = cnt > 0 ? (notRet / cnt) * 100 : 0;
     return `<div class="hold-card${currentHold===h?' selected':''}" onclick="holdsFilter('${h}',this)">
       <div class="hold-type">${h}</div>
       <div class="hold-count">${n(cnt)}</div>
       <div class="hold-pct">${pct}% of unregistered</div>
       <div style="margin-top:8px;font-size:11px;display:flex;gap:10px;">
         <span style="color:#16a34a;font-weight:600;">${n(likelyRet)} likely returning</span>
-        ${nrIds.size > 0 ? `<span style="color:#dc2626;font-weight:600;">${n(cnt - likelyRet)} not returning</span>` : ''}
+        ${nrIds.size > 0 ? `<span style="color:#dc2626;font-weight:600;">${n(notRet)} not returning</span>` : ''}
       </div>
-      <div class="hold-bar-bg"><div class="hold-bar-fill" style="width:${barW}%;background:${HOLD_COLORS[i]};"></div></div>
+      <div class="hold-bar-bg" title="Within this hold: green = likely returning, red = declared not returning">
+        <div class="hold-bar-fill hold-bar-fill-green" style="width:${greenPct}%;"></div>
+        <div class="hold-bar-fill hold-bar-fill-red"   style="width:${redPct}%;"></div>
+      </div>
     </div>`;
   }).join('');
 
