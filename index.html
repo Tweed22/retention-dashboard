@@ -363,17 +363,17 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="summary-content" style="display:none;">
     <div class="section-label">Returning Students</div>
     <div class="kpi-row kpi-row-4">
-      <div class="kpi-card blue"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unique returning student IDs</div></div>
-      <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">With ≥1 enrollment</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Still returning ÷ (Still returning + Not Returning incl. withdrawn)</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unreg + Returning Reg − Not Returning</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">All registered − new students</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments yet</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ (Returning Reg + Not Returning)</div></div>
     </div>
     <div class="section-label" style="margin-top:4px;">New Students &amp; Combined Totals</div>
     <div class="kpi-row kpi-row-5">
       <div class="kpi-card indigo clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[3])"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">From new student report</div></div>
       <div class="kpi-card sky"><div class="kpi-label">New Registered</div><div class="kpi-value" id="s-new-reg">—</div><div class="kpi-sub">New students enrolled</div></div>
-      <div class="kpi-card blue"><div class="kpi-label">All Students</div><div class="kpi-value" id="s-all-total">—</div><div class="kpi-sub">Returning + new</div></div>
-      <div class="kpi-card green"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">Returning + new registered</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning (pending + withdrawn)</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students</div></div>
       <div class="kpi-card teal clickable" onclick="showPage('canreg',document.querySelectorAll('.nav-tab')[2])"><div class="kpi-label">Can Register</div><div class="kpi-value" id="s-can-reg">—</div><div class="kpi-sub">No holds, not yet enrolled</div></div>
     </div>
     <div class="charts-row">
@@ -1335,43 +1335,45 @@ function renderAll() {
 function n(num) { return num.toLocaleString(); }
 
 function renderSummary() {
-  const retTotal   = Object.keys(returningStudents).length;
-  const retUnreg   = retTotal; // all in unregistered report
-  const retReg     = [...registeredIds].filter(id => !newStudents[id]).length;
-  // We can approximate total returning = unregistered (in report) + registered returning
-  const retRegisteredCount = registeredIds.size - Object.keys(newStudents).filter(id=>newStudents[id].status==='Registered').length;
-  const totalRet   = retUnreg + retRegisteredCount;
-  // True Persistence Rate (Tony 2026-05-05):
-  //   numerator   = students still on track to return
-  //                 (in returning population AND NOT on NR list)
-  //   denominator = still-returning + everyone on Not Returning (incl. withdrawn)
-  //                 The NR list is treated as a separate population so a student
-  //                 who's on NR is counted as "not returning" exactly once, even
-  //                 if they're also still listed in unreg/reg.
-  const nrIds = new Set(nrList.map(s => s.id).filter(Boolean));
-  const returningSet = new Set([
-    ...Object.keys(returningStudents),
-    ...[...registeredIds].filter(id => !newStudents[id]),
-  ]);
-  const stillReturning = [...returningSet].filter(id => !nrIds.has(id)).length;
-  const notReturningCount = nrList.length;
-  const totalPossible = stillReturning + notReturningCount;
-  const retRate = totalPossible ? Math.round(stillReturning / totalPossible * 1000) / 10 : 0;
-  const newTotal   = Object.keys(newStudents).length;
-  const newReg     = Object.values(newStudents).filter(s=>s.status==='Registered').length;
-  const allTotal   = totalRet + newTotal;
-  const allReg     = retRegisteredCount + newReg;
-  const canReg     = canRegisterStudents.length;
+  // ── Tony's clarified retention formulas (2026-05-05) ──────────────────
+  //   returningRegistered = all registered − new students who registered
+  //   returningUnregistered = students in unreg.csv (already excludes new)
+  //   notReturning = nrList.length (Pending + Withdrawn)
+  //
+  //   Total Returning Students = returningUnreg + returningReg − notReturning
+  //   Eligible to Return       = returningReg + notReturning
+  //   Persistence Rate         = returningReg / Eligible to Return
+  //   Total Registered         = all registered students
+  // ──────────────────────────────────────────────────────────────────────
+  const newReg                = Object.values(newStudents).filter(s=>s.status==='Registered').length;
+  const newTotal              = Object.keys(newStudents).length;
+  const allRegistered         = registeredIds.size;
+  const returningRegistered   = allRegistered - newReg;          // R_returning
+  const returningUnregistered = Object.keys(returningStudents).length;
+  const notReturning          = nrList.length;                    // pending + withdrawn
 
-  document.getElementById('s-total-ret').textContent  = n(totalRet);
-  document.getElementById('s-ret-reg').textContent    = n(retRegisteredCount);
-  document.getElementById('s-ret-unreg').textContent  = n(retUnreg);
+  const totalReturning  = returningUnregistered + returningRegistered - notReturning;  // #4
+  const eligibleReturn  = returningRegistered + notReturning;                          // #1
+  const totalRegistered = allRegistered;                                                // #3
+  const retRate         = eligibleReturn                                                 // #2
+    ? Math.round(returningRegistered / eligibleReturn * 1000) / 10
+    : 0;
+  const canReg          = canRegisterStudents.length;
+
+  document.getElementById('s-total-ret').textContent  = n(totalReturning);
+  document.getElementById('s-ret-reg').textContent    = n(returningRegistered);
+  document.getElementById('s-ret-unreg').textContent  = n(returningUnregistered);
   document.getElementById('s-ret-rate').textContent   = retRate + '%';
   document.getElementById('s-new-total').textContent  = n(newTotal);
   document.getElementById('s-new-reg').textContent    = n(newReg);
-  document.getElementById('s-all-total').textContent  = n(allTotal);
-  document.getElementById('s-all-reg').textContent    = n(allReg);
+  document.getElementById('s-eligible').textContent   = n(eligibleReturn);
+  document.getElementById('s-all-reg').textContent    = n(totalRegistered);
   document.getElementById('s-can-reg').textContent    = n(canReg);
+
+  // Variables the donuts and existing computation expect; alias to current
+  // values so existing render code keeps working.
+  const totalRet = totalReturning;
+  const retRegisteredCount = returningRegistered;
 
   // Show/hide
   document.getElementById('summary-empty').style.display   = 'none';
