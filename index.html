@@ -385,6 +385,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <div id="hold-donuts-grid" class="hold-donuts-grid"></div>
       </div>
     </div>
+    <div id="trend-current-container"></div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
         <div class="card-title">Reasons Not Returning</div>
@@ -392,7 +393,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <div id="reasons-chart"></div>
       </div>
     </div>
-    <div id="trend-charts-container"></div>
+    <div id="trend-historical-container"></div>
   </div>
 </div>
 
@@ -1491,15 +1492,44 @@ function fmtMDY(iso) {
   return `${m}/${d}/${y.slice(2)}`;
 }
 
+// Today's date in the user's local timezone, as YYYY-MM-DD.
+// Avoids the off-by-one that toISOString() introduces near midnight in the
+// US (which is 4am+ UTC, so the date can flip).
+function todayLocalISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// The current registration cycle's term_label, derived from termSettings.
+// Pattern: registration during Spring → 'Spring to Fall <next_year>'
+//          registration during Fall   → 'Fall to Spring <next_year>'
+// (Year reflects the TARGET term, matching how historical rows are labeled.)
+function getNextTermLabel() {
+  const cur = (termSettings.currentName || '').trim();
+  if (!cur) return null;
+  const m = cur.match(/^(spring|fall)\s+(\d{4})$/i);
+  if (!m) return null;
+  const season = m[1].toLowerCase();
+  const year = parseInt(m[2], 10);
+  if (season === 'spring') return `Spring to Fall ${year}`;
+  if (season === 'fall')   return `Fall to Spring ${year + 1}`;
+  return null;
+}
+
 // Registration rate trend charts, fed by the term_history Supabase table.
-// Renders one chart per term_label so each registration cycle (e.g. "Fall
-// 2026 registration", "Spring 2026 registration") gets its own line. Plain
-// SVG so we don't pull in a charting library.
+// The current term's chart goes above the Reasons chart; historical terms
+// go below. "Current" = whichever term_label matches getNextTermLabel()
+// based on termSettings.currentName.
 async function renderTrendChart() {
-  const container = document.getElementById('trend-charts-container');
-  if (!container) return;
+  const currentEl = document.getElementById('trend-current-container');
+  const historicalEl = document.getElementById('trend-historical-container');
+  if (!currentEl || !historicalEl) return;
   if (!sb) {
-    container.innerHTML = '<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">Trend charts only available in hosted mode.</div></div>';
+    currentEl.innerHTML = '';
+    historicalEl.innerHTML = '<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">Trend charts only available in hosted mode.</div></div>';
     return;
   }
   const { data, error } = await sb
@@ -1507,11 +1537,13 @@ async function renderTrendChart() {
     .select('snapshot_date, term_label, registered_count, holds_count, registration_rate')
     .order('snapshot_date', { ascending: true });
   if (error) {
-    container.innerHTML = `<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">Could not load history: ${error.message}</div></div>`;
+    currentEl.innerHTML = '';
+    historicalEl.innerHTML = `<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">Could not load history: ${error.message}</div></div>`;
     return;
   }
   if (!data || !data.length) {
-    container.innerHTML = '<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">No historical data yet. Add rows to <code>term_history</code> in Supabase.</div></div>';
+    currentEl.innerHTML = '';
+    historicalEl.innerHTML = '<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">No historical data yet. Upload CSVs (which auto-snapshot) or add rows to <code>term_history</code>.</div></div>';
     return;
   }
   // Group by term_label
@@ -1520,21 +1552,35 @@ async function renderTrendChart() {
     const label = d.term_label || 'Untitled';
     (byTerm[label] = byTerm[label] || []).push(d);
   });
-  // Sort term groups by their first snapshot_date (earliest term first)
-  const terms = Object.entries(byTerm).sort((a, b) =>
-    a[1][0].snapshot_date.localeCompare(b[1][0].snapshot_date)
-  );
 
-  // Today's persistence rate (from the headline KPI) — overlaid on each chart
-  // so you can see where the current term sits vs the historical curve.
+  const currentLabel = getNextTermLabel();
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
-  container.innerHTML = terms.map(([label, points]) =>
-    renderTrendCard(label, points, currentRate)
-  ).join('');
+  // Current term chart (if matching)
+  if (currentLabel && byTerm[currentLabel]) {
+    currentEl.innerHTML = renderTrendCard(currentLabel, byTerm[currentLabel], currentRate, true);
+  } else {
+    currentEl.innerHTML = '';
+  }
+
+  // Historical: everything except current. Sort by latest date desc so the
+  // most-recent past term appears at the top of the historical section.
+  const historicalEntries = Object.entries(byTerm)
+    .filter(([label]) => label !== currentLabel)
+    .sort((a, b) => b[1][b[1].length-1].snapshot_date.localeCompare(a[1][a[1].length-1].snapshot_date));
+
+  if (historicalEntries.length) {
+    historicalEl.innerHTML =
+      `<div class="section-label" style="margin-top:8px;">Historical Term Trends</div>` +
+      historicalEntries.map(([label, points]) =>
+        renderTrendCard(label, points, currentRate, false)
+      ).join('');
+  } else {
+    historicalEl.innerHTML = '';
+  }
 }
 
-function renderTrendCard(label, data, currentRate) {
+function renderTrendCard(label, data, currentRate, isCurrent) {
   const W = 1000, H = 280, ML = 48, MR = 16, MT = 22, MB = 42;
   const innerW = W - ML - MR;
   const innerH = H - MT - MB;
@@ -1589,11 +1635,15 @@ function renderTrendCard(label, data, currentRate) {
   const first = fmtMDY(data[0].snapshot_date);
   const last = fmtMDY(data[data.length-1].snapshot_date);
   const finalRate = data[data.length-1].registration_rate;
+  const titlePrefix = isCurrent ? 'Current Term — ' : '';
+  const labelHtml = isCurrent
+    ? `${titlePrefix}<span style="color:#2563eb;">${label}</span>`
+    : label;
   return `
     <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
-        <div class="card-title">${label} — Registration Trend</div>
-        <div class="card-subtitle">${first} → ${last} · ${data.length} data points · final rate ${finalRate}%</div>
+        <div class="card-title">${labelHtml} — Registration Trend</div>
+        <div class="card-subtitle">${first} → ${last} · ${data.length} data points · ${isCurrent ? 'latest' : 'final'} rate ${finalRate}%</div>
         ${svg}
       </div>
     </div>
@@ -3163,6 +3213,39 @@ async function pushDataToSupabase() {
     const metrics = computeSnapshotMetrics();
     metrics.snapshot_id = snapshotId;
     expect('snapshot_metrics upsert', await sb.from('snapshot_metrics').upsert(metrics));
+
+    // 5b) Snapshot to term_history so today's data appears on the trend chart.
+    //     One row per (date, term_label) — re-uploads later in the same day
+    //     overwrite. The label comes from termSettings.currentName via
+    //     getNextTermLabel() (e.g. "Spring 2026" → "Spring to Fall 2026").
+    const termLabel = getNextTermLabel();
+    if (termLabel) {
+      const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
+      const allRegistered = registeredIds.size;
+      const newRegCount = Object.values(newStudents).filter(s=>s.status==='Registered').length;
+      const returningRegistered = allRegistered - newRegCount;
+      const notReturningCount = nrList.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+      const nrIdSetSnap = new Set(nrList.map(s => s.id).filter(Boolean));
+      const overlapSnap = [...registeredIds].filter(id => !newStudents[id] && nrIdSetSnap.has(id)).length;
+      const effRegSnap = returningRegistered - overlapSnap;
+      const eligibleSnap = effRegSnap + notReturningCount;
+      const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
+      const histRes = await sb.from('term_history').upsert({
+        snapshot_date: todayLocalISO(),
+        term_label: termLabel,
+        registered_count: returningRegistered,
+        holds_count: totalHolds,
+        registration_rate: rateSnap,
+      }, { onConflict: 'snapshot_date,term_label' });
+      // Don't hard-fail if this errors — the main upload succeeded.
+      if (histRes.error) {
+        console.warn('term_history snapshot failed:', histRes.error);
+      } else {
+        console.log(`term_history snapshot saved: ${todayLocalISO()} ${termLabel} reg=${returningRegistered} holds=${totalHolds} rate=${rateSnap}%`);
+      }
+    } else {
+      console.warn('term_history snapshot skipped: termSettings.currentName not set or unrecognized format');
+    }
 
     // 6) Auto-feed current-term withdrawals into not_returning_reports
     //    (RLS allows committee insert; admin = committee.)
