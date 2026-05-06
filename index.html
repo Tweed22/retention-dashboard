@@ -363,26 +363,20 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="summary-content" style="display:none;">
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-5">
-      <div class="kpi-card blue"><div class="kpi-label">Grand Total</div><div class="kpi-value" id="s-grand-total">—</div><div class="kpi-sub">Returning + Not Returning + New</div></div>
-      <div class="kpi-card green"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unique returning IDs not on NR list</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning</div></div>
       <div class="kpi-card red"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[3])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning</div></div>
-    </div>
-    <div class="section-label" style="margin-top:4px;">Returning Detail</div>
-    <div class="kpi-row kpi-row-5">
-      <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">Registered − new students − NR overlap</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments yet</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
-      <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
-      <div class="kpi-card teal clickable" onclick="showPage('canreg',document.querySelectorAll('.nav-tab')[2])"><div class="kpi-label">Can Register</div><div class="kpi-value" id="s-can-reg">—</div><div class="kpi-sub">Returning, no holds, not yet enrolled</div></div>
     </div>
-    <div class="charts-row">
+    <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
         <div class="card-title">Returning Student Status</div>
-        <div class="card-subtitle">Each segment of the returning population at a glance</div>
+        <div class="card-subtitle">Registered · Has Blocking Hold · Can Register — each segment of the returning population at a glance</div>
         <div id="returning-donuts-grid" class="returning-donuts-grid"></div>
       </div>
+    </div>
+    <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
         <div class="card-title">Registration-Blocking Holds</div>
         <div class="card-subtitle">Center number = students still likely returning · below = total with this hold</div>
@@ -1405,16 +1399,13 @@ function renderSummary() {
   //                        (deduped: a student on NR + registered counts once, in NR)
   // ──────────────────────────────────────────────────────────────────────
 
-  document.getElementById('s-grand-total').textContent = n(grandTotal);
-  document.getElementById('s-total-ret').textContent   = n(totalReturning);
-  document.getElementById('s-not-ret').textContent     = n(notReturning);
-  document.getElementById('s-new-total').textContent   = n(newTotal);
-  document.getElementById('s-eligible').textContent    = n(eligibleReturn);
-  document.getElementById('s-ret-reg').textContent     = n(effectiveReturningReg);
-  document.getElementById('s-ret-unreg').textContent   = n(returningUnregistered);
-  document.getElementById('s-ret-rate').textContent    = retRate + '%';
-  document.getElementById('s-all-reg').textContent     = n(totalRegistered);
-  document.getElementById('s-can-reg').textContent     = n(canReg);
+  // Headline row only — Returning Detail row was removed (its info is now
+  // conveyed by the Returning Student Status donut chart instead).
+  document.getElementById('s-all-reg').textContent  = n(totalRegistered);
+  document.getElementById('s-eligible').textContent = n(eligibleReturn);
+  document.getElementById('s-not-ret').textContent  = n(notReturning);
+  document.getElementById('s-new-total').textContent = n(newTotal);
+  document.getElementById('s-ret-rate').textContent = retRate + '%';
 
   // Variables the donuts and existing computation expect; alias to current
   // values so existing render code keeps working.
