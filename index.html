@@ -255,6 +255,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 .pii-banner { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 9px 14px; font-size: 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
 .pii-banner strong { font-weight: 700; }
 
+/* ── Historical trend tabs ── */
+.hist-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.hist-tab { background: white; border: 1px solid #e0e4ec; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.hist-tab:hover { background: #f3f4f6; border-color: #cbd5e1; }
+.hist-tab.active { background: #2563eb; color: white; border-color: #2563eb; }
+
 /* ── CSV export buttons ── */
 .export-cluster { display: inline-flex; gap: 6px; align-items: center; }
 .export-btn { background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 11px; font-size: 11px; font-weight: 600; color: #1e2d4f; cursor: pointer; transition: background 0.15s, border-color 0.15s; white-space: nowrap; }
@@ -1566,6 +1572,16 @@ function svgSegmentDonut({label, count, total, color, onclick}) {
   </div>`;
 }
 
+// Active tab in the Historical Term Trends section. Module-level so it
+// survives re-renders triggered by tab clicks. Reset to null when no
+// historical data exists; on next render we pick the most-recent term.
+let activeHistoricalTermLabel = null;
+
+function setHistoricalTab(label) {
+  activeHistoricalTermLabel = label;
+  renderTrendChart();
+}
+
 // Format an ISO date (YYYY-MM-DD) as mm/dd/yy.
 function fmtMDY(iso) {
   if (!iso) return '';
@@ -1664,18 +1680,30 @@ async function renderTrendChart() {
     currentEl.innerHTML = '';
   }
 
-  // Historical: everything except current. Sort by latest date desc so the
-  // most-recent past term appears at the top of the historical section.
+  // Historical: everything except current. Sort by latest snapshot date desc
+  // so the most-recently-ended term is the default tab.
   const historicalEntries = Object.entries(byTerm)
     .filter(([label]) => label !== currentLabel)
     .sort((a, b) => b[1][b[1].length-1].snapshot_date.localeCompare(a[1][a[1].length-1].snapshot_date));
 
   if (historicalEntries.length) {
-    historicalEl.innerHTML =
-      `<div class="section-label" style="margin-top:8px;">Historical Term Trends</div>` +
-      historicalEntries.map(([label, points]) =>
-        renderTrendCard(label, points, currentRate, false)
-      ).join('');
+    // Reset/default the active tab if the previous selection no longer exists
+    // (e.g., a term was removed) or if we haven't picked one yet.
+    if (!activeHistoricalTermLabel || !historicalEntries.find(([l]) => l === activeHistoricalTermLabel)) {
+      activeHistoricalTermLabel = historicalEntries[0][0];
+    }
+    const tabsHtml = historicalEntries.map(([label]) => {
+      const isActive = label === activeHistoricalTermLabel;
+      const escLabel = label.replace(/'/g, "\\'");
+      return `<button class="hist-tab${isActive ? ' active' : ''}" onclick="setHistoricalTab('${escLabel}')">${label}</button>`;
+    }).join('');
+    const activePoints = byTerm[activeHistoricalTermLabel];
+    const activeChart = activePoints ? renderTrendCard(activeHistoricalTermLabel, activePoints, currentRate, false) : '';
+    historicalEl.innerHTML = `
+      <div class="section-label" style="margin-top:8px;">Historical Term Trends</div>
+      <div class="hist-tabs">${tabsHtml}</div>
+      ${activeChart}
+    `;
   } else {
     historicalEl.innerHTML = '';
   }
