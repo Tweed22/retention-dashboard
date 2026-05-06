@@ -366,7 +366,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card blue"><div class="kpi-label">Total Returning</div><div class="kpi-value" id="s-total-ret">—</div><div class="kpi-sub">Unique returning student IDs</div></div>
       <div class="kpi-card green"><div class="kpi-label">Returning Registered</div><div class="kpi-value" id="s-ret-reg">—</div><div class="kpi-sub">With ≥1 enrollment</div></div>
       <div class="kpi-card red"><div class="kpi-label">Returning Unregistered</div><div class="kpi-value" id="s-ret-unreg">—</div><div class="kpi-sub">No enrollments</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Returning Reg. Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Registered ÷ total returning</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">True Retention Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">(Total returning − Not Returning) ÷ Total returning</div></div>
     </div>
     <div class="section-label" style="margin-top:4px;">New Students &amp; Combined Totals</div>
     <div class="kpi-row kpi-row-5">
@@ -1341,7 +1341,16 @@ function renderSummary() {
   // We can approximate total returning = unregistered (in report) + registered returning
   const retRegisteredCount = registeredIds.size - Object.keys(newStudents).filter(id=>newStudents[id].status==='Registered').length;
   const totalRet   = retUnreg + retRegisteredCount;
-  const retRate    = totalRet ? Math.round(retRegisteredCount/totalRet*1000)/10 : 0;
+  // True Retention Rate: subtract students on the Not Returning list (any status —
+  // Pending or Withdrawn) from the still-returning count. The denominator stays
+  // inclusive of withdrawn students per Tony's framing — withdrawn students ARE
+  // returning students who have now confirmed they aren't coming back.
+  const nrIds = new Set(nrList.map(s => s.id).filter(Boolean));
+  const returningNRCount = [...nrIds]
+    .filter(id => returningStudents[id] || (registeredIds.has(id) && !newStudents[id]))
+    .length;
+  const stillReturning = Math.max(0, totalRet - returningNRCount);
+  const retRate = totalRet ? Math.round(stillReturning / totalRet * 1000) / 10 : 0;
   const newTotal   = Object.keys(newStudents).length;
   const newReg     = Object.values(newStudents).filter(s=>s.status==='Registered').length;
   const allTotal   = totalRet + newTotal;
@@ -1801,8 +1810,11 @@ function nsApply() {
 // ══════════════════════════════════════════════════════════════
 //  NOT RETURNING
 // ══════════════════════════════════════════════════════════════
-// Split a combined name into firstName/lastName. Handles "Last, First",
-// "First Last", and "First Middle Last" (last word treated as last name).
+// Split a combined name into firstName/lastName.
+//   "Last, First [Middle]" → firstName='First [Middle]', lastName='Last'
+//   "First [Middle...] Last" → firstName='First', lastName='[Middle...] Last'
+// Per Tony 2026-05-05: firstName is always exactly the first word; everything
+// after rolls into lastName (handles "John del Rey" → first='John', last='del Rey').
 function splitName(fullName) {
   const s = (fullName || '').trim();
   if (!s) return { firstName: '', lastName: '' };
@@ -1812,8 +1824,8 @@ function splitName(fullName) {
   }
   const parts = s.split(/\s+/);
   if (parts.length === 1) return { firstName: parts[0], lastName: '' };
-  const last = parts[parts.length - 1];
-  const first = parts.slice(0, -1).join(' ');
+  const first = parts[0];
+  const last  = parts.slice(1).join(' ');
   return { firstName: first, lastName: last };
 }
 
@@ -2879,10 +2891,14 @@ async function pushDataToSupabase() {
     expect('snapshot insert', snapResult);
     const snapshotId = snapResult.data.id;
 
-    // 2) Wipe existing students (delete-and-replace per-snapshot model)
-    //    then upsert freshly-parsed records.
-    status('Step 2/6: clearing previous student data…');
-    expect('students delete', await sb.from('students').delete().neq('id', '__sentinel__'));
+    // 2) Upsert students. Previously this step deleted ALL students first,
+    //    then re-inserted — but that meant any upload that didn't include
+    //    every CSV would wipe categories that weren't in the upload (e.g.
+    //    uploading only withdrawals.csv would wipe all returning + new
+    //    students). Pure upsert: each upload updates the students it touches
+    //    and leaves the rest alone. Stale records (students who left between
+    //    uploads) linger but are harmless; manually cleanable via SQL.
+    status('Step 2/6: preparing student data…');
     const allStudents = [
       ...Object.values(returningStudents).map(s => ({...s, _isReg: false, _isNew: false})),
       ...Object.values(newStudents).map(s => ({...s, _isReg: registeredIds.has(s.id), _isNew: true})),
