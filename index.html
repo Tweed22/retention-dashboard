@@ -3169,14 +3169,51 @@ processAllCSVs = async function processAllCSVsWithSupabase() {
 
 // Persist a single NR row's editable fields to Supabase. Called from every
 // inline cell handler (reason dropdown, custom-reason text input, notes
-// input, etc.) so changes survive a page reload. Fire-and-forget — we
-// don't await the result inside synchronous handlers, but errors surface
-// as console warnings (and one alert per error) so silent persistence
-// failures don't go unnoticed.
+// input, etc.) so changes survive a page reload.
+//
+// IMPORTANT: previously this was a fire-and-forget call with a once-per-
+// session alert guard. That hid recurring failures. Tony reported reason
+// changes weren't sticking — the most likely cause was silent RLS denial
+// or a row missing _supabaseId. Now we surface EVERY failure visibly and
+// log what's happening in the cell so the user gets immediate feedback.
 async function persistNRRowToSupabase(idx) {
-  if (!HOSTED || !isCommittee()) return;
+  if (!HOSTED) return;             // local-only mode, nothing to persist
+  if (!isCommittee()) {
+    console.warn(`NR persist skipped: not authenticated as committee. idx=${idx}`);
+    return;
+  }
   const row = nrList[idx];
-  if (!row || !row._supabaseId) return;
+  if (!row) {
+    console.warn(`NR persist skipped: nrList[${idx}] missing`);
+    return;
+  }
+  if (!row._supabaseId) {
+    console.warn(`NR persist skipped: row has no _supabaseId yet`, row);
+    // This row wasn't successfully inserted to Supabase yet (e.g. the user
+    // added it offline, or the initial insert failed). Try inserting now.
+    const { data, error: insErr } = await sb.from('not_returning_reports').insert({
+      student_id: row.id || null,
+      student_name: row.name,
+      reason: row.reason,
+      withdrawal_status: row.withdrawal,
+      notes: row.notes,
+      submitter_name: userDisplay,
+      submitter_email: currentUser?.email,
+      submitter_uid: currentUser?.id,
+    }).select().single();
+    if (insErr) {
+      alert(`Could not save NR row to database (insert path): ${insErr.message}\n\n` +
+            `idx=${idx}, student_id=${row.id}, reason=${row.reason}.\n\n` +
+            `Most likely cause: RLS policy or auth state.`);
+      return;
+    }
+    row._supabaseId = data.id;
+    saveNRList();
+    console.log('NR row inserted (was missing _supabaseId):', data.id);
+    return;
+  }
+  // Normal path: update the existing Supabase row.
+  console.log(`NR persist: idx=${idx}, supabaseId=${row._supabaseId}, reason="${row.reason}", status="${row.withdrawal}"`);
   const { error } = await sb.from('not_returning_reports').update({
     student_id: row.id || null,
     student_name: row.name,
@@ -3185,14 +3222,13 @@ async function persistNRRowToSupabase(idx) {
     notes: row.notes,
   }).eq('id', row._supabaseId);
   if (error) {
-    console.warn('NR row persist failed:', error);
-    // Avoid alert spam — only first error per session
-    if (!persistNRRowToSupabase._hasWarned) {
-      persistNRRowToSupabase._hasWarned = true;
-      alert('Could not save your edit to the database: ' + error.message +
-        '\n\nYour change is shown locally but will not survive a refresh. ' +
-        'Most likely cause: RLS policy or auth state. Check console for details.');
-    }
+    console.error('NR row persist FAILED:', error, 'row:', row);
+    alert(`Could not save your edit to the database: ${error.message}\n\n` +
+          `Affected row: id=${row.id || '(none)'}, reason="${row.reason}".\n\n` +
+          `Most likely cause: RLS policy blocks UPDATE for your account, ` +
+          `or your auth session has expired. Check the browser console for details.`);
+  } else {
+    console.log(`NR persist OK: ${row._supabaseId} reason="${row.reason}"`);
   }
 }
 
