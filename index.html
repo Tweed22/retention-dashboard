@@ -300,10 +300,26 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="auth-gate anon-only" id="auth-gate">
   <div class="auth-gate-card">
     <div class="auth-gate-title">Registration Dashboard</div>
-    <div class="auth-gate-sub">Committee members only. Sign in with your authorized email and we'll send you a one-time login link.</div>
-    <label for="auth-gate-email">Email address</label>
-    <input type="email" id="auth-gate-email" placeholder="you@example.com" autocomplete="email" />
-    <button id="auth-gate-send" onclick="sendMagicLinkFromGate()">Send magic link</button>
+    <div class="auth-gate-sub">Committee members only. Sign in with your authorized email and we'll send you a 6-digit code.</div>
+
+    <!-- Step 1: ask for email -->
+    <div id="auth-gate-step-email">
+      <label for="auth-gate-email">Email address</label>
+      <input type="email" id="auth-gate-email" placeholder="you@example.com" autocomplete="email" />
+      <button id="auth-gate-send" onclick="sendOtpFromGate()">Send code</button>
+    </div>
+
+    <!-- Step 2: ask for the 6-digit code -->
+    <div id="auth-gate-step-code" style="display:none;">
+      <label for="auth-gate-code">6-digit code</label>
+      <input type="text" id="auth-gate-code" placeholder="000000" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" style="letter-spacing:0.4em; font-size:18px; text-align:center;" />
+      <button id="auth-gate-verify" onclick="verifyOtpFromGate()">Verify and sign in</button>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px;">
+        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Use a different email</a>
+        <a href="#" id="auth-gate-resend" onclick="event.preventDefault(); resendOtpFromGate();" style="color:#2563eb; text-decoration:none;">Resend code</a>
+      </div>
+    </div>
+
     <div id="auth-gate-msg"></div>
   </div>
 </div>
@@ -2386,13 +2402,25 @@ function ensureNRNameFields(row) {
 // Used at render time only — the underlying nrList is left untouched so
 // the user can still remove specific duplicates if they want.
 function dedupeNRForDisplay(rows) {
+  // Pick the row that the user most recently touched. _updatedAt comes
+  // from Supabase and is auto-bumped by the trg_nrr_set_updated_at
+  // trigger on every UPDATE, so a manual edit always wins over a stale
+  // auto-imported duplicate. Falls back to the field-fullness score
+  // when timestamps are equal/missing (e.g. brand-new local rows that
+  // haven't been persisted yet).
   const score = r => (r.reason ? 2 : 0) + (r.notes ? 1 : 0) + (r.withdrawal === 'Withdrawn' ? 1 : 0);
+  const isBetter = (a, b) => {
+    const ta = a._updatedAt || '';
+    const tb = b._updatedAt || '';
+    if (ta !== tb) return ta > tb;
+    return score(a) > score(b);
+  };
   const byId = new Map();
   const noId = [];
   for (const r of rows) {
     if (!r.id) { noId.push(r); continue; }
     const prev = byId.get(r.id);
-    if (!prev || score(r) > score(prev)) byId.set(r.id, r);
+    if (!prev || isBetter(r, prev)) byId.set(r.id, r);
   }
   return [...byId.values(), ...noId];
 }
@@ -3036,7 +3064,20 @@ function authGateMsg(kind, html) {
   m.innerHTML = html;
 }
 
-async function sendMagicLinkFromGate() {
+// Two-step OTP flow:
+//   1) sendOtpFromGate  — ask Supabase to email a 6-digit code, swap the
+//      gate to show the code input.
+//   2) verifyOtpFromGate — call verifyOtp with the code; on success the
+//      onAuthStateChange handler reveals the dashboard.
+//
+// We also keep a magic-link fallback: signInWithOtp emails BOTH a link and
+// a token, controlled by the Supabase email template. So if a user clicks
+// the link in another tab it still works (legacy behavior). The OTP path
+// solves the multi-tab confusion because the user stays in one tab.
+
+let _otpEmail = ''; // captured at step 1, reused at verify + resend
+
+async function sendOtpFromGate() {
   const emailEl = document.getElementById('auth-gate-email');
   const btnEl   = document.getElementById('auth-gate-send');
   const email = (emailEl?.value || '').trim();
@@ -3049,27 +3090,85 @@ async function sendMagicLinkFromGate() {
     return;
   }
   btnEl.disabled = true;
-  authGateMsg('info', 'Sending magic link…');
-  // Strip any pre-existing hash (from a prior magic-link redirect) so the
-  // emailRedirectTo is always the clean URL the user is currently looking at.
+  authGateMsg('info', 'Sending code…');
   const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
   const { error } = await sb.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: cleanUrl },
+    options: { emailRedirectTo: cleanUrl, shouldCreateUser: true },
   });
   btnEl.disabled = false;
   if (error) {
     authGateMsg('error', '<strong>Error:</strong> ' + error.message);
     return;
   }
-  authGateMsg('success', '<strong>Check your email.</strong> The link will sign you in automatically. (If nothing arrives in 60 seconds, check spam.)');
+  _otpEmail = email;
+  // Swap to the code-entry step.
+  document.getElementById('auth-gate-step-email').style.display = 'none';
+  document.getElementById('auth-gate-step-code').style.display  = 'block';
+  authGateMsg('success', `<strong>Code sent to ${email}.</strong> Enter the 6-digit code from the email below. Code expires in 1 hour.`);
+  // Focus the code input so the user can start typing immediately.
+  setTimeout(() => document.getElementById('auth-gate-code')?.focus(), 50);
 }
 
-// Legacy modal helpers — kept as no-ops in case any leftover handler
-// still references them. The modal HTML is gone.
+async function verifyOtpFromGate() {
+  const codeEl = document.getElementById('auth-gate-code');
+  const btnEl  = document.getElementById('auth-gate-verify');
+  const token  = (codeEl?.value || '').trim().replace(/\s+/g, '');
+  if (!/^\d{6}$/.test(token)) {
+    authGateMsg('error', 'Please enter the 6-digit code from the email.');
+    return;
+  }
+  if (!sb || !_otpEmail) {
+    authGateMsg('error', 'Session lost. Please request a new code.');
+    return;
+  }
+  btnEl.disabled = true;
+  authGateMsg('info', 'Verifying…');
+  const { error } = await sb.auth.verifyOtp({
+    email: _otpEmail,
+    token,
+    type: 'email',
+  });
+  btnEl.disabled = false;
+  if (error) {
+    authGateMsg('error', '<strong>Error:</strong> ' + error.message + ' (Codes expire after 1 hour. Click "Resend code" if needed.)');
+    return;
+  }
+  // onAuthStateChange will fire SIGNED_IN and reveal the dashboard.
+  authGateMsg('success', 'Signed in. Loading your data…');
+}
+
+async function resendOtpFromGate() {
+  if (!_otpEmail) { resetAuthGate(); return; }
+  authGateMsg('info', 'Resending code…');
+  const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
+  const { error } = await sb.auth.signInWithOtp({
+    email: _otpEmail,
+    options: { emailRedirectTo: cleanUrl, shouldCreateUser: true },
+  });
+  if (error) {
+    authGateMsg('error', '<strong>Error:</strong> ' + error.message);
+    return;
+  }
+  authGateMsg('success', `<strong>New code sent to ${_otpEmail}.</strong> Use the most recent code; older codes are now invalid.`);
+}
+
+function resetAuthGate() {
+  _otpEmail = '';
+  document.getElementById('auth-gate-step-email').style.display = 'block';
+  document.getElementById('auth-gate-step-code').style.display  = 'none';
+  const codeEl = document.getElementById('auth-gate-code');
+  if (codeEl) codeEl.value = '';
+  authGateMsg('info', '');
+  document.getElementById('auth-gate-msg').className = '';
+  document.getElementById('auth-gate-msg').innerHTML = '';
+}
+
+// Legacy aliases — anything still calling the old name routes to OTP step 1.
 function openAuthModal() {}
 function closeAuthModal() {}
-async function sendMagicLink() { return sendMagicLinkFromGate(); }
+async function sendMagicLink() { return sendOtpFromGate(); }
+async function sendMagicLinkFromGate() { return sendOtpFromGate(); }
 
 async function signOut() {
   if (!sb) return;
@@ -3164,7 +3263,7 @@ async function fetchDashboardData() {
   const [students, withdrawals, nrReports, terms, snapshots] = await Promise.all([
     sb.from('students').select('*').limit(10000),
     sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }).limit(10000),
-    sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('created_at', { ascending: false }).limit(10000),
+    sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('updated_at', { ascending: false }).limit(10000),
     sb.from('terms').select('*').order('start_date', { ascending: true }),
     sb.from('csv_snapshots').select('*').order('uploaded_at', { ascending: false }).limit(1),
   ]);
@@ -3357,6 +3456,10 @@ async function loadHostedDashboardData() {
       _sourceWithdrawalId: r.source_withdrawal_id ? `wd-${r.id}` : null,
       _withdrawalLDA: null,
       _isFromCSV: !!r.source_withdrawal_id,
+      // updated_at drives the render-time dedupe — when two NR rows exist
+      // for the same student, the most-recently-updated wins so manual
+      // edits aren't masked by stale auto-imported duplicates.
+      _updatedAt: r.updated_at || r.created_at || '',
     };
     ensureNRNameFields(row);
     return row;
@@ -3738,6 +3841,7 @@ async function persistNRRowToSupabase(idx) {
       return;
     }
     row._supabaseId = data.id;
+    row._updatedAt = data.updated_at || data.created_at || new Date().toISOString();
     saveNRList();
     console.log('NR row inserted (was missing _supabaseId):', data.id);
     return;
@@ -3758,6 +3862,12 @@ async function persistNRRowToSupabase(idx) {
           `Most likely cause: RLS policy blocks UPDATE for your account, ` +
           `or your auth session has expired. Check the browser console for details.`);
   } else {
+    // Bump local _updatedAt so the render-time dedupe immediately prefers
+    // this row over any stale duplicate for the same student. Without this
+    // the user might see the dedupe "snap back" to the older row before
+    // the next page load picks up the trigger-refreshed timestamp.
+    row._updatedAt = new Date().toISOString();
+    saveNRList();
     console.log(`NR persist OK: ${row._supabaseId} reason="${row.reason}"`);
   }
 }
@@ -3984,11 +4094,23 @@ if (HOSTED) {
     'Local-file mode — data stays in your browser';
 }
 
-// Allow Enter on the auth gate email field to submit
+// Allow Enter on the auth gate fields to submit at each step.
 const _authGateInput = document.getElementById('auth-gate-email');
 if (_authGateInput) {
   _authGateInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') sendMagicLinkFromGate();
+    if (e.key === 'Enter') sendOtpFromGate();
+  });
+}
+const _authGateCodeInput = document.getElementById('auth-gate-code');
+if (_authGateCodeInput) {
+  _authGateCodeInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') verifyOtpFromGate();
+  });
+  // Auto-submit when 6 digits are pasted/typed (matches autocomplete=one-time-code UX).
+  _authGateCodeInput.addEventListener('input', e => {
+    const v = e.target.value.replace(/\D/g, '');
+    e.target.value = v;
+    if (v.length === 6) verifyOtpFromGate();
   });
 }
 </script>
