@@ -743,10 +743,62 @@ const NR_REASON_LEGACY = {
 };
 
 // Standard class-year vocabulary for the NR list edit dropdown + filter.
-// CSV exports may contain non-standard strings (e.g. "FR", "Senior I") which
-// are still preserved on the row — the edit dropdown adds them as a custom
-// option so the value isn't silently dropped.
+// Underlying CSV / registrar exports often use abbreviations (FR, SO, JR, SR);
+// we normalize on read so the stored value is always one of the full words
+// below. Unknown strings pass through unchanged so we don't silently drop
+// non-standard values.
 const NR_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
+
+const CLASS_YEAR_ALIASES = {
+  'FR': 'Freshman',  'F': 'Freshman',  'FRESH': 'Freshman',  'FRESHMAN': 'Freshman',
+  'SO': 'Sophomore', 'SOPH': 'Sophomore', 'SOPHOMORE': 'Sophomore',
+  'JR': 'Junior', 'JUNIOR': 'Junior',
+  'SR': 'Senior', 'SENIOR': 'Senior',
+  'GR': 'Graduate', 'GRAD': 'Graduate', 'GRADUATE': 'Graduate', 'G': 'Graduate',
+};
+
+function normalizeClassYear(raw) {
+  if (!raw) return '';
+  const key = String(raw).trim().toUpperCase();
+  return CLASS_YEAR_ALIASES[key] || String(raw).trim();
+}
+
+// Sport rollup. The registrar's roster splits track-family athletes across
+// "Cross Country", "Indoor Track and Field", "Outdoor Track and Field" — and
+// many athletes are in more than one. Tony 2026-05-07: roll those up into
+// one "Men's/Women's Track & Field" bucket per gender so the Sport(s) column
+// stays narrow and so filtering by Track & Field surfaces all of them at
+// once. Other sports (Football, Soccer, etc.) pass through unchanged.
+function normalizeSport(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const lc = s.toLowerCase();
+  let gender = '';
+  // Strip leading "Men's" / "Mens" / "Men " (and Women equivalents). Apostrophe
+  // styles vary across exports, so handle both straight and curly quotes.
+  const genderMatch = lc.match(/^(men['’]s|mens|men)\b\s*/) || lc.match(/^(women['’]s|womens|women)\b\s*/);
+  if (genderMatch) {
+    gender = genderMatch[0].toLowerCase().includes('women') ? "Women's " : "Men's ";
+  }
+  if (lc.includes('cross country') || lc.includes('track')) {
+    return (gender + 'Track & Field').trim();
+  }
+  return s;
+}
+
+// Apply normalizeSport to each entry in a comma-joined string, dedupe the
+// result, and return the comma-joined display value.
+function normalizeSportList(commaJoined) {
+  if (!commaJoined) return '';
+  const out = [];
+  const seen = new Set();
+  for (const part of commaJoined.split(',')) {
+    const v = normalizeSport(part);
+    if (v && !seen.has(v)) { seen.add(v); out.push(v); }
+  }
+  return out.join(', ');
+}
 
 let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [];
 let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false };
@@ -2648,7 +2700,16 @@ function nrRender() {
   if (wf) indexed=indexed.filter(r=>r.withdrawal===wf);
   if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
   if (cf) indexed=indexed.filter(r => (r.classYear || '') === cf);
-  if (sf) indexed=indexed.filter(r => (r.sport || '').split(',').map(s=>s.trim()).includes(sf));
+  // Sport filter: special "(Non-Athlete)" sentinel matches rows with an
+  // empty sport field. Otherwise we compare against the row's normalized
+  // sport list so "Men's Track & Field" matches a row stored as
+  // "Men's Cross Country, Men's Outdoor Track and Field".
+  if (sf === '(Non-Athlete)') {
+    indexed = indexed.filter(r => !normalizeSportList(r.sport));
+  } else if (sf) {
+    indexed = indexed.filter(r =>
+      normalizeSportList(r.sport).split(',').map(s => s.trim()).includes(sf));
+  }
   if (mf) indexed=indexed.filter(r => (r.major || '') === mf);
   if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.firstName||'')+(r.lastName||'')+(r.id||'')).toLowerCase().includes(q));
   indexed=applySort(indexed,nrSort_);
@@ -2680,20 +2741,23 @@ function nrRender() {
 // currently present in the (deduped) NR list. Preserves the current
 // selection if it still has matching rows; otherwise resets to "All ___".
 function nrPopulateAttributeFilters(rows) {
-  const fillSelect = (selectId, allLabel, values) => {
+  const fillSelect = (selectId, allLabel, values, prepend = []) => {
     const sel = document.getElementById(selectId);
     if (!sel) return;
     const cur = sel.value;
     const sorted = [...new Set(values.filter(Boolean))].sort((a,b) => a.localeCompare(b));
     const opts = [`<option value="">${allLabel}</option>`]
+      .concat(prepend.map(v => `<option ${cur===v?'selected':''}>${v}</option>`))
       .concat(sorted.map(v => `<option ${cur===v?'selected':''}>${v}</option>`));
     sel.innerHTML = opts.join('');
   };
   fillSelect('nr-filter-class', 'All Classes', rows.map(r => r.classYear));
-  // Sports come in as comma-separated strings on a single row — split them
-  // out so a row with "Football, Track" populates two distinct filter options.
-  const sportValues = rows.flatMap(r => (r.sport || '').split(',').map(s => s.trim()));
-  fillSelect('nr-filter-sport', 'All Sports', sportValues);
+  // Sport filter: build from the NORMALIZED sport list so the dropdown
+  // shows "Men's Track & Field" once instead of three separate XC / Indoor /
+  // Outdoor entries. The "(Non-Athlete)" option is prepended so committee
+  // members can quickly see students with no athletic affiliation.
+  const sportValues = rows.flatMap(r => normalizeSportList(r.sport).split(',').map(s => s.trim()));
+  fillSelect('nr-filter-sport', 'All Sports', sportValues, ['(Non-Athlete)']);
   fillSelect('nr-filter-major', 'All Majors', rows.map(r => r.major));
 }
 
@@ -2705,9 +2769,11 @@ function nrRenderStaticRow(r) {
   // we can't tell them apart.
   const lastCell  = r.lastName  || (r.firstName ? '' : (r.name || '—'));
   const firstCell = r.firstName || '';
-  // Sport(s) cell — sport is stored as a comma-joined string. Show "—"
-  // when empty so the column is visually consistent.
-  const sportCell = r.sport ? r.sport : '<span style="color:#bbb;font-size:11px;">—</span>';
+  // Sport(s) cell — display the rolled-up version (Track & Field family
+  // collapsed per gender) so the column stays narrow. Stored value is
+  // preserved on the row; this transform is display-only.
+  const displaySport = normalizeSportList(r.sport);
+  const sportCell = displaySport ? displaySport : '<span style="color:#bbb;font-size:11px;">—</span>';
   // Soft-yellow row tint for students who are also enrolled — this is the
   // signal that previously rode in the "Registered" chip column. Tony
   // 2026-05-07: a row tint is less noisy than the chip and frees the
@@ -2866,7 +2932,7 @@ function nrSave(idx) {
   r.lastName    = v('lastName');
   r.firstName   = v('firstName');
   r.name        = [r.firstName, r.lastName].filter(Boolean).join(' ');
-  r.classYear   = v('classYear');        // Freshman / Sophomore / etc.
+  r.classYear   = normalizeClassYear(v('classYear')); // FR/SR/etc. → full word
   r.sport       = v('sport');            // comma-joined string ("Football, Track")
   r.major       = v('major');
   r.reason      = v('reason');           // works for both <select> and <input> editors
@@ -3629,7 +3695,9 @@ async function loadHostedDashboardData() {
       major: r.major || '',
       advisor: '',
       sport: r.sport || '',
-      classYear: r.class_year || '',
+      // Normalize class year on read — CSVs use abbreviations (FR/SR/etc.)
+      // but the dashboard displays the full word.
+      classYear: normalizeClassYear(r.class_year || ''),
       isRegistered: !!(r.student_id && registeredIds.has(r.student_id)),
       reason,
       notes: r.notes || '',
@@ -3659,7 +3727,7 @@ async function loadHostedDashboardData() {
       r.advisor = s.advisor;
       if (!r.major)     r.major     = s.major || '';
       if (!r.sport)     r.sport     = (s.sports || []).join(', ');
-      if (!r.classYear) r.classYear = s.classYear || '';
+      if (!r.classYear) r.classYear = normalizeClassYear(s.classYear || '');
       if (!r.name)      r.name      = s.name;
     }
   });
