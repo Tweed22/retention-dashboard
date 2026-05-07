@@ -1283,24 +1283,20 @@ function isInCurrentTerm(lastActiveDate) {
 }
 
 // Decide whether a withdrawal row should be EXCLUDED from withdrawalsList.
-// Two categories are filtered out per Tony's 2026-05-04 direction:
-//   • Non Return (exit_reason='NR' / description='Non Return')
-//       — the exit_dte for these is the last day of a prior term and the
-//         registrar is just processing the paperwork now. Including them
-//         double-counts students who were already gone before the term began.
-//   • New Student -WD prior to attendance (exit_reason='NW')
-//       — these students never showed up to class. They aren't real
-//         withdrawals; including them inflates the current-term metric with
-//         no-shows.
-// Implemented as a helper so future categories (e.g. completions) can be
-// added by extending one place. Match on BOTH the short code and the
-// human-readable description so a typo or format drift in either field
-// doesn't sneak excluded rows back in.
+// Per Tony 2026-05-07: exclude rows whose exit_reason matches any of
+// NR, NW, CP, D1, S. Everything else counts as a real withdrawal.
+//   • NR (Non Return) — exit_dte is from a prior term; including double-
+//     counts students who were already gone before the current term.
+//   • NW (New Student-WD prior to attendance) — never showed up to class.
+//   • CP, D1, S — additional codes Tony wants treated the same way.
+// Match on the short code and (for NR/NW) the human-readable description
+// as a fallback so typos or format drift don't sneak excluded rows back in.
+const EXCLUDED_WD_CODES = new Set(['NR', 'NW', 'CP', 'D1', 'S']);
+
 function shouldExcludeWithdrawal(w) {
   const code = (w.type || '').trim().toUpperCase();
   const desc = (w.reason || '').toLowerCase();
-  if (code === 'NR') return true;
-  if (code === 'NW') return true;
+  if (EXCLUDED_WD_CODES.has(code)) return true;
   if (desc.includes('non return') || desc.includes('non-return') || desc.includes('nonreturn')) return true;
   if (desc.includes('prior to attendance')) return true;
   return false;
