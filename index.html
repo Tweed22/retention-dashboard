@@ -309,10 +309,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <button id="auth-gate-send" onclick="sendOtpFromGate()">Send code</button>
     </div>
 
-    <!-- Step 2: ask for the 6-digit code -->
+    <!-- Step 2: ask for the OTP code (6-10 digits, depending on project config) -->
     <div id="auth-gate-step-code" style="display:none;">
-      <label for="auth-gate-code">6-digit code</label>
-      <input type="text" id="auth-gate-code" placeholder="000000" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" style="letter-spacing:0.4em; font-size:18px; text-align:center;" />
+      <label for="auth-gate-code">Login code</label>
+      <input type="text" id="auth-gate-code" placeholder="00000000" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="one-time-code" style="letter-spacing:0.3em; font-size:18px; text-align:center;" />
       <button id="auth-gate-verify" onclick="verifyOtpFromGate()">Verify and sign in</button>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px;">
         <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Use a different email</a>
@@ -3110,32 +3110,62 @@ async function sendOtpFromGate() {
   setTimeout(() => document.getElementById('auth-gate-code')?.focus(), 50);
 }
 
+// Guard against double-fire — paste + Enter + click can trigger this several
+// times in a row, and Supabase will reject the second attempt as "Invalid
+// token" because the first attempt already consumed it. Plus we don't want
+// to show error messages from a stale request.
+let _verifyInFlight = false;
+
 async function verifyOtpFromGate() {
+  if (_verifyInFlight) { console.log('verifyOtp: already in flight, ignoring duplicate'); return; }
   const codeEl = document.getElementById('auth-gate-code');
   const btnEl  = document.getElementById('auth-gate-verify');
   const token  = (codeEl?.value || '').trim().replace(/\s+/g, '');
-  if (!/^\d{6}$/.test(token)) {
-    authGateMsg('error', 'Please enter the 6-digit code from the email.');
+  if (!/^\d{6,10}$/.test(token)) {
+    authGateMsg('error', 'Please enter the numeric code from the email.');
     return;
   }
   if (!sb || !_otpEmail) {
     authGateMsg('error', 'Session lost. Please request a new code.');
     return;
   }
+  _verifyInFlight = true;
   btnEl.disabled = true;
   authGateMsg('info', 'Verifying…');
-  const { error } = await sb.auth.verifyOtp({
-    email: _otpEmail,
-    token,
-    type: 'email',
-  });
+  const t0 = performance.now();
+  console.log(`verifyOtp: calling Supabase with email=${_otpEmail} token=${token.slice(0,2)}…`);
+  let error;
+  try {
+    const res = await sb.auth.verifyOtp({
+      email: _otpEmail,
+      token,
+      type: 'email',
+    });
+    error = res.error;
+    console.log(`verifyOtp: Supabase responded in ${Math.round(performance.now() - t0)}ms`,
+                error ? `error=${error.message}` : `OK, user=${res.data?.user?.email}`);
+  } catch (e) {
+    console.error('verifyOtp: exception', e);
+    error = { message: e.message || String(e) };
+  }
+  _verifyInFlight = false;
   btnEl.disabled = false;
   if (error) {
     authGateMsg('error', '<strong>Error:</strong> ' + error.message + ' (Codes expire after 1 hour. Click "Resend code" if needed.)');
     return;
   }
-  // onAuthStateChange will fire SIGNED_IN and reveal the dashboard.
   authGateMsg('success', 'Signed in. Loading your data…');
+  // The onAuthStateChange handler should fire and dismiss the gate. If it
+  // doesn't within 5s (e.g. committee_members lookup hung), call refreshAuthState
+  // ourselves so the user isn't stuck staring at "Loading your data…".
+  setTimeout(async () => {
+    if (document.body.classList.contains('auth-anon')) {
+      console.warn('verifyOtp: 5s after success and gate is still visible — running refreshAuthState manually');
+      const { data } = await sb.auth.getSession();
+      await refreshAuthState(data?.session);
+      if (isCommittee()) await loadHostedDashboardData();
+    }
+  }, 5000);
 }
 
 async function resendOtpFromGate() {
@@ -4068,6 +4098,8 @@ if (HOSTED) {
   // Wait for the auth state, then load. onAuthStateChange fires once
   // immediately with INITIAL_SESSION, so we don't need a separate getSession().
   sb.auth.onAuthStateChange(async (event, session) => {
+    const t0 = performance.now();
+    console.log(`auth: onAuthStateChange event=${event} hasSession=${!!session}`);
     // After a magic-link redirect, the URL has #access_token=... params.
     // Once Supabase has consumed them and stored the session, strip the
     // hash so the access token isn't shareable / browser-history-leaky.
@@ -4075,10 +4107,11 @@ if (HOSTED) {
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
     await refreshAuthState(session);
+    console.log(`auth: refreshAuthState done in ${Math.round(performance.now() - t0)}ms, role=${userRole}`);
     if (isCommittee()) {
+      const t1 = performance.now();
       await loadHostedDashboardData();
-    } else {
-      // Anon users see only the gate now — nothing to render.
+      console.log(`auth: loadHostedDashboardData done in ${Math.round(performance.now() - t1)}ms`);
     }
     startRealtime();
   });
@@ -4106,7 +4139,9 @@ if (_authGateCodeInput) {
   _authGateCodeInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') verifyOtpFromGate();
   });
-  // Auto-submit when 6 digits are pasted/typed (matches autocomplete=one-time-code UX).
+  // Auto-submit as soon as the user has typed/pasted a 6-digit code. The
+  // _verifyInFlight guard inside verifyOtpFromGate prevents this from
+  // double-firing if the user also hits Enter or clicks Verify.
   _authGateCodeInput.addEventListener('input', e => {
     const v = e.target.value.replace(/\D/g, '');
     e.target.value = v;
