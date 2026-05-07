@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Registration Retention Dashboard</title>
+<title>Registration Dashboard</title>
 <style>
 :root { color-scheme: light; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -274,7 +274,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <!-- ── Header ── -->
 <div class="header">
   <div class="header-left">
-    <h1>Registration Retention Dashboard</h1>
+    <h1>Registration Dashboard</h1>
     <div class="subtitle" id="header-subtitle">Loading…</div>
   </div>
   <div class="header-right">
@@ -290,7 +290,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <!-- ── Auth Gate (full-screen, shown only when not signed in) ── -->
 <div class="auth-gate anon-only" id="auth-gate">
   <div class="auth-gate-card">
-    <div class="auth-gate-title">Retention Dashboard</div>
+    <div class="auth-gate-title">Registration Dashboard</div>
     <div class="auth-gate-sub">Committee members only. Sign in with your authorized email and we'll send you a one-time login link.</div>
     <label for="auth-gate-email">Email address</label>
     <input type="email" id="auth-gate-email" placeholder="you@example.com" autocomplete="email" />
@@ -529,10 +529,11 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="page" id="page-new">
   <div id="new-empty" class="empty-state"><p>No new student data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your new student CSV</a>.</p></div>
   <div id="new-content" style="display:none;">
-    <div class="kpi-row kpi-row-3">
+    <div class="kpi-row kpi-row-4">
       <div class="kpi-card indigo"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="ns-total">—</div><div class="kpi-sub">From new student report</div></div>
       <div class="kpi-card sky"><div class="kpi-label">Registered</div><div class="kpi-value" id="ns-reg">—</div><div class="kpi-sub">New students with ≥1 enrollment</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Not Yet Registered</div><div class="kpi-value" id="ns-unreg">—</div><div class="kpi-sub">New students with no enrollments</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Not Yet Registered</div><div class="kpi-value" id="ns-unreg">—</div><div class="kpi-sub">New students with no enrollments</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="ns-withdrawn">—</div><div class="kpi-sub">Formally withdrew before attendance (NW)</div></div>
     </div>
     <p style="font-size:11px;color:#888;font-style:italic;margin-bottom:14px;">New students are excluded from the returning registration rate on the Summary page.</p>
     <div class="filter-row">
@@ -541,7 +542,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option value="returning">Returning Only</option>
         <option value="all">Show All</option>
       </select>
-      <select class="filter-select" id="ns-status" onchange="nsApply()"><option value="">All</option><option>Registered</option><option>Not Yet Registered</option></select>
+      <select class="filter-select" id="ns-status" onchange="nsApply()"><option value="">All</option><option>Registered</option><option>Not Yet Registered</option><option>Withdrawn</option></select>
       <select class="filter-select" id="ns-class" onchange="nsApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
       <select class="filter-select" id="ns-major" onchange="nsApply()"><option value="">All Majors</option></select>
       <select class="filter-select" id="ns-advisor" onchange="nsApply()"><option value="">All Advisors</option></select>
@@ -721,6 +722,7 @@ let newStudents         = {}; // id -> student obj
 let holdGroups          = {}; // 'Advising Hold' -> [student,...]
 let canRegisterStudents = [];
 let withdrawalsList     = []; // array of normalized withdrawal records (all terms; filter at render time)
+let withdrawnNewIds     = new Set(); // student IDs of new students who formally withdrew (NW code)
 let currentHold         = null;
 let nrEditIdx           = null; // index of NR row currently being edited inline
 
@@ -1378,9 +1380,18 @@ function buildData() {
   if (rawWithdrawals.length > 0) {
   const seenWd = new Set();
   withdrawalsList = [];
+  withdrawnNewIds = new Set();
   rawWithdrawals.forEach(r => {
     const w = normalizeWithdrawal(r);
     if (!w.id || !w.lastActiveDate) return; // filter rows without the two required fields
+    // Capture NW (New Student-WD prior to attendance) IDs separately so the
+    // New Students tab can flag them with a 'Withdrawn' status, even though
+    // they're still excluded from withdrawalsList per Tony 2026-05-04.
+    const code = (w.type || '').trim().toUpperCase();
+    const desc = (w.reason || '').toLowerCase();
+    if (code === 'NW' || desc.includes('prior to attendance')) {
+      withdrawnNewIds.add(w.id);
+    }
     if (shouldExcludeWithdrawal(w)) return; // omit Non-Return + New-Student-WD-prior-to-attendance per Tony 2026-05-04
     const key = `${w.id}|${w.lastActiveDate}`;
     if (seenWd.has(key)) return;
@@ -1400,6 +1411,12 @@ function buildData() {
     withdrawalsList.push(w);
   });
   } // end if (rawWithdrawals.length > 0)
+
+  // Tag new students who appear in NW (formal withdrawal before attendance)
+  // entries. Done after withdrawal parsing so withdrawnNewIds is populated.
+  Object.values(newStudents).forEach(s => {
+    if (withdrawnNewIds.has(s.id)) s.status = 'Withdrawn';
+  });
 
   saveNRList();
 }
@@ -1674,16 +1691,23 @@ async function renderTrendChart() {
   const currentLabel = getNextTermLabel();
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
-  // Build current-term data with synthetic today's point if missing, so the
-  // curve always ends at the dashed "Today" reference rate.
+  // Build current-term data so the curve and subtitle always reflect the
+  // LIVE True Persistence Rate, even if today's row in term_history was
+  // written earlier (e.g. by an earlier upload, before NR list edits).
+  // Strategy: if today's row exists, override its rate; if not, append.
   let currentPts = currentLabel ? byTerm[currentLabel] : null;
-  if (currentLabel && currentPts) {
+  if (currentLabel && currentPts && currentRate != null) {
     const todayStr = todayLocalISO();
-    if (!currentPts.some(d => d.snapshot_date === todayStr) && currentRate != null) {
-      const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
-      const allReg = registeredIds.size;
-      const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered').length;
-      const retReg = allReg - newRegCount;
+    const todayIdx = currentPts.findIndex(d => d.snapshot_date === todayStr);
+    const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
+    const allReg = registeredIds.size;
+    const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered').length;
+    const retReg = allReg - newRegCount;
+    if (todayIdx >= 0) {
+      currentPts = currentPts.map((d, i) => i === todayIdx
+        ? { ...d, registration_rate: currentRate, registered_count: retReg, holds_count: totalHolds }
+        : d);
+    } else {
       currentPts = [...currentPts, {
         snapshot_date: todayStr,
         term_label: currentLabel,
@@ -2006,6 +2030,8 @@ function renderNewStudents() {
   document.getElementById('ns-total').textContent = n(students.length);
   document.getElementById('ns-reg').textContent   = n(students.filter(s=>s.status==='Registered').length);
   document.getElementById('ns-unreg').textContent = n(students.filter(s=>s.status==='Not Yet Registered').length);
+  const wEl = document.getElementById('ns-withdrawn');
+  if (wEl) wEl.textContent = n(students.filter(s=>s.status==='Withdrawn').length);
   nsApply();
 }
 
@@ -2286,7 +2312,7 @@ function nsApply() {
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
           <td>${r.firstName||r.name||''}</td>
           <td style="color:#555;">${r.email}</td>
-          <td><span class="chip ${r.status==='Registered'?'chip-green':'chip-amber'}">${r.status}</span></td>
+          <td><span class="chip ${r.status==='Registered'?'chip-green':r.status==='Withdrawn'?'chip-red':'chip-amber'}">${r.status}</span></td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
@@ -2557,7 +2583,6 @@ function nrRenderStaticRow(r) {
     <td><span class="chip ${wChip}">${r.withdrawal}</span></td>
     <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td style="white-space:nowrap;">
-      <button onclick="nrEdit(${r._idx})" class="nr-row-btn" title="Edit">Edit</button>
       <button onclick="nrRemove(${r._idx})" class="nr-row-btn nr-row-btn-danger" title="Remove">Remove</button>
     </td>
   </tr>`;
