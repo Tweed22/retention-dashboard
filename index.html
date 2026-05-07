@@ -255,6 +255,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 .pii-banner { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 9px 14px; font-size: 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
 .pii-banner strong { font-weight: 700; }
 
+/* ── Trend chart hover tooltips ── */
+.tp .tp-halo  { opacity: 0; transition: opacity 0.12s; }
+.tp .tp-label { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+.tp .tp-bg    { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+.tp:hover .tp-halo,
+.tp:hover .tp-label,
+.tp:hover .tp-bg { opacity: 1; }
+.tp { cursor: default; }
+
 /* ── Historical trend tabs ── */
 .hist-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .hist-tab { background: white; border: 1px solid #e0e4ec; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
@@ -1800,8 +1809,27 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       ${data.map(d => {
         const cx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
         const cy = y(d.registration_rate || 0);
-        const tip = `${fmtMDY(d.snapshot_date)}: ${d.registration_rate}% · ${d.registered_count} registered${d.holds_count != null ? ', ' + d.holds_count + ' holds' : ''}`;
-        return `<g><circle cx="${cx}" cy="${cy}" r="3.5" fill="#2563eb" /><title>${tip}</title></g>`;
+        const rate = d.registration_rate;
+        const labelText = `${rate}% · ${fmtMDY(d.snapshot_date)}`;
+        // Position the tooltip above the dot, but flip to below near the top of
+        // the chart so it doesn't get clipped.
+        const labelY = cy < MT + 30 ? cy + 18 : cy - 12;
+        const bgY = labelY - 11;
+        // Approx label width — 7px per char, plus 14 padding
+        const labelW = labelText.length * 6.5 + 14;
+        // Center the bg horizontally on the dot, but clamp inside chart bounds
+        let bgX = cx - labelW / 2;
+        if (bgX < ML + 2) bgX = ML + 2;
+        if (bgX + labelW > W - MR - 2) bgX = W - MR - 2 - labelW;
+        const labelX = bgX + labelW / 2;
+        const tip = `${fmtMDY(d.snapshot_date)}: ${rate}% · ${d.registered_count} registered${d.holds_count != null ? ', ' + d.holds_count + ' holds' : ''}`;
+        return `<g class="tp">
+          <title>${tip}</title>
+          <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(37,99,235,0.18)" />
+          <circle cx="${cx}" cy="${cy}" r="3.5" fill="#2563eb" />
+          <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="18" rx="3" fill="#1a1d23" />
+          <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="600" fill="white">${labelText}</text>
+        </g>`;
       }).join('')}
       ${tickIdx.map((i, idx) => {
         const d = data[i];
