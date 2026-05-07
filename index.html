@@ -4097,8 +4097,7 @@ if (HOSTED) {
   document.body.classList.add('auth-anon');
   // Wait for the auth state, then load. onAuthStateChange fires once
   // immediately with INITIAL_SESSION, so we don't need a separate getSession().
-  sb.auth.onAuthStateChange(async (event, session) => {
-    const t0 = performance.now();
+  sb.auth.onAuthStateChange((event, session) => {
     console.log(`auth: onAuthStateChange event=${event} hasSession=${!!session}`);
     // After a magic-link redirect, the URL has #access_token=... params.
     // Once Supabase has consumed them and stored the session, strip the
@@ -4106,14 +4105,22 @@ if (HOSTED) {
     if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
-    await refreshAuthState(session);
-    console.log(`auth: refreshAuthState done in ${Math.round(performance.now() - t0)}ms, role=${userRole}`);
-    if (isCommittee()) {
-      const t1 = performance.now();
-      await loadHostedDashboardData();
-      console.log(`auth: loadHostedDashboardData done in ${Math.round(performance.now() - t1)}ms`);
-    }
-    startRealtime();
+    // CRITICAL: defer Supabase queries to the next tick. supabase-js holds
+    // an auth lock during verifyOtp/signInWithPassword; if we await another
+    // sb.from(...) query inside this handler, it deadlocks against the
+    // still-in-flight auth call. setTimeout 0 lets the current event finish
+    // and releases the lock before we run committee_members lookup.
+    setTimeout(async () => {
+      const t0 = performance.now();
+      await refreshAuthState(session);
+      console.log(`auth: refreshAuthState done in ${Math.round(performance.now() - t0)}ms, role=${userRole}`);
+      if (isCommittee()) {
+        const t1 = performance.now();
+        await loadHostedDashboardData();
+        console.log(`auth: loadHostedDashboardData done in ${Math.round(performance.now() - t1)}ms`);
+      }
+      startRealtime();
+    }, 0);
   });
 } else {
   // Local file mode — single-user fallback. Mark body as admin so the
