@@ -1604,13 +1604,18 @@ function todayLocalISO() {
 // Pattern: registration during Spring → 'Spring to Fall <next_year>'
 //          registration during Fall   → 'Fall to Spring <next_year>'
 // (Year reflects the TARGET term, matching how historical rows are labeled.)
+// Accepts 2-digit (Spring 26) or 4-digit (Spring 2026) year formats; also
+// tolerates a trailing year-only style like "Spring '26".
 function getNextTermLabel() {
   const cur = (termSettings.currentName || '').trim();
   if (!cur) return null;
-  const m = cur.match(/^(spring|fall)\s+(\d{4})$/i);
+  // Match 2-digit (26) or 4-digit (2026) year — disallow 3-digit typos.
+  const m = cur.match(/^(spring|fall)\s+'?(\d{2}|\d{4})$/i);
   if (!m) return null;
   const season = m[1].toLowerCase();
-  const year = parseInt(m[2], 10);
+  let year = parseInt(m[2], 10);
+  // Expand 2-digit year (assume 21st century)
+  if (year < 100) year += 2000;
   if (season === 'spring') return `Spring to Fall ${year}`;
   if (season === 'fall')   return `Fall to Spring ${year + 1}`;
   return null;
@@ -3412,6 +3417,7 @@ async function pushDataToSupabase() {
     //     One row per (date, term_label) — re-uploads later in the same day
     //     overwrite. The label comes from termSettings.currentName via
     //     getNextTermLabel() (e.g. "Spring 2026" → "Spring to Fall 2026").
+    status('Step 5b/6: writing daily snapshot to history…');
     const termLabel = getNextTermLabel();
     if (termLabel) {
       const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
@@ -3424,21 +3430,38 @@ async function pushDataToSupabase() {
       const effRegSnap = returningRegistered - overlapSnap;
       const eligibleSnap = effRegSnap + notReturningCount;
       const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
+      const today = todayLocalISO();
       const histRes = await sb.from('term_history').upsert({
-        snapshot_date: todayLocalISO(),
+        snapshot_date: today,
         term_label: termLabel,
         registered_count: returningRegistered,
         holds_count: totalHolds,
         registration_rate: rateSnap,
       }, { onConflict: 'snapshot_date,term_label' });
-      // Don't hard-fail if this errors — the main upload succeeded.
+      // Don't hard-fail the main upload — but surface the result visibly.
       if (histRes.error) {
         console.warn('term_history snapshot failed:', histRes.error);
+        alert('Warning: main upload succeeded, but the daily snapshot to term_history failed.\n\n' +
+          `Error: ${histRes.error.message}\n\n` +
+          'Most likely cause: term_history table missing or RLS blocks insert. ' +
+          'The dashboard will still render fine; just no new point on the trend chart for today.');
       } else {
-        console.log(`term_history snapshot saved: ${todayLocalISO()} ${termLabel} reg=${returningRegistered} holds=${totalHolds} rate=${rateSnap}%`);
+        console.log(`term_history snapshot saved: ${today} ${termLabel} reg=${returningRegistered} holds=${totalHolds} rate=${rateSnap}%`);
+        // Successful snapshot — surface in the status so Tony sees it landed
+        status(`Step 5b/6: snapshot saved (${today} · ${termLabel} · rate ${rateSnap}%)`);
       }
     } else {
-      console.warn('term_history snapshot skipped: termSettings.currentName not set or unrecognized format');
+      // Skipped: termSettings.currentName isn't a recognizable Spring/Fall + year
+      // format. Surface this as an alert so the user can fix their setting; the
+      // upload itself proceeds, just no trend-chart point gets recorded.
+      const why = (termSettings.currentName || '').trim()
+        ? `Term name "${termSettings.currentName}" doesn't match expected format (e.g., "Spring 2026" or "Fall 2026").`
+        : 'No current term name is set.';
+      alert('Daily snapshot to trend chart was SKIPPED.\n\n' +
+        why + '\n\n' +
+        'Fix: open the Update Data panel and set the Term window — current term name should be "Spring 2026", "Fall 2026", etc. ' +
+        'The upload itself succeeded; future uploads will record snapshots once the term is named correctly.');
+      console.warn('term_history snapshot skipped:', why);
     }
 
     // 6) Auto-feed current-term withdrawals into not_returning_reports
