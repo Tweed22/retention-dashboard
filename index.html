@@ -209,9 +209,6 @@ tbody td { padding: 8px 12px; color: #2d3142; }
   .upload-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* ── Withdrawal CSV chip on NR rows ── */
-.nr-source-chip { display: inline-block; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; font-size: 9px; font-weight: 600; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
-
 /* ── Auth UI ── */
 .auth-status { font-size: 11px; color: rgba(255,255,255,0.85); display: inline-flex; align-items: center; gap: 6px; }
 .auth-status .auth-name { font-weight: 600; color: white; }
@@ -2644,9 +2641,10 @@ function nrRenderStaticRow(r) {
     ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
     : '<span style="color:#bbb;font-size:11px;">—</span>';
   const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
-  const sourceChip = r._sourceWithdrawalId
-    ? `<span class="nr-source-chip" title="Auto-imported from withdrawal CSV — Last Active ${esc(r._withdrawalLDA||'')}">From CSV</span>`
-    : '';
+  // (The "From CSV" chip was removed per Tony 2026-05-07 — it added visual
+  //  noise without giving the committee actionable information. The
+  //  underlying _sourceWithdrawalId is still stored on the row and used
+  //  by nrRemove to populate nrIgnoredWithdrawalIds.)
   // Display the structured first/last fields if present; fall back to the
   // single combined name (rendering it whole in the Last Name column) when
   // we can't tell them apart.
@@ -2654,7 +2652,7 @@ function nrRenderStaticRow(r) {
   const firstCell = r.firstName || '';
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
-    <td style="font-weight:600;">${lastCell}${sourceChip}</td>
+    <td style="font-weight:600;">${lastCell}</td>
     <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td>${regCell}</td>
     <td style="font-size:11px;">${r.major||'—'}</td>
