@@ -61,6 +61,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-row-4 { grid-template-columns: repeat(4, 1fr); }
 .kpi-row-5 { grid-template-columns: repeat(5, 1fr); }
 .kpi-card { background: white; border-radius: 10px; padding: 16px 18px; border: 1px solid #e0e4ec; position: relative; overflow: hidden; }
+.kpi-clickable { cursor: pointer; transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s; }
+.kpi-clickable:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.07); border-color: #cbd5e1; }
+.kpi-clickable:active { transform: translateY(0); }
 .kpi-card.clickable { cursor: pointer; transition: box-shadow 0.15s; }
 .kpi-card.clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
 .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; border-radius:10px 10px 0 0; }
@@ -396,7 +399,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="kpi-row kpi-row-5">
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
+      <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn) — click to open</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
     </div>
@@ -3217,6 +3220,19 @@ function showPage(name, tab) {
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   if (tab) tab.classList.add('active');
+}
+
+// Switch to the Not Returning tab — looked up by its onclick attribute so we
+// also activate the matching nav-tab visually (showPage's `tab` arg). Used
+// by the clickable Total Not Returning KPI card on the Summary page.
+function goToNRPage() {
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes("'notreturning'"));
+  showPage('notreturning', navTab);
+  // Smooth-scroll the table into view if the page is already long.
+  setTimeout(() => {
+    document.getElementById('page-notreturning')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
 }
 
 // Populate the filter dropdown with the current reasons list. Includes any custom
