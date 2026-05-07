@@ -1674,21 +1674,17 @@ async function renderTrendChart() {
   const currentLabel = getNextTermLabel();
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
-  // Current term chart (if matching). Append a synthetic "today" point to
-  // the historical series if one isn't already present, so the curve ends
-  // at the same rate as the dashed "Today" reference line — otherwise the
-  // line stops at the date of the most recent CSV upload, which is
-  // confusing if the user hasn't uploaded yet today.
-  if (currentLabel && byTerm[currentLabel]) {
-    let pts = byTerm[currentLabel];
+  // Build current-term data with synthetic today's point if missing, so the
+  // curve always ends at the dashed "Today" reference rate.
+  let currentPts = currentLabel ? byTerm[currentLabel] : null;
+  if (currentLabel && currentPts) {
     const todayStr = todayLocalISO();
-    const hasToday = pts.some(d => d.snapshot_date === todayStr);
-    if (!hasToday && currentRate != null) {
+    if (!currentPts.some(d => d.snapshot_date === todayStr) && currentRate != null) {
       const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
       const allReg = registeredIds.size;
       const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered').length;
       const retReg = allReg - newRegCount;
-      pts = [...pts, {
+      currentPts = [...currentPts, {
         snapshot_date: todayStr,
         term_label: currentLabel,
         registered_count: retReg,
@@ -1696,7 +1692,21 @@ async function renderTrendChart() {
         registration_rate: currentRate,
       }];
     }
-    currentEl.innerHTML = renderTrendCard(currentLabel, pts, currentRate, true);
+  }
+
+  // For historical charts: compute elapsed days since the first snapshot of
+  // the current term. We draw a vertical "equivalent point" marker on each
+  // historical chart at the same elapsed offset from its own start — answers
+  // "where was last year's cycle at the same point we are now?"
+  let elapsedDays = null;
+  if (currentPts && currentPts.length > 0) {
+    const firstSnap = new Date(currentPts[0].snapshot_date + 'T12:00:00Z').getTime();
+    const today = new Date(todayLocalISO() + 'T12:00:00Z').getTime();
+    elapsedDays = Math.max(0, Math.round((today - firstSnap) / 86400000));
+  }
+
+  if (currentLabel && currentPts) {
+    currentEl.innerHTML = renderTrendCard(currentLabel, currentPts, currentRate, true, null);
   } else {
     currentEl.innerHTML = '';
   }
@@ -1719,7 +1729,7 @@ async function renderTrendChart() {
       return `<button class="hist-tab${isActive ? ' active' : ''}" onclick="setHistoricalTab('${escLabel}')">${label}</button>`;
     }).join('');
     const activePoints = byTerm[activeHistoricalTermLabel];
-    const activeChart = activePoints ? renderTrendCard(activeHistoricalTermLabel, activePoints, currentRate, false) : '';
+    const activeChart = activePoints ? renderTrendCard(activeHistoricalTermLabel, activePoints, currentRate, false, elapsedDays) : '';
     historicalEl.innerHTML = `
       <div class="section-label" style="margin-top:8px;">Historical Term Trends</div>
       <div class="hist-tabs">${tabsHtml}</div>
@@ -1730,7 +1740,7 @@ async function renderTrendChart() {
   }
 }
 
-function renderTrendCard(label, data, currentRate, isCurrent) {
+function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
   const W = 1000, H = 280, ML = 48, MR = 16, MT = 22, MB = 42;
   const innerW = W - ML - MR;
   const innerH = H - MT - MB;
@@ -1781,10 +1791,42 @@ function renderTrendCard(label, data, currentRate, isCurrent) {
         return `<text x="${tx}" y="${H-MB+22}" text-anchor="${anchor}" font-size="11" fill="#666">${fmtMDY(d.snapshot_date)}</text>`;
       }).join('')}
       <text x="${ML-32}" y="${MT-6}" font-size="10" fill="#888">Reg %</text>
-      ${currentRate != null ? `
-        <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
-        <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="11" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
-      ` : ''}
+      ${(() => {
+        // Current chart: horizontal "Today" line at the live persistence rate.
+        if (isCurrent && currentRate != null) {
+          return `
+            <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
+            <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="11" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
+          `;
+        }
+        // Historical chart: vertical "equivalent point" marker at the same
+        // elapsed time as today is into the current term.
+        if (!isCurrent && elapsedDays != null && data.length > 0) {
+          const firstHist = new Date(data[0].snapshot_date + 'T12:00:00Z').getTime();
+          const equivMs = firstHist + elapsedDays * 86400000;
+          if (equivMs >= minD && equivMs <= maxD) {
+            const xMark = x(equivMs);
+            // Find the data point closest to the equivalent date, for the rate readout
+            let closest = data[0];
+            let bestDist = Infinity;
+            data.forEach(d => {
+              const dms = new Date(d.snapshot_date + 'T12:00:00Z').getTime();
+              const dist = Math.abs(dms - equivMs);
+              if (dist < bestDist) { bestDist = dist; closest = d; }
+            });
+            const weeks = Math.round(elapsedDays / 7);
+            const labelText = weeks > 0
+              ? `Wk ${weeks} of cycle: ${closest.registration_rate}%`
+              : `Day 0: ${closest.registration_rate}%`;
+            return `
+              <line x1="${xMark}" y1="${MT}" x2="${xMark}" y2="${MT+innerH}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
+              <circle cx="${xMark}" cy="${y(closest.registration_rate)}" r="4" fill="#dc2626" stroke="white" stroke-width="2" />
+              <text x="${xMark+6}" y="${MT+12}" font-size="11" fill="#dc2626" font-weight="600">${labelText}</text>
+            `;
+          }
+        }
+        return '';
+      })()}
     </svg>
   `;
 
