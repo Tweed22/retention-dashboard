@@ -646,7 +646,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
       <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
       <th class="sortable" onclick="nrSort('firstName')">First Name</th>
-      <th>Registered</th>
+      <th class="sortable" onclick="nrSort('sport')">Sport(s)</th>
       <th class="sortable" onclick="nrSort('major')">Major</th>
       <th class="sortable" onclick="nrSort('reason')">Reason</th>
       <th>Notes</th>
@@ -2637,30 +2637,32 @@ function nrRender() {
 
 function nrRenderStaticRow(r) {
   const wChip = r.withdrawal==='Withdrawn' ? 'chip-red' : 'chip-amber';
-  const regCell = isNRRegistered(r)
-    ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
-    : '<span style="color:#bbb;font-size:11px;">—</span>';
   const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
-  // (The "From CSV" chip was removed per Tony 2026-05-07 — it added visual
-  //  noise without giving the committee actionable information. The
-  //  underlying _sourceWithdrawalId is still stored on the row and used
-  //  by nrRemove to populate nrIgnoredWithdrawalIds.)
   // Display the structured first/last fields if present; fall back to the
   // single combined name (rendering it whole in the Last Name column) when
   // we can't tell them apart.
   const lastCell  = r.lastName  || (r.firstName ? '' : (r.name || '—'));
   const firstCell = r.firstName || '';
-  return `<tr>
+  // Sport(s) cell — sport is stored as a comma-joined string. Show "—"
+  // when empty so the column is visually consistent.
+  const sportCell = r.sport ? r.sport : '<span style="color:#bbb;font-size:11px;">—</span>';
+  // Soft-yellow row tint for students who are also enrolled — this is the
+  // signal that previously rode in the "Registered" chip column. Tony
+  // 2026-05-07: a row tint is less noisy than the chip and frees the
+  // column for Sport(s) info.
+  const rowStyle = isNRRegistered(r) ? ' style="background:#fef9c3;"' : '';
+  return `<tr${rowStyle}>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${lastCell}</td>
     <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    <td>${regCell}</td>
+    <td style="font-size:11px;">${sportCell}</td>
     <td style="font-size:11px;">${r.major||'—'}</td>
     <td>${renderReasonCell(r._idx, r.reason)}</td>
     <td><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
     <td><span class="chip ${wChip}">${r.withdrawal}</span></td>
     <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td style="white-space:nowrap;">
+      <button onclick="nrEdit(${r._idx})" class="nr-row-btn" title="Edit row">Edit</button>
       <button onclick="nrRemove(${r._idx})" class="nr-row-btn nr-row-btn-danger" title="Remove">Remove</button>
     </td>
   </tr>`;
@@ -2749,14 +2751,13 @@ function nrRenderEditRow(r) {
     ? `<select class="nr-edit-input" id="nr-e-reason-${r._idx}" style="width:140px;">${reasonOpts}</select>`
     : `<input class="nr-edit-input" id="nr-e-reason-${r._idx}" value="${(r.reason||'').replace(/"/g,'&quot;')}" placeholder="Custom reason" style="width:140px;" />`;
   const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
-  const regCell = isNRRegistered(r)
-    ? '<span class="chip chip-blue" style="font-size:9px;padding:1px 6px;">Registered</span>'
-    : '<span style="color:#bbb;font-size:11px;">—</span>';
+  // Edit-mode tint stays the same (off-white amber) — distinguishes the
+  // edited row from the now-yellow registered-student tint elsewhere.
   return `<tr style="background:#fffbeb;">
     <td><input class="nr-edit-input" id="nr-e-id-${r._idx}"        value="${esc(r.id)}"        style="width:90px;font-family:monospace;" /></td>
     <td><input class="nr-edit-input" id="nr-e-lastName-${r._idx}"  value="${esc(r.lastName)}"  style="width:120px;" /></td>
     <td><input class="nr-edit-input" id="nr-e-firstName-${r._idx}" value="${esc(r.firstName)}" style="width:110px;" /></td>
-    <td>${regCell}</td>
+    <td><input class="nr-edit-input" id="nr-e-sport-${r._idx}"     value="${esc(r.sport)}"     placeholder="Football, Track" style="width:110px;" /></td>
     <td><input class="nr-edit-input" id="nr-e-major-${r._idx}"     value="${esc(r.major)}"     style="width:110px;" /></td>
     <td>${reasonField}</td>
     <td><input class="nr-edit-input" id="nr-e-notes-${r._idx}"     value="${esc(r.notes)}"     style="width:160px;" /></td>
@@ -2793,6 +2794,7 @@ function nrSave(idx) {
   r.lastName    = v('lastName');
   r.firstName   = v('firstName');
   r.name        = [r.firstName, r.lastName].filter(Boolean).join(' ');
+  r.sport       = v('sport');            // comma-joined string ("Football, Track")
   r.major       = v('major');
   r.reason      = v('reason');           // works for both <select> and <input> editors
   r.notes       = v('notes');
@@ -2877,6 +2879,14 @@ function syncWithdrawalsToNR() {
       ? `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}; processed ${w.processedDate}.`
       : `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}.`;
     const existingIdxs = byStudentIdx.get(w.id) || [];
+    // Sport for fresh inserts: pull from the in-memory students map since
+    // the withdrawal CSV doesn't carry athletics data. Falls back to
+    // empty string when the student isn't in any roster.
+    const stu = (returningStudents && returningStudents[w.id])
+             || (newStudents && newStudents[w.id])
+             || (registeredStudents && registeredStudents[w.id]);
+    const sportFromStudents = stu && stu.sports ? stu.sports.join(', ') : '';
+
     if (existingIdxs.length === 0) {
       // No row for this student yet — insert.
       const nrRow = {
@@ -2887,7 +2897,7 @@ function syncWithdrawalsToNR() {
         email: w.email || '',
         major: w.major || '',
         advisor: w.advisor || '',
-        sport: '',
+        sport: sportFromStudents,
         isRegistered: !!(w.id && registeredIds && registeredIds.has(w.id)),
         reason: mappedReason,
         notes: csvNotes,
@@ -2901,7 +2911,10 @@ function syncWithdrawalsToNR() {
       nrList.unshift(nrRow);
       added++;
     } else {
-      // Update the (first) existing row in place; CSV is the final answer.
+      // Update the (first) existing row in place. CSV is the final answer
+      // for everything EXCEPT sport — withdrawal CSVs don't carry athletics
+      // data, so we leave the existing sport value alone (per Tony
+      // 2026-05-07 — preserve sport across Pending → Withdrawn).
       const target = nrList[existingIdxs[0]];
       target.reason          = mappedReason;
       target.notes           = csvNotes;
@@ -2909,12 +2922,15 @@ function syncWithdrawalsToNR() {
       target._sourceWithdrawalId = sourceId;
       target._withdrawalLDA  = w.lastActiveDate;
       target._updatedAt      = new Date().toISOString();
-      // Refresh name/contact from the CSV if those fields are empty locally.
+      // Refresh name/contact/major from CSV (those fields may have been
+      // empty pre-withdrawal); fall back to the students map for sport
+      // if it's still empty locally.
       if (!target.firstName && w.firstName) target.firstName = w.firstName;
       if (!target.lastName  && w.lastName)  target.lastName  = w.lastName;
       if (!target.email     && w.email)     target.email     = w.email;
       if (!target.major     && w.major)     target.major     = w.major;
       if (!target.advisor   && w.advisor)   target.advisor   = w.advisor;
+      if (!target.sport     && sportFromStudents) target.sport = sportFromStudents;
       ensureNRNameFields(target);
       updated++;
     }
@@ -3528,9 +3544,14 @@ async function loadHostedDashboardData() {
       firstName: '',
       lastName: '',
       email: '',
-      major: '',
+      // Sport + major are now persisted on the NR row itself (migration 0005)
+      // so manual edits and the Pending → Withdrawn transition don't lose
+      // them. The enrichment block below still fills these in from the
+      // students table when the NR row's stored value is empty (i.e., for
+      // older rows created before this migration ran).
+      major: r.major || '',
       advisor: '',
-      sport: '',
+      sport: r.sport || '',
       isRegistered: !!(r.student_id && registeredIds.has(r.student_id)),
       reason,
       notes: r.notes || '',
@@ -3548,12 +3569,19 @@ async function loadHostedDashboardData() {
     ensureNRNameFields(row);
     return row;
   });
-  // Enrich NR rows from student lookups (for major / email display)
+  // Enrich NR rows from student lookups for fields not stored on the NR
+  // row itself (email, advisor) and as a fallback for sport/major when
+  // they're empty on the row. Stored values win over enrichment so a
+  // hand-edited sport survives even if the underlying student record's
+  // sports list is different (e.g., athlete dropped from a roster).
   nrList.forEach(r => {
     const s = returningStudents[r.id] || newStudents[r.id] || registeredStudents[r.id];
     if (s) {
-      r.email = s.email; r.major = s.major; r.advisor = s.advisor;
-      if (!r.name) r.name = s.name;
+      r.email   = s.email;
+      r.advisor = s.advisor;
+      if (!r.major)  r.major  = s.major || '';
+      if (!r.sport)  r.sport  = (s.sports || []).join(', ');
+      if (!r.name)   r.name   = s.name;
     }
   });
   // Term settings — pick "current" + "next"
@@ -3775,7 +3803,7 @@ async function pushDataToSupabase() {
     //    student is represented by exactly one row.
     status('Step 6/6: syncing Not Returning list…');
     const wdRowsBackRes = currentTermId
-      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason, first_name, last_name').eq('term_id', currentTermId)
+      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason, first_name, last_name, major').eq('term_id', currentTermId)
       : { data: [], error: null };
     expect('withdrawals select for sync', wdRowsBackRes);
     const wdsForSync = (wdRowsBackRes.data || []).filter(w => w.student_id);
@@ -3802,6 +3830,12 @@ async function pushDataToSupabase() {
       const hides   = []; // NR row ids to mark is_hidden=true
 
       for (const w of wdsForSync) {
+        // Fields that the CSV is authoritative for. NOTE: sport is
+        // intentionally NOT in this object — withdrawal CSVs from the
+        // registrar never contain athletics data, and Tony 2026-05-07
+        // wants sport preserved across the Pending → Withdrawn transition.
+        // So updates leave sport alone; only fresh inserts try to populate
+        // sport (from the in-memory students map) below.
         const csvFields = {
           student_id: w.student_id,
           student_name: [w.first_name, w.last_name].filter(Boolean).join(' '),
@@ -3809,11 +3843,26 @@ async function pushDataToSupabase() {
           withdrawal_status: 'Withdrawn',
           source_withdrawal_id: w.id,
           notes: `Auto-imported. Last active ${w.last_active_date}.`,
+          major: w.major || null,
         };
         const existing = byStudent.get(w.student_id) || [];
         if (existing.length === 0) {
-          // No NR row for this student yet — fresh insert.
-          inserts.push({ ...csvFields, submitter_name: '[CSV import]', submitter_uid: currentUser?.id });
+          // No NR row for this student yet — fresh insert. Look up sport
+          // in the in-memory students map; if the student appears in any
+          // of the three categories, we have their athletics list. If not
+          // (student was never in the unreg/registered/new CSVs), sport
+          // stays null and a committee member can fill it in via the
+          // Edit button.
+          const stu = returningStudents[w.student_id]
+                   || newStudents[w.student_id]
+                   || registeredStudents[w.student_id];
+          const sportFromCSV = stu && stu.sports ? stu.sports.join(', ') : null;
+          inserts.push({
+            ...csvFields,
+            sport: sportFromCSV,
+            submitter_name: '[CSV import]',
+            submitter_uid: currentUser?.id,
+          });
         } else {
           // Most-recently-updated row wins; preserve original submitter info
           // by NOT overwriting submitter_name/submitter_uid on update.
@@ -3975,6 +4024,8 @@ async function persistNRRowToSupabase(idx) {
       reason: row.reason,
       withdrawal_status: row.withdrawal,
       notes: row.notes,
+      sport: row.sport || null,
+      major: row.major || null,
       submitter_name: userDisplay,
       submitter_email: currentUser?.email,
       submitter_uid: currentUser?.id,
@@ -3999,6 +4050,8 @@ async function persistNRRowToSupabase(idx) {
     reason: row.reason,
     withdrawal_status: row.withdrawal,
     notes: row.notes,
+    sport: row.sport || null,
+    major: row.major || null,
   }).eq('id', row._supabaseId);
   if (error) {
     console.error('NR row persist FAILED:', error, 'row:', row);
@@ -4042,6 +4095,8 @@ nrAdd = async function nrAddWithSupabase() {
       reason: fresh.reason,
       withdrawal_status: fresh.withdrawal,
       notes: fresh.notes,
+      sport: fresh.sport || null,
+      major: fresh.major || null,
       submitter_name: userDisplay,
       submitter_email: currentUser?.email,
       submitter_uid: currentUser?.id,
