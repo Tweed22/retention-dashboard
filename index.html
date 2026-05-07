@@ -3326,6 +3326,16 @@ async function loadHostedDashboardData() {
   // rows still in the DB display under the current vocabulary. firstName /
   // lastName are derived from the stored combined name for the split-column
   // display added 2026-05-05.
+  // DIAGNOSTIC: log row count + reason distribution so we can confirm what
+  // Supabase actually returned vs what gets rendered. Helps debug "reasons
+  // resetting on refresh" by making the post-load state visible in console.
+  console.log(`NR load: ${data.nrReports.length} rows from Supabase`);
+  const reasonDist = {};
+  data.nrReports.forEach(r => {
+    const k = r.reason || '(empty)';
+    reasonDist[k] = (reasonDist[k] || 0) + 1;
+  });
+  console.log('NR load reason distribution:', reasonDist);
   nrList = data.nrReports.map(r => {
     let reason = r.reason || '';
     if (reason && NR_REASON_LEGACY[reason]) reason = NR_REASON_LEGACY[reason];
