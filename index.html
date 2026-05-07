@@ -1498,11 +1498,15 @@ function renderSummary() {
   // Tony 2026-05-05: Graduating students aren't "returning" or "not returning" —
   // they're completing their degree. Exclude them from the Total Not Returning
   // count and from the Eligible to Return denominator.
-  const notReturning          = nrList.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+  // Tony 2026-05-07: count uses the deduped list (one row per student) so
+  // students with both a manual entry and a CSV-auto-imported row aren't
+  // double-counted.
+  const dedupedNR             = getDedupedNRList();
+  const notReturning          = dedupedNR.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
 
   // Dedupe: students who are both returning-registered AND on NR list count
   // once (in the NR bucket, not in the registered bucket).
-  const nrIdSet = new Set(nrList.map(s => s.id).filter(Boolean));
+  const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
   const overlapRegNR = [...registeredIds]
     .filter(id => !newStudents[id] && nrIdSet.has(id)).length;
   const effectiveReturningReg = returningRegistered - overlapRegNR;
@@ -1933,7 +1937,9 @@ function renderReasonsChart() {
   // custom string typed via the Other → text-input swap also gets its own bar so
   // Tony can see what people are writing in.
   const tally = {};
-  nrList.forEach(r => {
+  // Use the deduped list so duplicate rows for one student don't get counted
+  // multiple times in any reason bucket.
+  getDedupedNRList().forEach(r => {
     const reason = (r.reason || '').trim();
     if (!reason) return;
     // Graduating students aren't "not returning" in the retention sense
@@ -2408,6 +2414,14 @@ function ensureNRNameFields(row) {
 // fields. Rows without a student_id are kept as-is (can't reliably match).
 // Used at render time only — the underlying nrList is left untouched so
 // the user can still remove specific duplicates if they want.
+// Returns the deduplicated nrList — one row per student_id (the same
+// row dedupeNRForDisplay would render). Use this anywhere a count or
+// aggregation is computed from NR data so duplicates don't double-count
+// in KPIs / chart slices / persistence formulas.
+function getDedupedNRList() {
+  return dedupeNRForDisplay(nrList);
+}
+
 function dedupeNRForDisplay(rows) {
   // Pick the row that the user most recently touched. _updatedAt comes
   // from Supabase and is auto-bumped by the trg_nrr_set_updated_at
@@ -2580,13 +2594,16 @@ function nrRemove(idx) {
 function nrSort(col) { if(nrSort_.col===col)nrSort_.dir*=-1;else{nrSort_.col=col;nrSort_.dir=1;} nrRender(); }
 
 function nrUpdateKpis() {
-  document.getElementById('nr-count').textContent    = n(nrList.length);
-  document.getElementById('nr-pending').textContent  = n(nrList.filter(s=>s.withdrawal==='Pending').length);
-  document.getElementById('nr-withdrawn').textContent = n(nrList.filter(s=>s.withdrawal==='Withdrawn').length);
+  // KPIs reflect the deduped list (one row per student) so the numbers match
+  // what the table actually shows after dedupeNRForDisplay runs.
+  const dedupedNR = getDedupedNRList();
+  document.getElementById('nr-count').textContent    = n(dedupedNR.length);
+  document.getElementById('nr-pending').textContent  = n(dedupedNR.filter(s=>s.withdrawal==='Pending').length);
+  document.getElementById('nr-withdrawn').textContent = n(dedupedNR.filter(s=>s.withdrawal==='Withdrawn').length);
   // "Registered for Courses" count: students on the NR list who are also enrolled
   // in at least one course. Surfaces the discrepancy between "flagged not returning"
   // and "actually still registered" so the committee can reconcile.
-  const regNRCount = nrList.filter(s => isNRRegistered(s)).length;
+  const regNRCount = dedupedNR.filter(s => isNRRegistered(s)).length;
   const regEl = document.getElementById('nr-registered');
   if (regEl) regEl.textContent = n(regNRCount);
 }
@@ -2843,36 +2860,68 @@ function syncWithdrawalsToNR() {
   // dated before the term began belong to a prior term and shouldn't appear
   // on the current NR list, even though they remain in withdrawalsList.
   const inTerm = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate));
-  const existing = new Set(nrList.map(r => r._sourceWithdrawalId).filter(Boolean));
-  let added = 0;
+  // Build a student_id → indices map of current nrList rows so we can look up
+  // existing rows per student in O(1) below. Per Tony 2026-05-07: CSV wins,
+  // so when a student already has an NR row we UPDATE it rather than insert
+  // a duplicate.
+  const byStudentIdx = new Map();
+  nrList.forEach((r, idx) => {
+    if (!r.id) return;
+    if (!byStudentIdx.has(r.id)) byStudentIdx.set(r.id, []);
+    byStudentIdx.get(r.id).push(idx);
+  });
+  let added = 0, updated = 0;
   inTerm.forEach(w => {
     const sourceId = `wd-${w.id}-${w.lastActiveDate}`;
-    if (existing.has(sourceId)) return; // already imported, idempotent
     if (nrIgnoredWithdrawalIds.has(sourceId)) return; // user removed this earlier — don't bring it back
-    // Map withdrawal reason onto NR vocabulary where possible
     const mappedReason = mapWithdrawalReason(w.reason);
-    const nrRow = {
-      id: w.id,
-      name: w.name || '',
-      firstName: w.firstName || '',
-      lastName: w.lastName || '',
-      email: w.email || '',
-      major: w.major || '',
-      advisor: w.advisor || '',
-      sport: '',
-      isRegistered: !!(w.id && registeredIds && registeredIds.has(w.id)),
-      reason: mappedReason,
-      notes: w.processedDate ? `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}; processed ${w.processedDate}.` : `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}.`,
-      withdrawal: 'Withdrawn',
-      dateAdded: new Date().toISOString().slice(0,10),
-      _sourceWithdrawalId: sourceId,
-      _withdrawalLDA: w.lastActiveDate,
-    };
-    ensureNRNameFields(nrRow);
-    nrList.unshift(nrRow);
-    added++;
+    const csvNotes = w.processedDate
+      ? `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}; processed ${w.processedDate}.`
+      : `Auto-imported from withdrawal CSV. Last active ${w.lastActiveDate}.`;
+    const existingIdxs = byStudentIdx.get(w.id) || [];
+    if (existingIdxs.length === 0) {
+      // No row for this student yet — insert.
+      const nrRow = {
+        id: w.id,
+        name: w.name || '',
+        firstName: w.firstName || '',
+        lastName: w.lastName || '',
+        email: w.email || '',
+        major: w.major || '',
+        advisor: w.advisor || '',
+        sport: '',
+        isRegistered: !!(w.id && registeredIds && registeredIds.has(w.id)),
+        reason: mappedReason,
+        notes: csvNotes,
+        withdrawal: 'Withdrawn',
+        dateAdded: new Date().toISOString().slice(0,10),
+        _sourceWithdrawalId: sourceId,
+        _withdrawalLDA: w.lastActiveDate,
+        _updatedAt: new Date().toISOString(),
+      };
+      ensureNRNameFields(nrRow);
+      nrList.unshift(nrRow);
+      added++;
+    } else {
+      // Update the (first) existing row in place; CSV is the final answer.
+      const target = nrList[existingIdxs[0]];
+      target.reason          = mappedReason;
+      target.notes           = csvNotes;
+      target.withdrawal      = 'Withdrawn';
+      target._sourceWithdrawalId = sourceId;
+      target._withdrawalLDA  = w.lastActiveDate;
+      target._updatedAt      = new Date().toISOString();
+      // Refresh name/contact from the CSV if those fields are empty locally.
+      if (!target.firstName && w.firstName) target.firstName = w.firstName;
+      if (!target.lastName  && w.lastName)  target.lastName  = w.lastName;
+      if (!target.email     && w.email)     target.email     = w.email;
+      if (!target.major     && w.major)     target.major     = w.major;
+      if (!target.advisor   && w.advisor)   target.advisor   = w.advisor;
+      ensureNRNameFields(target);
+      updated++;
+    }
   });
-  if (added > 0) saveNRList();
+  if (added > 0 || updated > 0) saveNRList();
 }
 
 // Best-effort mapping of free-text withdrawal reasons → the NR_REASONS vocabulary.
@@ -3685,8 +3734,10 @@ async function pushDataToSupabase() {
       const allRegistered = registeredIds.size;
       const newRegCount = Object.values(newStudents).filter(s=>s.status==='Registered').length;
       const returningRegistered = allRegistered - newRegCount;
-      const notReturningCount = nrList.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
-      const nrIdSetSnap = new Set(nrList.map(s => s.id).filter(Boolean));
+      // Use the deduped list so duplicates don't inflate the daily snapshot.
+      const dedupedSnap = getDedupedNRList();
+      const notReturningCount = dedupedSnap.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+      const nrIdSetSnap = new Set(dedupedSnap.map(s => s.id).filter(Boolean));
       const overlapSnap = [...registeredIds].filter(id => !newStudents[id] && nrIdSetSnap.has(id)).length;
       const effRegSnap = returningRegistered - overlapSnap;
       const eligibleSnap = effRegSnap + notReturningCount;
@@ -3715,40 +3766,99 @@ async function pushDataToSupabase() {
     // Note: getNextTermLabel() always returns a value now (date-based fallback),
     // so the previous "snapshot skipped" branch is unreachable.
 
-    // 6) Auto-feed current-term withdrawals into not_returning_reports
-    //    (RLS allows committee insert; admin = committee.)
+    // 6) Sync current-term withdrawals into not_returning_reports.
+    //    Per Tony 2026-05-07: CSV is the final answer per student. So for
+    //    each current-term withdrawal we either:
+    //      • UPDATE an existing NR row for the same student_id (overwriting
+    //        any manual entry's reason / status / notes — the CSV wins), or
+    //      • INSERT a new NR row if no existing row covers the student.
+    //    Plus: if a student somehow has multiple NR rows (legacy duplicates),
+    //    keep the most-recently-updated one and HIDE the rest, so each
+    //    student is represented by exactly one row.
     status('Step 6/6: syncing Not Returning list…');
-    const existingNRRes = await sb.from('not_returning_reports')
-      .select('source_withdrawal_id')
-      .not('source_withdrawal_id', 'is', null)
-      .limit(10000);
-    expect('NR existing select', existingNRRes);
-    const existingSet = new Set((existingNRRes.data || []).map(r => r.source_withdrawal_id));
     const wdRowsBackRes = currentTermId
       ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason, first_name, last_name').eq('term_id', currentTermId)
       : { data: [], error: null };
     expect('withdrawals select for sync', wdRowsBackRes);
-    const newNR = (wdRowsBackRes.data || []).filter(w => !existingSet.has(w.id)).map(w => ({
-      student_id: w.student_id,
-      student_name: [w.first_name, w.last_name].filter(Boolean).join(' '),
-      reason: mapWithdrawalReason(w.withdrawal_reason),
-      withdrawal_status: 'Withdrawn',
-      submitter_name: '[CSV import]',
-      submitter_uid: currentUser?.id,
-      source_withdrawal_id: w.id,
-      notes: `Auto-imported. Last active ${w.last_active_date}.`,
-    }));
-    if (newNR.length) {
-      const nrInsertRes = await sb.from('not_returning_reports').insert(newNR);
-      // Don't hard-fail the whole upload on auto-sync failure — the rest is saved,
-      // and the user can manually add NR rows. But surface it visibly.
-      if (nrInsertRes.error) {
-        console.warn('NR auto-sync error:', nrInsertRes.error);
-        alert('Warning: Withdrawal data uploaded, but auto-syncing the Not Returning list failed: ' + nrInsertRes.error.message);
+    const wdsForSync = (wdRowsBackRes.data || []).filter(w => w.student_id);
+
+    let syncInserts = 0, syncUpdates = 0, syncHidden = 0;
+    if (wdsForSync.length) {
+      // Pull every non-hidden NR row whose student_id is covered by this batch
+      // of current-term withdrawals. Group by student_id so we can find the
+      // matching row(s) for each withdrawal in O(1) below.
+      const studentIds = [...new Set(wdsForSync.map(w => w.student_id))];
+      const exRes = await sb.from('not_returning_reports')
+        .select('id, student_id, source_withdrawal_id, updated_at')
+        .in('student_id', studentIds)
+        .eq('is_hidden', false);
+      expect('NR existing-by-student select', exRes);
+      const byStudent = new Map();
+      for (const r of (exRes.data || [])) {
+        if (!byStudent.has(r.student_id)) byStudent.set(r.student_id, []);
+        byStudent.get(r.student_id).push(r);
+      }
+
+      const inserts = [];
+      const updates = []; // {id, fields}
+      const hides   = []; // NR row ids to mark is_hidden=true
+
+      for (const w of wdsForSync) {
+        const csvFields = {
+          student_id: w.student_id,
+          student_name: [w.first_name, w.last_name].filter(Boolean).join(' '),
+          reason: mapWithdrawalReason(w.withdrawal_reason),
+          withdrawal_status: 'Withdrawn',
+          source_withdrawal_id: w.id,
+          notes: `Auto-imported. Last active ${w.last_active_date}.`,
+        };
+        const existing = byStudent.get(w.student_id) || [];
+        if (existing.length === 0) {
+          // No NR row for this student yet — fresh insert.
+          inserts.push({ ...csvFields, submitter_name: '[CSV import]', submitter_uid: currentUser?.id });
+        } else {
+          // Most-recently-updated row wins; preserve original submitter info
+          // by NOT overwriting submitter_name/submitter_uid on update.
+          existing.sort((a,b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+          const keep = existing[0];
+          updates.push({ id: keep.id, fields: csvFields });
+          for (const dup of existing.slice(1)) hides.push(dup.id);
+        }
+      }
+
+      // Execute the planned writes. Each batch is best-effort so a partial
+      // failure doesn't abort the whole upload — surface errors but keep going.
+      if (inserts.length) {
+        const insRes = await sb.from('not_returning_reports').insert(inserts);
+        if (insRes.error) {
+          console.warn('NR auto-sync insert error:', insRes.error);
+          alert('Warning: NR auto-sync inserts failed: ' + insRes.error.message);
+        } else {
+          syncInserts = inserts.length;
+        }
+      }
+      // Updates have to be one-by-one because each row gets different fields.
+      for (const u of updates) {
+        const upRes = await sb.from('not_returning_reports').update(u.fields).eq('id', u.id);
+        if (upRes.error) {
+          console.warn(`NR auto-sync update error for ${u.id}:`, upRes.error);
+        } else {
+          syncUpdates++;
+        }
+      }
+      if (hides.length) {
+        const hideRes = await sb.from('not_returning_reports')
+          .update({ is_hidden: true })
+          .in('id', hides);
+        if (hideRes.error) {
+          console.warn('NR auto-sync hide error:', hideRes.error);
+        } else {
+          syncHidden = hides.length;
+        }
       }
     }
 
-    status(`Upload complete: ${studentRows.length} students, ${withdrawalsList.length} withdrawals, ${newNR.length} NR auto-imported. Refreshing…`);
+    status(`Upload complete: ${studentRows.length} students, ${withdrawalsList.length} withdrawals, NR sync: +${syncInserts} new, ${syncUpdates} updated, ${syncHidden} duplicates hidden. Refreshing…`);
     return true;
   } catch (e) {
     console.error('pushDataToSupabase failed:', e);
@@ -3796,7 +3906,7 @@ function computeSnapshotMetrics() {
     holds_missing_docs: holdsBy[3] || 0,
     holds_immunization: holdsBy[4] || 0,
     can_register: canRegisterStudents.length,
-    not_returning_count: nrList.filter(r => !r.is_hidden).length,
+    not_returning_count: getDedupedNRList().filter(r => !r.is_hidden).length,
     withdrawals_this_term: wdThisTerm,
     high_risk_count: 0,
     critical_risk_count: 0,
