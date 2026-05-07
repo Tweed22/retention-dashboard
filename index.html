@@ -632,6 +632,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <select class="filter-select" id="nr-filter-reason" onchange="nrRender()">
       <option value="">All Reasons</option>
     </select>
+    <select class="filter-select" id="nr-filter-class" onchange="nrRender()">
+      <option value="">All Classes</option>
+    </select>
+    <select class="filter-select" id="nr-filter-sport" onchange="nrRender()">
+      <option value="">All Sports</option>
+    </select>
+    <select class="filter-select" id="nr-filter-major" onchange="nrRender()">
+      <option value="">All Majors</option>
+    </select>
     <input class="table-search" type="text" id="nr-search" placeholder="Search name or ID…" oninput="nrRender()" style="width:180px;" />
   </div>
   <div class="table-wrap">
@@ -646,6 +655,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
       <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
       <th class="sortable" onclick="nrSort('firstName')">First Name</th>
+      <th class="sortable" onclick="nrSort('classYear')">Class</th>
       <th class="sortable" onclick="nrSort('sport')">Sport(s)</th>
       <th class="sortable" onclick="nrSort('major')">Major</th>
       <th class="sortable" onclick="nrSort('reason')">Reason</th>
@@ -731,6 +741,12 @@ const NR_REASON_LEGACY = {
   'Medical / health reasons': 'Medical',
   'Financial hardship':       'Financial',  // 2026-05-05 rename
 };
+
+// Standard class-year vocabulary for the NR list edit dropdown + filter.
+// CSV exports may contain non-standard strings (e.g. "FR", "Senior I") which
+// are still preserved on the row — the edit dropdown adds them as a custom
+// option so the value isn't silently dropped.
+const NR_CLASS_YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
 
 let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [];
 let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false };
@@ -2617,22 +2633,68 @@ function isNRRegistered(r) {
 function nrRender() {
   const wf = document.getElementById('nr-filter-withdrawal').value;
   const rf = document.getElementById('nr-filter-reason').value;
+  const cf = document.getElementById('nr-filter-class')?.value || '';
+  const sf = document.getElementById('nr-filter-sport')?.value || '';
+  const mf = document.getElementById('nr-filter-major')?.value || '';
   const q  = document.getElementById('nr-search').value.toLowerCase();
   // Index FIRST so action buttons map back to the original nrList row, then
   // dedupe so a student doesn't appear twice (e.g. when both auto-import
   // and human-entered rows exist for the same ID — keep the better-filled one).
   let indexed = nrList.map((r,i)=>({...r, _idx:i}));
   indexed = dedupeNRForDisplay(indexed);
+  // Refresh filter dropdown options every render so newly added values
+  // (e.g., from a fresh CSV upload) become available immediately.
+  nrPopulateAttributeFilters(indexed);
   if (wf) indexed=indexed.filter(r=>r.withdrawal===wf);
   if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
+  if (cf) indexed=indexed.filter(r => (r.classYear || '') === cf);
+  if (sf) indexed=indexed.filter(r => (r.sport || '').split(',').map(s=>s.trim()).includes(sf));
+  if (mf) indexed=indexed.filter(r => (r.major || '') === mf);
   if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.firstName||'')+(r.lastName||'')+(r.id||'')).toLowerCase().includes(q));
   indexed=applySort(indexed,nrSort_);
+  // Visible-vs-total count next to the table title (Tony 2026-05-07 — makes
+  // it obvious how aggressive the active filters are).
+  const totalRows = dedupeNRForDisplay(nrList.map((r,i)=>({...r, _idx:i}))).length;
+  const filtered = indexed.length !== totalRows;
+  const titleEl = document.querySelector('#page-notreturning .table-header-row h3');
+  if (titleEl) {
+    titleEl.innerHTML = filtered
+      ? `Not Returning Students <span style="color:#666;font-weight:500;font-size:13px;">— showing ${indexed.length} of ${totalRows}</span>`
+      : `Not Returning Students <span style="color:#666;font-weight:500;font-size:13px;">— ${totalRows} total</span>`;
+  }
   const tbody=document.getElementById('nr-tbody');
-  if (!indexed.length) { tbody.innerHTML=emptyRow(10,'No students on the Not Returning list yet. Use the form above to add the first entry.'); return; }
+  if (!indexed.length) {
+    tbody.innerHTML = emptyRow(11,
+      filtered
+        ? 'No rows match the current filters. Try clearing one of the dropdowns above.'
+        : 'No students on the Not Returning list yet. Use the form above to add the first entry.');
+    return;
+  }
   tbody.innerHTML=indexed.map(r=>{
     if (r._idx === nrEditIdx) return nrRenderEditRow(r);
     return nrRenderStaticRow(r);
   }).join('');
+}
+
+// Refresh the Class / Sport / Major filter dropdowns from the values
+// currently present in the (deduped) NR list. Preserves the current
+// selection if it still has matching rows; otherwise resets to "All ___".
+function nrPopulateAttributeFilters(rows) {
+  const fillSelect = (selectId, allLabel, values) => {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const cur = sel.value;
+    const sorted = [...new Set(values.filter(Boolean))].sort((a,b) => a.localeCompare(b));
+    const opts = [`<option value="">${allLabel}</option>`]
+      .concat(sorted.map(v => `<option ${cur===v?'selected':''}>${v}</option>`));
+    sel.innerHTML = opts.join('');
+  };
+  fillSelect('nr-filter-class', 'All Classes', rows.map(r => r.classYear));
+  // Sports come in as comma-separated strings on a single row — split them
+  // out so a row with "Football, Track" populates two distinct filter options.
+  const sportValues = rows.flatMap(r => (r.sport || '').split(',').map(s => s.trim()));
+  fillSelect('nr-filter-sport', 'All Sports', sportValues);
+  fillSelect('nr-filter-major', 'All Majors', rows.map(r => r.major));
 }
 
 function nrRenderStaticRow(r) {
@@ -2651,10 +2713,12 @@ function nrRenderStaticRow(r) {
   // 2026-05-07: a row tint is less noisy than the chip and frees the
   // column for Sport(s) info.
   const rowStyle = isNRRegistered(r) ? ' style="background:#fef9c3;"' : '';
+  const classCell = r.classYear ? classChip(r.classYear) : '<span style="color:#bbb;font-size:11px;">—</span>';
   return `<tr${rowStyle}>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${lastCell}</td>
     <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td>${classCell}</td>
     <td style="font-size:11px;">${sportCell}</td>
     <td style="font-size:11px;">${r.major||'—'}</td>
     <td>${renderReasonCell(r._idx, r.reason)}</td>
@@ -2753,10 +2817,18 @@ function nrRenderEditRow(r) {
   const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
   // Edit-mode tint stays the same (off-white amber) — distinguishes the
   // edited row from the now-yellow registered-student tint elsewhere.
+  // Class dropdown — uses standard NR_CLASS_YEARS list. If the row's
+  // current value isn't in the list (e.g., custom strings from a CSV), the
+  // first option is the existing value so it isn't lost.
+  const classOpts = ['<option value="">— Select —</option>']
+    .concat(NR_CLASS_YEARS.map(o => `<option ${r.classYear===o?'selected':''}>${o}</option>`))
+    .concat(r.classYear && !NR_CLASS_YEARS.includes(r.classYear) ? [`<option selected>${esc(r.classYear)}</option>`] : [])
+    .join('');
   return `<tr style="background:#fffbeb;">
     <td><input class="nr-edit-input" id="nr-e-id-${r._idx}"        value="${esc(r.id)}"        style="width:90px;font-family:monospace;" /></td>
     <td><input class="nr-edit-input" id="nr-e-lastName-${r._idx}"  value="${esc(r.lastName)}"  style="width:120px;" /></td>
     <td><input class="nr-edit-input" id="nr-e-firstName-${r._idx}" value="${esc(r.firstName)}" style="width:110px;" /></td>
+    <td><select class="nr-edit-input" id="nr-e-classYear-${r._idx}" style="width:110px;">${classOpts}</select></td>
     <td><input class="nr-edit-input" id="nr-e-sport-${r._idx}"     value="${esc(r.sport)}"     placeholder="Football, Track" style="width:110px;" /></td>
     <td><input class="nr-edit-input" id="nr-e-major-${r._idx}"     value="${esc(r.major)}"     style="width:110px;" /></td>
     <td>${reasonField}</td>
@@ -2764,7 +2836,7 @@ function nrRenderEditRow(r) {
     <td><select class="nr-edit-input" id="nr-e-withdrawal-${r._idx}" style="width:90px;">${withOpts}</select></td>
     <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td style="white-space:nowrap;">
-      <button onclick="nrSave(${r._idx})"     class="nr-row-btn nr-row-btn-primary" title="Save">Save</button>
+      <button onclick="nrSave(${r._idx})"     class="nr-row-btn nr-row-btn-primary" title="Save and close edit row" style="font-weight:600;">Save changes</button>
       <button onclick="nrCancelEdit()"        class="nr-row-btn" title="Cancel">Cancel</button>
     </td>
   </tr>`;
@@ -2794,6 +2866,7 @@ function nrSave(idx) {
   r.lastName    = v('lastName');
   r.firstName   = v('firstName');
   r.name        = [r.firstName, r.lastName].filter(Boolean).join(' ');
+  r.classYear   = v('classYear');        // Freshman / Sophomore / etc.
   r.sport       = v('sport');            // comma-joined string ("Football, Track")
   r.major       = v('major');
   r.reason      = v('reason');           // works for both <select> and <input> editors
@@ -2898,6 +2971,7 @@ function syncWithdrawalsToNR() {
         major: w.major || '',
         advisor: w.advisor || '',
         sport: sportFromStudents,
+        classYear: w.classYear || (stu && stu.classYear) || '',
         isRegistered: !!(w.id && registeredIds && registeredIds.has(w.id)),
         reason: mappedReason,
         notes: csvNotes,
@@ -2931,6 +3005,9 @@ function syncWithdrawalsToNR() {
       if (!target.major     && w.major)     target.major     = w.major;
       if (!target.advisor   && w.advisor)   target.advisor   = w.advisor;
       if (!target.sport     && sportFromStudents) target.sport = sportFromStudents;
+      // Class year: prefer existing value, then CSV, then in-memory student.
+      if (!target.classYear && w.classYear) target.classYear = w.classYear;
+      if (!target.classYear && stu && stu.classYear) target.classYear = stu.classYear;
       ensureNRNameFields(target);
       updated++;
     }
@@ -3544,14 +3621,15 @@ async function loadHostedDashboardData() {
       firstName: '',
       lastName: '',
       email: '',
-      // Sport + major are now persisted on the NR row itself (migration 0005)
-      // so manual edits and the Pending → Withdrawn transition don't lose
-      // them. The enrichment block below still fills these in from the
-      // students table when the NR row's stored value is empty (i.e., for
-      // older rows created before this migration ran).
+      // Sport + major + class are now persisted on the NR row itself (migrations
+      // 0005, 0006) so manual edits and the Pending → Withdrawn transition
+      // don't lose them. The enrichment block below still fills these in from
+      // the students table when the NR row's stored value is empty (i.e., for
+      // older rows created before these migrations ran).
       major: r.major || '',
       advisor: '',
       sport: r.sport || '',
+      classYear: r.class_year || '',
       isRegistered: !!(r.student_id && registeredIds.has(r.student_id)),
       reason,
       notes: r.notes || '',
@@ -3579,9 +3657,10 @@ async function loadHostedDashboardData() {
     if (s) {
       r.email   = s.email;
       r.advisor = s.advisor;
-      if (!r.major)  r.major  = s.major || '';
-      if (!r.sport)  r.sport  = (s.sports || []).join(', ');
-      if (!r.name)   r.name   = s.name;
+      if (!r.major)     r.major     = s.major || '';
+      if (!r.sport)     r.sport     = (s.sports || []).join(', ');
+      if (!r.classYear) r.classYear = s.classYear || '';
+      if (!r.name)      r.name      = s.name;
     }
   });
   // Term settings — pick "current" + "next"
@@ -3803,7 +3882,7 @@ async function pushDataToSupabase() {
     //    student is represented by exactly one row.
     status('Step 6/6: syncing Not Returning list…');
     const wdRowsBackRes = currentTermId
-      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason, first_name, last_name, major').eq('term_id', currentTermId)
+      ? await sb.from('withdrawals').select('id, student_id, last_active_date, withdrawal_reason, first_name, last_name, major, class_year').eq('term_id', currentTermId)
       : { data: [], error: null };
     expect('withdrawals select for sync', wdRowsBackRes);
     const wdsForSync = (wdRowsBackRes.data || []).filter(w => w.student_id);
@@ -3844,6 +3923,7 @@ async function pushDataToSupabase() {
           source_withdrawal_id: w.id,
           notes: `Auto-imported. Last active ${w.last_active_date}.`,
           major: w.major || null,
+          class_year: w.class_year || null,
         };
         const existing = byStudent.get(w.student_id) || [];
         if (existing.length === 0) {
@@ -4026,6 +4106,7 @@ async function persistNRRowToSupabase(idx) {
       notes: row.notes,
       sport: row.sport || null,
       major: row.major || null,
+      class_year: row.classYear || null,
       submitter_name: userDisplay,
       submitter_email: currentUser?.email,
       submitter_uid: currentUser?.id,
@@ -4052,6 +4133,7 @@ async function persistNRRowToSupabase(idx) {
     notes: row.notes,
     sport: row.sport || null,
     major: row.major || null,
+    class_year: row.classYear || null,
   }).eq('id', row._supabaseId);
   if (error) {
     console.error('NR row persist FAILED:', error, 'row:', row);
@@ -4097,6 +4179,7 @@ nrAdd = async function nrAddWithSupabase() {
       notes: fresh.notes,
       sport: fresh.sport || null,
       major: fresh.major || null,
+      class_year: fresh.classYear || null,
       submitter_name: userDisplay,
       submitter_email: currentUser?.email,
       submitter_uid: currentUser?.id,
@@ -4146,6 +4229,9 @@ nrSave = async function nrSaveWithSupabase(idx) {
       reason: updated.reason,
       withdrawal_status: updated.withdrawal,
       notes: updated.notes,
+      sport: updated.sport || null,
+      major: updated.major || null,
+      class_year: updated.classYear || null,
     }).eq('id', supabaseId);
     if (error) {
       alert('Edits saved locally but failed to persist to database: ' + error.message +
