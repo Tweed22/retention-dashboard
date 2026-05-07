@@ -1600,25 +1600,41 @@ function todayLocalISO() {
   return `${y}-${m}-${day}`;
 }
 
-// The current registration cycle's term_label, derived from termSettings.
-// Pattern: registration during Spring → 'Spring to Fall <next_year>'
-//          registration during Fall   → 'Fall to Spring <next_year>'
-// (Year reflects the TARGET term, matching how historical rows are labeled.)
-// Accepts 2-digit (Spring 26) or 4-digit (Spring 2026) year formats; also
-// tolerates a trailing year-only style like "Spring '26".
+// Infer the current registration cycle's term_label from today's date.
+// Used as the fallback when termSettings.currentName isn't set or doesn't
+// match the expected "Spring YYYY" / "Fall YYYY" pattern. Boundaries:
+//   Mar–Aug = Spring semester (registering for Fall this year)
+//             → "Spring to Fall <year>"
+//   Sep–Dec = Fall semester (registering for Spring next year)
+//             → "Fall to Spring <year+1>"
+//   Jan–Feb = continuation of previous Fall semester (registering for this
+//             year's Spring) → "Fall to Spring <year>"
+function inferTermLabelFromDate() {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  if (month >= 3 && month <= 8)  return `Spring to Fall ${year}`;
+  if (month >= 9 && month <= 12) return `Fall to Spring ${year + 1}`;
+  return `Fall to Spring ${year}`;  // Jan–Feb
+}
+
+// The current registration cycle's term_label. Tries termSettings.currentName
+// first (for explicit override); falls back to date-based inference so the
+// auto-snapshot never gets skipped just because the term name field is empty
+// or has a typo.
 function getNextTermLabel() {
   const cur = (termSettings.currentName || '').trim();
-  if (!cur) return null;
-  // Match 2-digit (26) or 4-digit (2026) year — disallow 3-digit typos.
-  const m = cur.match(/^(spring|fall)\s+'?(\d{2}|\d{4})$/i);
-  if (!m) return null;
-  const season = m[1].toLowerCase();
-  let year = parseInt(m[2], 10);
-  // Expand 2-digit year (assume 21st century)
-  if (year < 100) year += 2000;
-  if (season === 'spring') return `Spring to Fall ${year}`;
-  if (season === 'fall')   return `Fall to Spring ${year + 1}`;
-  return null;
+  if (cur) {
+    const m = cur.match(/^(spring|fall)\s+'?(\d{2}|\d{4})$/i);
+    if (m) {
+      const season = m[1].toLowerCase();
+      let year = parseInt(m[2], 10);
+      if (year < 100) year += 2000;
+      if (season === 'spring') return `Spring to Fall ${year}`;
+      if (season === 'fall')   return `Fall to Spring ${year + 1}`;
+    }
+  }
+  return inferTermLabelFromDate();
 }
 
 // Registration rate trend charts, fed by the term_history Supabase table.
@@ -3450,19 +3466,9 @@ async function pushDataToSupabase() {
         // Successful snapshot — surface in the status so Tony sees it landed
         status(`Step 5b/6: snapshot saved (${today} · ${termLabel} · rate ${rateSnap}%)`);
       }
-    } else {
-      // Skipped: termSettings.currentName isn't a recognizable Spring/Fall + year
-      // format. Surface this as an alert so the user can fix their setting; the
-      // upload itself proceeds, just no trend-chart point gets recorded.
-      const why = (termSettings.currentName || '').trim()
-        ? `Term name "${termSettings.currentName}" doesn't match expected format (e.g., "Spring 2026" or "Fall 2026").`
-        : 'No current term name is set.';
-      alert('Daily snapshot to trend chart was SKIPPED.\n\n' +
-        why + '\n\n' +
-        'Fix: open the Update Data panel and set the Term window — current term name should be "Spring 2026", "Fall 2026", etc. ' +
-        'The upload itself succeeded; future uploads will record snapshots once the term is named correctly.');
-      console.warn('term_history snapshot skipped:', why);
     }
+    // Note: getNextTermLabel() always returns a value now (date-based fallback),
+    // so the previous "snapshot skipped" branch is unreachable.
 
     // 6) Auto-feed current-term withdrawals into not_returning_reports
     //    (RLS allows committee insert; admin = committee.)
