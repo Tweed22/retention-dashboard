@@ -3790,6 +3790,7 @@ nrAdd = async function nrAddWithSupabase() {
     fresh._supabaseId = data.id;
     saveNRList(); // local cache for offline resilience
   }
+  renderSummary(); // refresh persistence rate + trend chart with the new NR row
 };
 nrRemove = async function nrRemoveWithSupabase(idx) {
   const row = nrList[idx];
@@ -3807,6 +3808,7 @@ nrRemove = async function nrRemoveWithSupabase(idx) {
         'Most common cause: your account does not have admin role (only admins can delete NR rows per RLS policy).');
     }
   }
+  renderSummary(); // refresh persistence rate + trend chart now that NR list shrunk
 };
 nrSave = async function nrSaveWithSupabase(idx) {
   // Capture the row reference BEFORE _origNrSave runs, since nrEditIdx
@@ -3830,6 +3832,7 @@ nrSave = async function nrSaveWithSupabase(idx) {
         '\n\nYour changes will revert on refresh.');
     }
   }
+  renderSummary(); // refresh persistence rate + trend chart with the saved edits
 };
 
 // Inline cell handlers — wrap so changes persist to Supabase too, not
@@ -3837,21 +3840,29 @@ nrSave = async function nrSaveWithSupabase(idx) {
 // triggers a Supabase write with reason='' (transient state) which is
 // then immediately superseded by the user's typed value via
 // nrCellReasonText — two cheap writes, last one wins.
+// Each wrapper also calls renderSummary() so the True Persistence Rate
+// recomputes and the trend chart's Today line + synthetic last point
+// reflect the change immediately. Without this, the chart stayed stale
+// until the next CSV upload or page refresh (Tony 2026-05-06).
 nrCellReason = function(idx, el) {
   _origNrCellReason(idx, el);
   persistNRRowToSupabase(idx);
+  renderSummary();
 };
 nrCellReasonText = function(idx, el) {
   _origNrCellReasonText(idx, el);
   persistNRRowToSupabase(idx);
+  renderSummary();
 };
 nrResetReason = function(idx) {
   _origNrResetReason(idx);
   persistNRRowToSupabase(idx);
+  renderSummary();
 };
 nrCellNotes = function(idx, el) {
   _origNrCellNotes(idx, el);
   persistNRRowToSupabase(idx);
+  renderSummary();
 };
 
 // Escape key dismisses the NR edit form. Belt-and-suspenders alongside the
