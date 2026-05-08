@@ -231,35 +231,71 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 }
 .theme-toggle:hover { background: rgba(255,255,255,0.22); }
 
-/* ── Dark mode overrides ── Targets the most common surfaces (page bg,
-   cards, tables, inputs, chips) without rewriting every rule. Anything
-   not covered here will still render with its light-mode color, which
-   is acceptable as long as it's not jarring. */
-body.dark { background: #0f172a; color: #e5e7eb; }
-body.dark .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
-body.dark .nav { background: #1e293b; border-bottom: 1px solid #334155; }
+/* ══════════════════════════════════════════════════════════════
+   Dark mode — page surfaces, cards, tables, charts, and chips.
+   Uses softer slate/zinc tones rather than pure black + white so
+   nothing strobes on light↔dark toggle.
+   ══════════════════════════════════════════════════════════════ */
+body.dark { background: #0b1220; color: #d1d5db; }
+body.dark .header { background: linear-gradient(135deg, #1e293b 0%, #0b1220 100%); }
+body.dark .nav { background: #111827; border-bottom: 1px solid #1f2937; }
 body.dark .nav-tab { color: #cbd5e1; }
-body.dark .nav-tab:hover { background: #334155; color: white; }
+body.dark .nav-tab:hover { background: #1f2937; color: #f3f4f6; }
 body.dark .nav-tab.active { background: #2563eb; color: white; }
+
+/* Cards / panels — use a very slight elevation step from the page bg
+   so they feel like surfaces without glowing white. */
 body.dark .kpi-card,
 body.dark .table-wrap,
 body.dark .nr-add-row,
 body.dark .upload-panel,
 body.dark .hold-card,
 body.dark .alert-box {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #e5e7eb;
+  background: #111827 !important;
+  border-color: #1f2937 !important;
+  color: #d1d5db;
 }
-body.dark .kpi-label { color: #cbd5e1; }
-body.dark .kpi-sub { color: #94a3b8; }
-body.dark .kpi-value { color: #f8fafc; }
+body.dark .kpi-label  { color: #cbd5e1; }
+body.dark .kpi-sub    { color: #94a3b8; }
+body.dark .kpi-value  { color: #e5e7eb; }
 body.dark .section-label { color: #cbd5e1; }
 body.dark .table-header-row h3 { color: #e5e7eb; }
-body.dark table { color: #e5e7eb; }
-body.dark th { background: #334155 !important; color: #cbd5e1 !important; border-color: #475569 !important; }
-body.dark td { border-color: #334155 !important; color: #e5e7eb; }
-body.dark tr:hover td { background: #1e293b; }
+body.dark .upload-panel-title { color: #e5e7eb; }
+body.dark .header-subtitle, body.dark #header-subtitle { color: #cbd5e1; }
+
+/* Tables — softer divider lines; readable but non-strobing text. */
+body.dark table { color: #d1d5db; }
+body.dark th { background: #1f2937 !important; color: #cbd5e1 !important; border-color: #334155 !important; }
+body.dark td { border-color: #1f2937 !important; color: #d1d5db; }
+body.dark tr:hover td { background: #1f2937; }
+
+/* Inline color/background overrides — most rows in the dashboard set
+   td colors via inline style="color:#XXX". Attribute selectors with
+   !important are the cleanest way to remap those without rewriting
+   every render function. */
+body.dark [style*="color:#555"],
+body.dark [style*="color: #555"]  { color: #cbd5e1 !important; }
+body.dark [style*="color:#888"],
+body.dark [style*="color: #888"]  { color: #94a3b8 !important; }
+body.dark [style*="color:#666"],
+body.dark [style*="color: #666"]  { color: #cbd5e1 !important; }
+body.dark [style*="color:#374151"]{ color: #cbd5e1 !important; }
+body.dark [style*="color:#1a1d23"]{ color: #e5e7eb !important; }
+body.dark [style*="color:#bbb"]   { color: #6b7280 !important; }
+body.dark [style*="background:white"],
+body.dark [style*="background: white"],
+body.dark [style*="background:#fff"],
+body.dark [style*="background: #fff"]    { background: #111827 !important; }
+body.dark [style*="background:#fffbeb"]  { background: #1f2937 !important; }   /* edit row tint */
+body.dark [style*="background:#fff5f5"]  { background: #1f2937 !important; }   /* on-NR registered tint */
+body.dark [style*="background:#fef9c3"]  { background: #422006 !important; }
+body.dark [style*="background:#f4f6fa"]  { background: #1f2937 !important; }
+body.dark [style*="background:#eff6ff"]  { background: #1e293b !important; }
+body.dark [style*="background:#fef3c7"]  { background: #422006 !important; }
+body.dark [style*="background:#f0fdf4"]  { background: #052e16 !important; }
+body.dark [style*="background:rgba(255,255,255"] { background: rgba(255,255,255,0.06) !important; }
+
+/* Form controls */
 body.dark .filter-select,
 body.dark .table-search,
 body.dark input[type="text"],
@@ -269,33 +305,65 @@ body.dark select,
 body.dark textarea,
 body.dark .nr-edit-input,
 body.dark .nr-cell-input {
-  background: #0f172a !important;
-  color: #e5e7eb !important;
-  border-color: #334155 !important;
+  background: #0b1220 !important;
+  color: #d1d5db !important;
+  border-color: #1f2937 !important;
 }
 body.dark .filter-label { color: #cbd5e1; }
 body.dark .nr-add-row .nr-field label { color: #94a3b8; }
-body.dark .reason-bar-label { color: #e5e7eb; }
-body.dark .reason-bar-track { background: #334155; }
-body.dark .hold-bar-bg { background: #334155; }
-body.dark .empty-state { color: #94a3b8; }
-body.dark .empty-state p { color: #94a3b8; }
-body.dark .nr-row-btn { background: #334155; color: #e5e7eb; border-color: #475569; }
-body.dark .nr-row-btn:hover { background: #475569; }
+body.dark .reason-bar-label { color: #d1d5db; }
+body.dark .reason-bar-track { background: #1f2937; }
+body.dark .hold-bar-bg { background: #1f2937; }
+body.dark .empty-state, body.dark .empty-state p { color: #94a3b8; }
+
+/* Buttons */
+body.dark .nr-row-btn { background: #1f2937; color: #d1d5db; border-color: #334155; }
+body.dark .nr-row-btn:hover { background: #334155; }
 body.dark .nr-row-btn-primary { background: #2563eb; border-color: #2563eb; color: white; }
-body.dark .nr-row-btn-danger { background: #1e293b; color: #f87171; border-color: #7f1d1d; }
-body.dark .export-btn { background: #334155; color: #cbd5e1; border-color: #475569; }
-body.dark .export-btn:hover { background: #475569; color: white; }
+body.dark .nr-row-btn-danger { background: #1f2937; color: #fca5a5; border-color: #7f1d1d; }
+body.dark .export-btn { background: #1f2937; color: #cbd5e1; border-color: #334155; }
+body.dark .export-btn:hover { background: #334155; color: #f3f4f6; }
 body.dark .pii-banner { background: #422006; border-color: #78350f; color: #fde68a; }
-body.dark .hist-tab { background: #334155; color: #cbd5e1; border-color: #475569; }
+body.dark .hist-tab { background: #1f2937; color: #cbd5e1; border-color: #334155; }
 body.dark .hist-tab.active { background: #2563eb; color: white; }
-/* SVG charts: the gridlines are too subtle on dark; lift them slightly */
-body.dark svg line[stroke="#e5e7eb"] { stroke: #334155; }
-body.dark svg line[stroke="#cbd5e1"] { stroke: #475569; }
-body.dark svg line[stroke="#f1f5f9"] { stroke: #1e293b; }
+body.dark .upload-btn { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); color: #e5e7eb; }
+body.dark .upload-btn:hover { background: rgba(255,255,255,0.18); }
+
+/* Chips — keep the hue family but darken backgrounds + lift text so
+   they don't strobe white on a dark canvas. */
+body.dark .chip-red    { background: #3f1d1d; color: #fca5a5; }
+body.dark .chip-amber  { background: #3a2812; color: #fbbf24; }
+body.dark .chip-blue   { background: #1e293b; color: #93c5fd; }
+body.dark .chip-purple { background: #2e1065; color: #c4b5fd; }
+body.dark .chip-teal   { background: #134e4a; color: #5eead4; }
+body.dark .chip-green  { background: #14532d; color: #86efac; }
+body.dark .chip-indigo { background: #312e81; color: #a5b4fc; }
+body.dark .chip-gray   { background: #1f2937; color: #cbd5e1; }
+body.dark .athlete-badge { background: #14532d; border-color: #166534; color: #86efac; }
+
+/* SVG charts — gridlines, axis labels, area-fill stops */
+body.dark svg line[stroke="#e5e7eb"] { stroke: #1f2937; }
+body.dark svg line[stroke="#cbd5e1"] { stroke: #334155; }
+body.dark svg line[stroke="#f1f5f9"] { stroke: #111827; }
 body.dark svg text[fill="#888"] { fill: #94a3b8; }
 body.dark svg text[fill="#666"] { fill: #cbd5e1; }
-body.dark .theme-toggle { background: rgba(255,255,255,0.18); }
+body.dark svg text { fill: #d1d5db; }
+body.dark svg .donut-bg { fill: #1f2937; }
+/* Reasons-not-returning chart bars (red/amber on white background): keep the
+   hue but darken the track so it doesn't glow. */
+body.dark .hold-card svg text { fill: #cbd5e1; }
+/* Hold card title was nearly invisible on dark — `color:#1a1d23` baked in
+   the .hold-type rule didn't pick up the inline-style override. Lift it
+   directly so the hold names ("Advising Hold", etc.) are readable. */
+body.dark .hold-type  { color: #f3f4f6; }
+body.dark .hold-pct   { color: #94a3b8; }
+body.dark .hold-count { color: #60a5fa; }
+
+/* Donut charts on Summary */
+body.dark .hold-donut-svg circle { stroke-opacity: 0.9; }
+
+body.dark .theme-toggle { background: rgba(255,255,255,0.16); }
+body.dark .theme-toggle:hover { background: rgba(255,255,255,0.24); }
 
 /* Full-screen auth gate. Anon users see only this — the rest of the dashboard
    (header, nav, all pages) is hidden under body.auth-anon. After sign-in the
@@ -3798,8 +3866,34 @@ async function loadHostedDashboardData() {
     // Run names through dedupeRepeatedName so legacy "Smith Smith" rows
     // already in Supabase get cleaned on every read. Anything that isn't
     // in the doubled "X X" shape passes through unchanged.
-    const firstName = dedupeRepeatedName(s.first_name || '');
-    const lastName  = dedupeRepeatedName(s.last_name  || '');
+    let firstName = dedupeRepeatedName(s.first_name || '');
+    let lastName  = dedupeRepeatedName(s.last_name  || '');
+    // Some legacy rows have BOTH first_name and last_name set to the same
+    // "Last, First" combined string — when displayed as `${last}, ${first}`
+    // it shows up doubled (e.g. "Ewers, Ben Richard, Ewers, Ben Richard").
+    // Detect that case and re-split into the proper components.
+    if (firstName && firstName === lastName && firstName.includes(',')) {
+      const parts = firstName.split(',').map(p => p.trim());
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        lastName  = parts[0];
+        firstName = parts.slice(1).join(', ');
+      }
+    }
+    // If only one of the two fields carries the combined "Last, First", split it.
+    if (firstName && firstName.includes(',') && !lastName) {
+      const parts = firstName.split(',').map(p => p.trim());
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        lastName  = parts[0];
+        firstName = parts.slice(1).join(', ');
+      }
+    } else if (lastName && lastName.includes(',') && !firstName) {
+      const parts = lastName.split(',').map(p => p.trim());
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        const newLast = parts[0];
+        firstName = parts.slice(1).join(', ');
+        lastName  = newLast;
+      }
+    }
     return {
       id: s.id,
       firstName,
