@@ -272,14 +272,23 @@ body.dark .upload-panel-title { color: #e0e0e0; }
 body.dark .header-subtitle, body.dark #header-subtitle { color: #a8a8a8; }
 
 /* Tables — borders nearly blend into surface; row hover SINKS into a
-   darker tone instead of brightening. The `!important` cascade is
-   needed because some rows carry inline background tints (e.g., NR
-   row tint) which would otherwise win against the hover rule. */
+   slightly darker tone. The `!important` cascade is needed because
+   some rows carry inline background tints (e.g., NR row tint) which
+   would otherwise win against the hover rule. We disable the
+   transition so the hover state is instant — the previous 0.1s
+   animation made the hover feel like it strobed when the cursor
+   moved between rows. */
 body.dark table { color: #e0e0e0; }
-body.dark th { background: #2a2a2a !important; color: #a8a8a8 !important; border-color: #2a2a2a !important; font-weight: 600; }
-body.dark td { border-color: #2a2a2a !important; color: #e0e0e0; }
-body.dark tr:hover td,
-body.dark tr:hover td[style] { background: #1a1a1a !important; }
+body.dark thead th { background: #232323 !important; color: #909090 !important; border-bottom-color: #2a2a2a !important; font-weight: 600; }
+body.dark tbody tr { border-bottom: 1px solid #232323 !important; transition: none !important; background: transparent !important; }
+body.dark tbody tr:last-child { border-bottom: none !important; }
+body.dark tbody td { border-color: #232323 !important; color: #d0d0d0; transition: none !important; }
+/* Hover lives on td (not tr) so it works uniformly even when the row
+   carries inline background tints. The dark step is small enough that
+   it reads as a gentle "press" rather than a flash. */
+body.dark tbody tr:hover td,
+body.dark tbody tr:hover td[style] { background: #202020 !important; }
+body.dark .table-header-row { border-bottom-color: #2a2a2a !important; }
 
 /* Inline color/background overrides — render functions set colors via
    inline style attributes. These attribute selectors with !important
