@@ -2747,8 +2747,14 @@ function nrUpdateKpis() {
   // KPIs reflect the deduped list (one row per student) so the numbers match
   // what the table actually shows after dedupeNRForDisplay runs.
   const dedupedNR = getDedupedNRList();
-  document.getElementById('nr-count').textContent    = n(dedupedNR.length);
-  document.getElementById('nr-pending').textContent  = n(dedupedNR.filter(s=>s.withdrawal==='Pending').length);
+  // Per Tony 2026-05-07: graduating students aren't really "not returning"
+  // (they're completing their degree), so exclude them from both the
+  // Total Not Returning headline and the Withdrawal Pending sub-count.
+  // Withdrawn count is left as-is — once the registrar has formally
+  // processed the withdrawal we count it regardless of reason.
+  const nonGrad = dedupedNR.filter(s => (s.reason || '').toLowerCase() !== 'graduating');
+  document.getElementById('nr-count').textContent    = n(nonGrad.length);
+  document.getElementById('nr-pending').textContent  = n(nonGrad.filter(s=>s.withdrawal==='Pending').length);
   document.getElementById('nr-withdrawn').textContent = n(dedupedNR.filter(s=>s.withdrawal==='Withdrawn').length);
   // "Registered for Courses" count: students on the NR list who are also enrolled
   // in at least one course. Surfaces the discrepancy between "flagged not returning"
