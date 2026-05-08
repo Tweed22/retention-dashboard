@@ -622,7 +622,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     </div>
     <div class="nr-field med">
       <label>Withdrawal</label>
-      <select id="nr-f-withdrawal"><option value="Pending">Pending</option><option value="Withdrawn">Withdrawn</option></select>
+      <select id="nr-f-withdrawal"><option value="Pending">Pending</option><option value="Withdrawn">Withdrawn</option><option value="Registered">Registered</option></select>
     </div>
     <div class="nr-field wide"><label>Notes</label><input type="text" id="nr-f-notes" placeholder="Optional notes" /></div>
     <button class="nr-add-btn" onclick="nrAdd()">+ Add Row</button>
@@ -631,7 +631,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <!-- ── Filters + table ── -->
   <div class="filter-row" style="margin-bottom:10px;">
     <span class="filter-label">Filter:</span>
-    <select class="filter-select" id="nr-filter-withdrawal" onchange="nrRender()"><option value="">All Statuses</option><option>Pending</option><option>Withdrawn</option></select>
+    <select class="filter-select" id="nr-filter-withdrawal" onchange="nrRender()"><option value="">All Statuses</option><option>Pending</option><option>Withdrawn</option><option>Registered</option></select>
     <select class="filter-select" id="nr-filter-reason" onchange="nrRender()">
       <option value="">All Reasons</option>
     </select>
@@ -1879,28 +1879,59 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
   const x = t => ML + ((t - minD) / span) * innerW;
   const y = pct => MT + innerH - (Math.max(0, Math.min(100, pct)) / 100) * innerH;
 
-  const points = data.map(d =>
+  // Build the line + the area-fill path (volume-style chart). The area
+  // path is the same line plus a closing segment down to y(0) and back
+  // to the start, filled with a soft blue gradient.
+  const linePoints = data.map(d =>
     `${x(new Date(d.snapshot_date + 'T12:00:00Z').getTime())},${y(d.registration_rate || 0)}`
-  ).join(' ');
+  );
+  const polyPoints = linePoints.join(' ');
+  const firstX = x(new Date(data[0].snapshot_date + 'T12:00:00Z').getTime());
+  const lastX  = x(new Date(data[data.length-1].snapshot_date + 'T12:00:00Z').getTime());
+  const baseY  = y(0);
+  const areaPath = `M ${firstX},${baseY} L ${linePoints.join(' L ')} L ${lastX},${baseY} Z`;
 
-  // X-axis: ~5 evenly-spaced date labels in mm/dd/yy
-  const tickIdx = [...new Set([
-    0,
-    Math.floor(data.length*0.25),
-    Math.floor(data.length*0.5),
-    Math.floor(data.length*0.75),
-    data.length-1,
-  ])];
+  // X-axis: monthly markers at the start of each month within the data
+  // range. Full month name (January, February, etc.) per Tony 2026-05-07.
+  // Each tick has its own gridline so the area-chart has visual structure
+  // even where the data points themselves are sparse.
+  const monthTicks = [];
+  const startMonth = new Date(minD);
+  startMonth.setUTCDate(1);
+  // Step forward one month at a time. If the first data point is mid-month,
+  // also include that month so the chart isn't blank on its left edge.
+  const cursor = new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth(), 1, 12, 0, 0));
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  while (cursor.getTime() <= maxD) {
+    const t = cursor.getTime();
+    if (t >= minD) {
+      monthTicks.push({
+        t,
+        label: MONTH_NAMES[cursor.getUTCMonth()],
+      });
+    }
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
   const yTicks = [0, 25, 50, 75, 100];
 
   const svg = `
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;">
+      <defs>
+        <linearGradient id="trend-area-${label.replace(/[^a-z0-9]/gi,'')}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2563eb" stop-opacity="0.32" />
+          <stop offset="100%" stop-color="#2563eb" stop-opacity="0.04" />
+        </linearGradient>
+      </defs>
       ${yTicks.map(v => `
         <line x1="${ML}" y1="${y(v)}" x2="${W-MR}" y2="${y(v)}" stroke="#e5e7eb" stroke-width="1" />
         <text x="${ML-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#888">${v}%</text>
       `).join('')}
+      ${monthTicks.map(({t}) => `
+        <line x1="${x(t)}" y1="${MT}" x2="${x(t)}" y2="${MT+innerH}" stroke="#f1f5f9" stroke-width="1" />
+      `).join('')}
       <line x1="${ML}" y1="${y(0)}" x2="${W-MR}" y2="${y(0)}" stroke="#cbd5e1" stroke-width="1" />
-      <polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="${points}" />
+      <path d="${areaPath}" fill="url(#trend-area-${label.replace(/[^a-z0-9]/gi,'')})" stroke="none" />
+      <polyline fill="none" stroke="#2563eb" stroke-width="2" points="${polyPoints}" />
       ${data.map(d => {
         const cx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
         const cy = y(d.registration_rate || 0);
@@ -1918,24 +1949,22 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
         if (bgX + labelW > W - MR - 2) bgX = W - MR - 2 - labelW;
         const labelX = bgX + labelW / 2;
         const tip = `${fmtMDY(d.snapshot_date)}: ${rate}% · ${d.registered_count} registered${d.holds_count != null ? ', ' + d.holds_count + ' holds' : ''}`;
+        // Smaller dots per Tony 2026-05-07 — but keep the larger invisible
+        // hover halo (r=10) so the tooltip is still easy to trigger.
         return `<g class="tp">
           <title>${tip}</title>
-          <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(37,99,235,0.18)" />
-          <circle cx="${cx}" cy="${cy}" r="3.5" fill="#2563eb" />
+          <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(37,99,235,0.0)" />
+          <circle cx="${cx}" cy="${cy}" r="2" fill="#2563eb" />
           <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="18" rx="3" fill="#1a1d23" />
           <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="600" fill="white">${labelText}</text>
         </g>`;
       }).join('')}
-      ${tickIdx.map((i, idx) => {
-        const d = data[i];
-        const tx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
-        // Anchor first label to start, last to end, middle to middle so the
-        // text doesn't get clipped at the chart's edges as new dates extend
-        // the x-axis.
+      ${monthTicks.map(({t, label: mname}, idx) => {
+        const tx = x(t);
         const isFirst = idx === 0;
-        const isLast = idx === tickIdx.length - 1;
+        const isLast = idx === monthTicks.length - 1;
         const anchor = isFirst ? 'start' : isLast ? 'end' : 'middle';
-        return `<text x="${tx}" y="${H-MB+22}" text-anchor="${anchor}" font-size="11" fill="#666">${fmtMDY(d.snapshot_date)}</text>`;
+        return `<text x="${tx}" y="${H-MB+22}" text-anchor="${anchor}" font-size="11" fill="#666">${mname}</text>`;
       }).join('')}
       <text x="${ML-32}" y="${MT-6}" font-size="10" fill="#888">Reg %</text>
       ${(() => {
@@ -2765,7 +2794,6 @@ function nrPopulateAttributeFilters(rows) {
 }
 
 function nrRenderStaticRow(r) {
-  const wChip = r.withdrawal==='Withdrawn' ? 'chip-red' : 'chip-amber';
   const esc = v => (v==null?'':String(v)).replace(/"/g,'&quot;');
   // Display the structured first/last fields if present; fall back to the
   // single combined name (rendering it whole in the Last Name column) when
@@ -2777,13 +2805,23 @@ function nrRenderStaticRow(r) {
   // preserved on the row; this transform is display-only.
   const displaySport = normalizeSportList(r.sport);
   const sportCell = displaySport ? displaySport : '<span style="color:#bbb;font-size:11px;">—</span>';
-  // Soft-yellow row tint for students who are also enrolled — this is the
-  // signal that previously rode in the "Registered" chip column. Tony
-  // 2026-05-07: a row tint is less noisy than the chip and frees the
-  // column for Sport(s) info.
-  const rowStyle = isNRRegistered(r) ? ' style="background:#fef9c3;"' : '';
+  // Withdrawal status chip — now supports "Registered" as a third value
+  // (blue chip) for students on the NR list who are still enrolled in
+  // courses. Auto-promote to Registered when the student appears in
+  // registeredIds AND they aren't already formally Withdrawn (Withdrawn
+  // wins on conflict — a withdrawn student shouldn't visually flip back
+  // to Registered just because the registered CSV is stale).
+  // Tony 2026-05-07: this replaces the soft-yellow row tint.
+  const effectiveStatus = r.withdrawal === 'Withdrawn'
+    ? 'Withdrawn'
+    : (r.withdrawal === 'Registered' || isNRRegistered(r))
+      ? 'Registered'
+      : (r.withdrawal || 'Pending');
+  const wChip = effectiveStatus === 'Withdrawn'  ? 'chip-red'
+              : effectiveStatus === 'Registered' ? 'chip-blue'
+              : 'chip-amber';
   const classCell = r.classYear ? classChip(r.classYear) : '<span style="color:#bbb;font-size:11px;">—</span>';
-  return `<tr${rowStyle}>
+  return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${lastCell}</td>
     <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
@@ -2792,7 +2830,7 @@ function nrRenderStaticRow(r) {
     <td style="font-size:11px;">${r.major||'—'}</td>
     <td>${renderReasonCell(r._idx, r.reason)}</td>
     <td><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
-    <td><span class="chip ${wChip}">${r.withdrawal}</span></td>
+    <td><span class="chip ${wChip}">${effectiveStatus}</span></td>
     <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td style="white-space:nowrap;">
       <button onclick="nrEdit(${r._idx})" class="nr-row-btn" title="Edit row">Edit</button>
@@ -2873,7 +2911,7 @@ function nrCellNotes(idx, el) {
 }
 
 function nrRenderEditRow(r) {
-  const withOpts = ['Pending','Withdrawn']
+  const withOpts = ['Pending','Withdrawn','Registered']
     .map(o => `<option ${r.withdrawal===o?'selected':''}>${o}</option>`)
     .join('');
   const isStandard = !r.reason || NR_REASONS.includes(r.reason);
