@@ -216,6 +216,87 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 .auth-status { font-size: 11px; color: rgba(255,255,255,0.85); display: inline-flex; align-items: center; gap: 6px; }
 .auth-status .auth-name { font-weight: 600; color: white; }
 
+/* ── Dark mode toggle button (header, far right) ── */
+.theme-toggle {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: white;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.22); }
+
+/* ── Dark mode overrides ── Targets the most common surfaces (page bg,
+   cards, tables, inputs, chips) without rewriting every rule. Anything
+   not covered here will still render with its light-mode color, which
+   is acceptable as long as it's not jarring. */
+body.dark { background: #0f172a; color: #e5e7eb; }
+body.dark .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+body.dark .nav { background: #1e293b; border-bottom: 1px solid #334155; }
+body.dark .nav-tab { color: #cbd5e1; }
+body.dark .nav-tab:hover { background: #334155; color: white; }
+body.dark .nav-tab.active { background: #2563eb; color: white; }
+body.dark .kpi-card,
+body.dark .table-wrap,
+body.dark .nr-add-row,
+body.dark .upload-panel,
+body.dark .hold-card,
+body.dark .alert-box {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e5e7eb;
+}
+body.dark .kpi-label { color: #cbd5e1; }
+body.dark .kpi-sub { color: #94a3b8; }
+body.dark .kpi-value { color: #f8fafc; }
+body.dark .section-label { color: #cbd5e1; }
+body.dark .table-header-row h3 { color: #e5e7eb; }
+body.dark table { color: #e5e7eb; }
+body.dark th { background: #334155 !important; color: #cbd5e1 !important; border-color: #475569 !important; }
+body.dark td { border-color: #334155 !important; color: #e5e7eb; }
+body.dark tr:hover td { background: #1e293b; }
+body.dark .filter-select,
+body.dark .table-search,
+body.dark input[type="text"],
+body.dark input[type="email"],
+body.dark input[type="number"],
+body.dark select,
+body.dark textarea,
+body.dark .nr-edit-input,
+body.dark .nr-cell-input {
+  background: #0f172a !important;
+  color: #e5e7eb !important;
+  border-color: #334155 !important;
+}
+body.dark .filter-label { color: #cbd5e1; }
+body.dark .nr-add-row .nr-field label { color: #94a3b8; }
+body.dark .reason-bar-label { color: #e5e7eb; }
+body.dark .reason-bar-track { background: #334155; }
+body.dark .hold-bar-bg { background: #334155; }
+body.dark .empty-state { color: #94a3b8; }
+body.dark .empty-state p { color: #94a3b8; }
+body.dark .nr-row-btn { background: #334155; color: #e5e7eb; border-color: #475569; }
+body.dark .nr-row-btn:hover { background: #475569; }
+body.dark .nr-row-btn-primary { background: #2563eb; border-color: #2563eb; color: white; }
+body.dark .nr-row-btn-danger { background: #1e293b; color: #f87171; border-color: #7f1d1d; }
+body.dark .export-btn { background: #334155; color: #cbd5e1; border-color: #475569; }
+body.dark .export-btn:hover { background: #475569; color: white; }
+body.dark .pii-banner { background: #422006; border-color: #78350f; color: #fde68a; }
+body.dark .hist-tab { background: #334155; color: #cbd5e1; border-color: #475569; }
+body.dark .hist-tab.active { background: #2563eb; color: white; }
+/* SVG charts: the gridlines are too subtle on dark; lift them slightly */
+body.dark svg line[stroke="#e5e7eb"] { stroke: #334155; }
+body.dark svg line[stroke="#cbd5e1"] { stroke: #475569; }
+body.dark svg line[stroke="#f1f5f9"] { stroke: #1e293b; }
+body.dark svg text[fill="#888"] { fill: #94a3b8; }
+body.dark svg text[fill="#666"] { fill: #cbd5e1; }
+body.dark .theme-toggle { background: rgba(255,255,255,0.18); }
+
 /* Full-screen auth gate. Anon users see only this — the rest of the dashboard
    (header, nav, all pages) is hidden under body.auth-anon. After sign-in the
    body class flips and the gate disappears. */
@@ -293,6 +374,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <button class="upload-btn" onclick="signOut()" style="margin-left:6px;">Sign out</button>
     </div>
     <button class="upload-btn admin-only" onclick="toggleUploadPanel()">Update Data</button>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
   </div>
 </div>
 
@@ -2501,14 +2583,27 @@ function nsApply() {
 // whole right half exactly mirrors the left.
 function dedupeRepeatedName(s) {
   if (!s) return s;
-  const t = String(s).trim();
+  const t = String(s).trim().replace(/\s+/g, ' ');
   if (!t) return t;
-  const tokens = t.split(/\s+/);
-  if (tokens.length >= 2 && tokens.length % 2 === 0) {
-    const half = tokens.length / 2;
-    const left  = tokens.slice(0, half).join(' ');
-    const right = tokens.slice(half).join(' ');
-    if (left.toLowerCase() === right.toLowerCase()) return left;
+  const tokens = t.split(' ');
+  // Try every repetition length from longest to shortest. If the first k
+  // tokens equal the next k tokens (case-insensitive), drop the duplicate
+  // copy and stitch the remainder back together. This handles all of:
+  //   "Smith Smith"                    → "Smith"        (k=1)
+  //   "Gracia Damen Gracia Damen"      → "Gracia Damen" (k=2)
+  //   "Smith Smith Jr"                 → "Smith Jr"     (k=1)
+  //   "Gracia Damen Gracia Damen, Job" → "Gracia Damen, Job" (k=2)
+  // Bottom-up so the smallest dedup wins (avoids over-collapsing legit
+  // names like "Walla Walla, WA"... though those are rare).
+  for (let k = 1; k <= Math.floor(tokens.length / 2); k++) {
+    let match = true;
+    for (let i = 0; i < k; i++) {
+      if (tokens[i].toLowerCase() !== tokens[i + k].toLowerCase()) { match = false; break; }
+    }
+    if (match) {
+      // Drop tokens k..2k-1 and stitch the rest together.
+      return [...tokens.slice(0, k), ...tokens.slice(2 * k)].join(' ').trim();
+    }
   }
   return t;
 }
@@ -3509,6 +3604,27 @@ async function signOut() {
   await sb.auth.signOut();
   // onAuthStateChange will re-render to anon UI
 }
+
+// ── Dark-mode toggle (Tony 2026-05-07) ──
+// Persists the preference in localStorage so it survives refreshes and
+// applies on first paint to avoid a light-mode flash. The toggle button
+// in the header reflects the current state with a sun/moon icon.
+function applyTheme() {
+  const dark = localStorage.getItem('theme') === 'dark';
+  document.body.classList.toggle('dark', dark);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) {
+    btn.textContent = dark ? '☀️' : '🌙';
+    btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  }
+}
+function toggleTheme() {
+  const isDark = document.body.classList.contains('dark');
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  applyTheme();
+}
+// Apply immediately so the page paints in the correct theme on load.
+applyTheme();
 
 // Translate the current Supabase auth session into our role model. Looks up
 // committee_members for role + display_name. Failures are surfaced visibly
