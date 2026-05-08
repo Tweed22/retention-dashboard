@@ -453,8 +453,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       </div>
       <table><thead><tr>
         <th class="sortable" onclick="regSort('id')">Student ID</th>
-        <th class="sortable" onclick="regSort('lastName')">Last Name</th>
-        <th class="sortable" onclick="regSort('firstName')">First Name</th>
+        <th class="sortable" onclick="regSort('lastName')">Name</th>
         <th>Email</th>
         <th class="sortable" onclick="regSort('classYear')">Class</th>
         <th class="sortable" onclick="regSort('major')">Major</th>
@@ -2417,16 +2416,24 @@ function regApply() {
         const isNR = nrIds.has(r.id);
         const rowStyle = isNR ? ' style="background:#fff5f5;"' : '';
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
+        // Build a single "Last, First" display name; fall back to whatever
+        // we have (lastName alone, the combined `name`, or the firstName).
+        // Run through dedupeRepeatedName to clean any "Smith Smith" pollution
+        // that may have crept in from legacy import paths.
+        const cleanLast  = dedupeRepeatedName(r.lastName);
+        const cleanFirst = dedupeRepeatedName(r.firstName);
+        const displayName = (cleanLast && cleanFirst)
+          ? `${cleanLast}, ${cleanFirst}`
+          : (cleanLast || cleanFirst || dedupeRepeatedName(r.name) || '');
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
-          <td>${r.firstName||r.name||''}</td>
+          <td style="font-weight:600;">${displayName}${nrBadge}</td>
           <td style="color:#555;">${r.email||''}</td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major||''}</td><td>${r.advisor||''}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
-    : emptyRow(8,'No students match.');
+    : emptyRow(7,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2482,6 +2489,28 @@ function nsApply() {
 //   "First [Middle...] Last" → firstName='First', lastName='[Middle...] Last'
 // Per Tony 2026-05-05: firstName is always exactly the first word; everything
 // after rolls into lastName (handles "John del Rey" → first='John', last='del Rey').
+// Some legacy NR rows arrive with the last name doubled (e.g., the value
+// stored is literally "Marcolino Marcolino" or "Gracia Damen Gracia Damen").
+// We're not 100% sure where the duplication originated — likely a one-off
+// import path that ran a name through normalization twice. This collapses
+// "X X" → "X" when the two halves are identical token-for-token (case
+// insensitive). Anything else passes through untouched, so legitimate names
+// like "Walla Walla" with truly repeating words aren't affected unless the
+// whole right half exactly mirrors the left.
+function dedupeRepeatedName(s) {
+  if (!s) return s;
+  const t = String(s).trim();
+  if (!t) return t;
+  const tokens = t.split(/\s+/);
+  if (tokens.length >= 2 && tokens.length % 2 === 0) {
+    const half = tokens.length / 2;
+    const left  = tokens.slice(0, half).join(' ');
+    const right = tokens.slice(half).join(' ');
+    if (left.toLowerCase() === right.toLowerCase()) return left;
+  }
+  return t;
+}
+
 function splitName(fullName) {
   const s = (fullName || '').trim();
   if (!s) return { firstName: '', lastName: '' };
@@ -2970,8 +2999,8 @@ function nrSave(idx) {
     return;
   }
   r.id          = newId;
-  r.lastName    = v('lastName');
-  r.firstName   = v('firstName');
+  r.lastName    = dedupeRepeatedName(v('lastName'));
+  r.firstName   = dedupeRepeatedName(v('firstName'));
   r.name        = [r.firstName, r.lastName].filter(Boolean).join(' ');
   r.classYear   = normalizeClassYear(v('classYear')); // FR/SR/etc. → full word
   r.sport       = v('sport');            // comma-joined string ("Football, Track")
@@ -3767,6 +3796,12 @@ async function loadHostedDashboardData() {
       _updatedAt: r.updated_at || r.created_at || '',
     };
     ensureNRNameFields(row);
+    // Clean any doubled-up first / last names that snuck in via a legacy
+    // import path. This is a defensive pass — the helper is a no-op when
+    // the value isn't in the doubled "X X" shape.
+    row.firstName = dedupeRepeatedName(row.firstName);
+    row.lastName  = dedupeRepeatedName(row.lastName);
+    row.name      = dedupeRepeatedName(row.name);
     return row;
   });
   // Enrich NR rows from student lookups for fields not stored on the NR
