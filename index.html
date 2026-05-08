@@ -95,8 +95,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .reason-bar-row { display: grid; grid-template-columns: 220px 1fr 36px; align-items: center; gap: 10px; font-size: 12px; }
 .reason-bar-label { color: #1a1d23; font-weight: 500; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reason-bar-track { background: #f0f2f6; height: 18px; border-radius: 4px; overflow: hidden; }
-.reason-bar-fill { background: #2563eb; height: 100%; border-radius: 4px; transition: width 0.2s; }
+.reason-bar-fill { background: #16a34a; height: 100%; border-radius: 4px; transition: width 0.2s; }
 .reason-bar-count { font-weight: 700; color: #1a1d23; text-align: left; }
+/* Dark mode: count text was hardcoded #1a1d23 → invisible. Bar uses
+   the muted green so it matches the trend chart accent. */
+body.dark .reason-bar-count { color: #e0e0e0; }
+body.dark .reason-bar-fill  { background: #5ab57d; }
 .reasons-chart-empty { padding: 18px 0; color: #888; font-size: 12px; text-align: center; }
 .hold-donut-legend .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
 @media (max-width: 1100px) {
@@ -2135,7 +2139,7 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       </defs>
       ${yTicks.map(v => `
         <line x1="${ML}" y1="${y(v)}" x2="${W-MR}" y2="${y(v)}" stroke="#e5e7eb" stroke-width="1" />
-        <text x="${ML-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#888">${v}%</text>
+        <text x="${ML-6}" y="${y(v)+3}" text-anchor="end" font-size="9" fill="#888">${v}%</text>
       `).join('')}
       ${monthTicks.map(({t}) => `
         <line x1="${x(t)}" y1="${MT}" x2="${x(t)}" y2="${MT+innerH}" stroke="#f1f5f9" stroke-width="1" />
@@ -2167,8 +2171,8 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
           <title>${tip}</title>
           <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(0,0,0,0)" />
           <circle cx="${cx}" cy="${cy}" r="1.5" fill="${TREND_COLOR}" />
-          <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="18" rx="3" fill="#1a1d23" />
-          <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="600" fill="white">${labelText}</text>
+          <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="16" rx="3" fill="#1a1d23" />
+          <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="10" font-weight="600" fill="white">${labelText}</text>
         </g>`;
       }).join('')}
       ${monthTicks.map(({t, label: mname}, idx) => {
@@ -2176,16 +2180,16 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
         const isFirst = idx === 0;
         const isLast = idx === monthTicks.length - 1;
         const anchor = isFirst ? 'start' : isLast ? 'end' : 'middle';
-        return `<text x="${tx}" y="${H-MB+22}" text-anchor="${anchor}" font-size="11" fill="#666">${mname}</text>`;
+        return `<text x="${tx}" y="${H-MB+22}" text-anchor="${anchor}" font-size="10" fill="#666">${mname}</text>`;
       }).join('')}
-      <text x="${ML-32}" y="${MT-6}" font-size="10" fill="#888">Reg %</text>
+      <text x="${ML-32}" y="${MT-6}" font-size="9" fill="#888">Reg %</text>
       ${(() => {
         // Current chart: horizontal "Today" line at the live persistence rate.
         let currentMarkup = '';
         if (isCurrent && currentRate != null) {
           currentMarkup = `
             <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
-            <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="11" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
+            <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="10" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
           `;
         }
         // Vertical "Wk N of cycle" marker: drawn on BOTH current and
@@ -2214,8 +2218,8 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
               : `Day 0: ${closest.registration_rate}%`;
             weekMarkup = `
               <line x1="${xMark}" y1="${MT}" x2="${xMark}" y2="${MT+innerH}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
-              <circle cx="${xMark}" cy="${y(closest.registration_rate)}" r="3" fill="#dc2626" stroke="white" stroke-width="1.5" />
-              <text x="${xMark+6}" y="${MT+12}" font-size="11" fill="#dc2626" font-weight="600">${labelText}</text>
+              <circle cx="${xMark}" cy="${y(closest.registration_rate)}" r="2.5" fill="#dc2626" stroke="white" stroke-width="1" />
+              <text x="${xMark+6}" y="${MT+11}" font-size="10" fill="#dc2626" font-weight="600">${labelText}</text>
             `;
           }
         }
