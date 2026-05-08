@@ -454,11 +454,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="regSort('id')">Student ID</th>
         <th class="sortable" onclick="regSort('lastName')">Name</th>
-        <th>Email</th>
         <th class="sortable" onclick="regSort('classYear')">Class</th>
-        <th class="sortable" onclick="regSort('major')">Major</th>
-        <th class="sortable" onclick="regSort('advisor')">Advisor</th>
-        <th class="sortable" onclick="regSort('sports')">Sport</th>
         <th class="sortable" onclick="regSort('creditHours')">Credits</th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
@@ -2454,13 +2450,11 @@ function regApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${displayName}${nrBadge}</td>
-          <td style="color:#555;">${r.email||''}</td>
           <td>${classChip(r.classYear)}</td>
-          <td>${r.major||''}</td><td>${r.advisor||''}</td><td>${sc(r)}</td>
           <td style="font-weight:600;text-align:right;">${creditCell}</td>
         </tr>`;
       }).join('')
-    : emptyRow(8,'No students match.');
+    : emptyRow(4,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
