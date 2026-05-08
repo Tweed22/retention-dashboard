@@ -437,11 +437,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
-      <select class="filter-select" id="reg-major" onchange="regApply()"><option value="">All Majors</option></select>
-      <select class="filter-select" id="reg-advisor" onchange="regApply()"><option value="">All Advisors</option></select>
-      <select class="filter-select" id="reg-sport" onchange="regApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
-      <select class="filter-select" id="reg-team" onchange="regApply()"><option value="">All Teams</option></select>
-      <input class="table-search" type="text" id="reg-search" placeholder="Search name, email, ID…" oninput="regApply()" />
+      <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
     </div>
     <div class="table-wrap">
       <div class="table-header-row">
@@ -1049,19 +1045,10 @@ function getRegisteredExportData() {
   const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
   const all = returningRegisteredList().map(r => ({...r, __onNR: nrIds.has(r.id)}));
   const cls     = document.getElementById('reg-class').value.toLowerCase();
-  const major   = document.getElementById('reg-major').value;
-  const advisor = document.getElementById('reg-advisor').value;
-  const sport   = document.getElementById('reg-sport').value;
-  const team    = document.getElementById('reg-team').value;
   const q       = document.getElementById('reg-search').value.toLowerCase();
   let visible = [...all];
   if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
-  if (major)   visible = visible.filter(r => r.major === major);
-  if (advisor) visible = visible.filter(r => r.advisor === advisor);
-  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
-  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
-  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  if (q)       visible = visible.filter(r => (r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
   visible = applySort(visible, regSort_);
   return { visible, all };
 }
@@ -2226,9 +2213,12 @@ function populateDropdowns() {
     items.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
     if (items.includes(cur)) sel.value = cur;
   }
-  ['h-major','cr-major','ns-major','reg-major'].forEach(id=>fillSelect(id,majors,'Majors'));
-  ['h-advisor','cr-advisor','ns-advisor','reg-advisor'].forEach(id=>fillSelect(id,advisors,'Advisors'));
-  ['h-team','cr-team','ns-team','reg-team'].forEach(id=>fillSelect(id,teams,'Teams'));
+  // Registered tab no longer has major/advisor/team filter dropdowns
+  // (Tony 2026-05-07 — those columns were removed too). Other tabs still
+  // populate normally; fillSelect is a no-op for missing IDs anyway.
+  ['h-major','cr-major','ns-major'].forEach(id=>fillSelect(id,majors,'Majors'));
+  ['h-advisor','cr-advisor','ns-advisor'].forEach(id=>fillSelect(id,advisors,'Advisors'));
+  ['h-team','cr-team','ns-team'].forEach(id=>fillSelect(id,teams,'Teams'));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2412,19 +2402,10 @@ function renderRegistered() {
 function regApply() {
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
   const cls     = document.getElementById('reg-class').value.toLowerCase();
-  const major   = document.getElementById('reg-major').value;
-  const advisor = document.getElementById('reg-advisor').value;
-  const sport   = document.getElementById('reg-sport').value;
-  const team    = document.getElementById('reg-team').value;
   const q       = document.getElementById('reg-search').value.toLowerCase();
   let rows = returningRegisteredList();
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
-  if (major)   rows=rows.filter(r=>r.major===major);
-  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
-  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
-  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
-  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  if (q) rows=rows.filter(r=>(r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,regSort_);
   document.getElementById('reg-title').textContent = `${n(rows.length)} of ${n(returningRegisteredList().length)} Returning Students Registered`;
   const tbody=document.getElementById('reg-tbody');
