@@ -218,18 +218,22 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 
 /* ── Dark mode toggle button (header, far right) ── */
 .theme-toggle {
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.18);
-  color: white;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.85);
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 14px;
-  line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   margin-left: 8px;
-  transition: background 0.15s, border-color 0.15s;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.theme-toggle:hover { background: rgba(255,255,255,0.22); }
+.theme-toggle:hover { background: rgba(255,255,255,0.18); color: white; }
+.theme-toggle svg   { display: block; }
 
 /* ══════════════════════════════════════════════════════════════
    Dark mode — palette inspired by Final Cut Pro / DaVinci Resolve /
@@ -267,11 +271,15 @@ body.dark .table-header-row h3 { color: #e0e0e0; }
 body.dark .upload-panel-title { color: #e0e0e0; }
 body.dark .header-subtitle, body.dark #header-subtitle { color: #a8a8a8; }
 
-/* Tables — gentle dividers, low-contrast row hover (was too bright). */
+/* Tables — borders nearly blend into surface; row hover SINKS into a
+   darker tone instead of brightening. The `!important` cascade is
+   needed because some rows carry inline background tints (e.g., NR
+   row tint) which would otherwise win against the hover rule. */
 body.dark table { color: #e0e0e0; }
-body.dark th { background: #2e2e2e !important; color: #a8a8a8 !important; border-color: #353535 !important; font-weight: 600; }
-body.dark td { border-color: #353535 !important; color: #e0e0e0; }
-body.dark tr:hover td { background: #2a2a2a; }
+body.dark th { background: #2a2a2a !important; color: #a8a8a8 !important; border-color: #2a2a2a !important; font-weight: 600; }
+body.dark td { border-color: #2a2a2a !important; color: #e0e0e0; }
+body.dark tr:hover td,
+body.dark tr:hover td[style] { background: #1a1a1a !important; }
 
 /* Inline color/background overrides — render functions set colors via
    inline style attributes. These attribute selectors with !important
@@ -359,16 +367,37 @@ body.dark svg circle[stroke="#e5e7eb"],
 body.dark svg circle[stroke="#f0f2f6"] { stroke: #353535 !important; }
 body.dark svg text[fill="#1a1d23"]   { fill: #e0e0e0 !important; }
 body.dark svg text[fill="#bbb"]      { fill: #707070 !important; }
-/* Trend chart area-fill gradient stops use #2563eb directly — soften them. */
-body.dark svg stop[stop-color="#2563eb"] { stop-color: #4a90e2 !important; }
+/* Trend chart area-fill gradient stops use #16a34a (green) — keep them
+   the same hue but slightly less vivid so the area isn't too lush on
+   the dark surface. */
+body.dark svg stop[stop-color="#16a34a"] { stop-color: #5ab57d !important; }
+body.dark svg polyline[stroke="#16a34a"] { stroke: #5ab57d; }
+body.dark svg circle[fill="#16a34a"]     { fill: #5ab57d; }
 
 /* Hold card title (was hard-coded #1a1d23, invisible on dark) */
 body.dark .hold-type  { color: #e0e0e0; }
 body.dark .hold-pct   { color: #707070; }
-body.dark .hold-count { color: #4a90e2; }
+body.dark .hold-count { color: #5ab57d; }   /* muted green accent */
 
-/* KPI hover (clickable Total Not Returning card) — soft shadow, no glow. */
-body.dark .kpi-clickable:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.5); border-color: #404040; }
+/* Donut chart titles ("Registered", "Has Blocking Hold", "Can Register",
+   per-hold names). Were #1a1d23 in light mode, invisible against the
+   dark card. Match the center-number color so the heading and number
+   read as one unit. */
+body.dark .hold-donut-name { color: #e0e0e0; }
+
+/* Hover behavior — clickable surfaces sink into a recessed darker tone
+   instead of brightening. No upward translate (Tony 2026-05-07: should
+   feel like the surface is being pressed in, not lifted). */
+body.dark .kpi-clickable:hover {
+  background: #1a1a1a !important;
+  box-shadow: inset 0 1px 4px rgba(0,0,0,0.6);
+  border-color: #2a2a2a !important;
+  transform: none;
+}
+body.dark .hold-donut-item-clickable:hover {
+  background: #1a1a1a;
+  transform: none;
+}
 
 body.dark .theme-toggle       { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
 body.dark .theme-toggle:hover { background: rgba(255,255,255,0.14); }
@@ -456,7 +485,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <button class="upload-btn" onclick="signOut()" style="margin-left:6px;">Sign out</button>
     </div>
     <button class="upload-btn admin-only" onclick="toggleUploadPanel()">Update Data</button>
-    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
   </div>
 </div>
 
@@ -2001,7 +2030,10 @@ async function renderTrendChart() {
   }
 
   if (currentLabel && currentPts) {
-    currentEl.innerHTML = renderTrendCard(currentLabel, currentPts, currentRate, true, null);
+    // Pass elapsedDays to the current chart too so it gets a vertical
+    // "Wk N of cycle" marker for at-a-glance reference (parity with the
+    // historical charts). Per Tony 2026-05-07.
+    currentEl.innerHTML = renderTrendCard(currentLabel, currentPts, currentRate, true, elapsedDays);
   } else {
     currentEl.innerHTML = '';
   }
@@ -2081,12 +2113,15 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
   }
   const yTicks = [0, 25, 50, 75, 100];
 
+  // Trend chart now uses a muted green (#16a34a) instead of blue, with a
+  // thinner stroke and smaller dots per Tony 2026-05-07.
+  const TREND_COLOR = '#16a34a';
   const svg = `
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;">
       <defs>
         <linearGradient id="trend-area-${label.replace(/[^a-z0-9]/gi,'')}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#2563eb" stop-opacity="0.32" />
-          <stop offset="100%" stop-color="#2563eb" stop-opacity="0.04" />
+          <stop offset="0%" stop-color="${TREND_COLOR}" stop-opacity="0.28" />
+          <stop offset="100%" stop-color="${TREND_COLOR}" stop-opacity="0.04" />
         </linearGradient>
       </defs>
       ${yTicks.map(v => `
@@ -2098,7 +2133,7 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       `).join('')}
       <line x1="${ML}" y1="${y(0)}" x2="${W-MR}" y2="${y(0)}" stroke="#cbd5e1" stroke-width="1" />
       <path d="${areaPath}" fill="url(#trend-area-${label.replace(/[^a-z0-9]/gi,'')})" stroke="none" />
-      <polyline fill="none" stroke="#2563eb" stroke-width="2" points="${polyPoints}" />
+      <polyline fill="none" stroke="${TREND_COLOR}" stroke-width="1.2" points="${polyPoints}" />
       ${data.map(d => {
         const cx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
         const cy = y(d.registration_rate || 0);
@@ -2116,12 +2151,13 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
         if (bgX + labelW > W - MR - 2) bgX = W - MR - 2 - labelW;
         const labelX = bgX + labelW / 2;
         const tip = `${fmtMDY(d.snapshot_date)}: ${rate}% · ${d.registered_count} registered${d.holds_count != null ? ', ' + d.holds_count + ' holds' : ''}`;
-        // Smaller dots per Tony 2026-05-07 — but keep the larger invisible
-        // hover halo (r=10) so the tooltip is still easy to trigger.
+        // Tiny dots per Tony 2026-05-07 — color matches the line so they
+        // read as "data points on a curve". The invisible hover halo
+        // (r=10) is preserved so tooltips are still easy to trigger.
         return `<g class="tp">
           <title>${tip}</title>
-          <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(37,99,235,0.0)" />
-          <circle cx="${cx}" cy="${cy}" r="2" fill="#2563eb" />
+          <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(0,0,0,0)" />
+          <circle cx="${cx}" cy="${cy}" r="1.5" fill="${TREND_COLOR}" />
           <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="18" rx="3" fill="#1a1d23" />
           <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="600" fill="white">${labelText}</text>
         </g>`;
@@ -2136,20 +2172,26 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       <text x="${ML-32}" y="${MT-6}" font-size="10" fill="#888">Reg %</text>
       ${(() => {
         // Current chart: horizontal "Today" line at the live persistence rate.
+        let currentMarkup = '';
         if (isCurrent && currentRate != null) {
-          return `
+          currentMarkup = `
             <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
             <text x="${W-MR-6}" y="${y(currentRate)-4}" text-anchor="end" font-size="11" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
           `;
         }
-        // Historical chart: vertical "equivalent point" marker at the same
-        // elapsed time as today is into the current term.
-        if (!isCurrent && elapsedDays != null && data.length > 0) {
-          const firstHist = new Date(data[0].snapshot_date + 'T12:00:00Z').getTime();
-          const equivMs = firstHist + elapsedDays * 86400000;
+        // Vertical "Wk N of cycle" marker: drawn on BOTH current and
+        // historical charts. On the historical chart it shows the
+        // equivalent point in time (where THIS year's cycle is now).
+        // On the current chart it's effectively the cursor on today,
+        // which provides at-a-glance "we're in week N of the cycle"
+        // context — Tony 2026-05-07.
+        let weekMarkup = '';
+        if (elapsedDays != null && data.length > 0) {
+          const firstSnap = new Date(data[0].snapshot_date + 'T12:00:00Z').getTime();
+          const equivMs = firstSnap + elapsedDays * 86400000;
           if (equivMs >= minD && equivMs <= maxD) {
             const xMark = x(equivMs);
-            // Find the data point closest to the equivalent date, for the rate readout
+            // Find the data point closest to the equivalent date for the rate readout.
             let closest = data[0];
             let bestDist = Infinity;
             data.forEach(d => {
@@ -2161,14 +2203,14 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
             const labelText = weeks > 0
               ? `Wk ${weeks} of cycle: ${closest.registration_rate}%`
               : `Day 0: ${closest.registration_rate}%`;
-            return `
+            weekMarkup = `
               <line x1="${xMark}" y1="${MT}" x2="${xMark}" y2="${MT+innerH}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
-              <circle cx="${xMark}" cy="${y(closest.registration_rate)}" r="4" fill="#dc2626" stroke="white" stroke-width="2" />
+              <circle cx="${xMark}" cy="${y(closest.registration_rate)}" r="3" fill="#dc2626" stroke="white" stroke-width="1.5" />
               <text x="${xMark+6}" y="${MT+12}" font-size="11" fill="#dc2626" font-weight="600">${labelText}</text>
             `;
           }
         }
-        return '';
+        return currentMarkup + weekMarkup;
       })()}
     </svg>
   `;
@@ -3690,13 +3732,16 @@ async function signOut() {
 // ── Dark-mode toggle (Tony 2026-05-07) ──
 // Persists the preference in localStorage so it survives refreshes and
 // applies on first paint to avoid a light-mode flash. The toggle button
-// in the header reflects the current state with a sun/moon icon.
+// shows a clean stroke-style SVG icon (no emoji) — moon when in light
+// mode, sun when in dark mode.
+const THEME_ICON_MOON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+const THEME_ICON_SUN  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M4.93 19.07l1.41-1.41"></path><path d="M17.66 6.34l1.41-1.41"></path></svg>';
 function applyTheme() {
   const dark = localStorage.getItem('theme') === 'dark';
   document.body.classList.toggle('dark', dark);
   const btn = document.getElementById('theme-toggle');
   if (btn) {
-    btn.textContent = dark ? '☀️' : '🌙';
+    btn.innerHTML = dark ? THEME_ICON_SUN : THEME_ICON_MOON;
     btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
   }
 }
