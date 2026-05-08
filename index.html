@@ -459,6 +459,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="regSort('major')">Major</th>
         <th class="sortable" onclick="regSort('advisor')">Advisor</th>
         <th class="sortable" onclick="regSort('sports')">Sport</th>
+        <th class="sortable" onclick="regSort('creditHours')">Credits</th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
     </div>
@@ -1231,6 +1232,13 @@ function normalizeStudent(row) {
     if (single) holdValues.push(single);
   }
 
+  // Credit hours — present on the registered CSV, one numeric value per
+  // enrollment row. Parsed as float so half-credit courses (e.g., 1.5)
+  // are preserved. Missing/blank values are 0 so the per-student sum
+  // works without special-casing.
+  const creditRaw = findField(row, ['credit_hrs','credit hours','credit hrs','credits','creditHours','credit_hours']);
+  const creditNum = creditRaw ? parseFloat(creditRaw) : 0;
+
   return {
     id:        findField(row, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,''),
     firstName,
@@ -1244,6 +1252,10 @@ function normalizeStudent(row) {
                  .split(/[,;|]/).map(s=>s.trim()).filter(Boolean),
     holds:     holdValues, // array of hold strings
     classYear: findField(row, ['class','class status','year','class year','classification','standing','student class']),
+    // Per-row credit hours. The buildData merger sums these across all
+    // enrollment rows so each student ends up with their total enrolled
+    // credit hours.
+    creditHours: isFinite(creditNum) ? creditNum : 0,
   };
 }
 
@@ -1393,13 +1405,19 @@ function buildData() {
       const s = normalizeStudent(r);
       if (!s.id) return;
       if (!registeredStudents[s.id]) {
+        // First enrollment row for this student — keep as-is. creditHours
+        // already holds this row's value; subsequent rows will add to it.
         registeredStudents[s.id] = s;
       } else {
+        // Additional enrollment row for the same student — merge sports
+        // (de-duped) and ADD credit hours to the running total.
         s.sports.forEach(sp => {
           if (sp && !registeredStudents[s.id].sports.includes(sp)) {
             registeredStudents[s.id].sports.push(sp);
           }
         });
+        registeredStudents[s.id].creditHours =
+          (registeredStudents[s.id].creditHours || 0) + (s.creditHours || 0);
       }
     });
   }
@@ -2425,15 +2443,21 @@ function regApply() {
         const displayName = (cleanLast && cleanFirst)
           ? `${cleanLast}, ${cleanFirst}`
           : (cleanLast || cleanFirst || dedupeRepeatedName(r.name) || '');
+        // Credits cell — show with at most one decimal so 12 stays "12"
+        // and 13.5 stays "13.5". Empty when the student has 0 (or null)
+        // credit hours, which usually means they aren't enrolled.
+        const credits = r.creditHours;
+        const creditCell = credits ? (Number.isInteger(credits) ? credits : credits.toFixed(1)) : '<span style="color:#bbb;font-size:11px;">—</span>';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${displayName}${nrBadge}</td>
           <td style="color:#555;">${r.email||''}</td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major||''}</td><td>${r.advisor||''}</td><td>${sc(r)}</td>
+          <td style="font-weight:600;text-align:right;">${creditCell}</td>
         </tr>`;
       }).join('')
-    : emptyRow(7,'No students match.');
+    : emptyRow(8,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3682,6 +3706,8 @@ async function loadHostedDashboardData() {
       sports: s.sports || [],
       classYear: s.class_year || '',
       holds: s.holds || [],
+      // numeric or null in the DB; coerce to a number for display formatting.
+      creditHours: s.credit_hours != null ? Number(s.credit_hours) : 0,
     };
   }
   // Returning + new + registered maps
@@ -3917,6 +3943,10 @@ async function pushDataToSupabase() {
       sports: s.sports || [],
       class_year: s.classYear || null,
       holds: s.holds || [],
+      // Per-student total enrolled credit hours, summed across all rows
+      // of the registered CSV. Sent as null when zero/unknown so the column
+      // stays sparse for non-registered students.
+      credit_hours: s.creditHours ? s.creditHours : null,
       is_new_student: s._isNew,
       is_registered: s._isReg || registeredIds.has(s.id),
       snapshot_id: snapshotId,
