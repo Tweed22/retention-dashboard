@@ -1210,8 +1210,11 @@ function processAllCSVs() {
 //  DATA PROCESSING
 // ══════════════════════════════════════════════════════════════
 function normalizeStudent(row) {
-  const firstName = findField(row, ['first name','firstname','first','given name']);
-  const lastName  = findField(row, ['last name','lastname','last','surname','family name']);
+  // Dedupe at parse time so a CSV column with "Marcolino Marcolino" gets
+  // cleaned before it ever lands in registeredStudents / nrList. Future
+  // saves to Supabase then carry the cleaned values forward.
+  const firstName = dedupeRepeatedName(findField(row, ['first name','firstname','first','given name']));
+  const lastName  = dedupeRepeatedName(findField(row, ['last name','lastname','last','surname','family name']));
   // Build display name: prefer explicit first/last columns, fall back to a single name column
   let name = '';
   if (firstName || lastName) {
@@ -3701,11 +3704,16 @@ async function loadHostedDashboardData() {
   }
   // Adapter — Supabase rows → existing in-memory shape
   function toClient(s) {
+    // Run names through dedupeRepeatedName so legacy "Smith Smith" rows
+    // already in Supabase get cleaned on every read. Anything that isn't
+    // in the doubled "X X" shape passes through unchanged.
+    const firstName = dedupeRepeatedName(s.first_name || '');
+    const lastName  = dedupeRepeatedName(s.last_name  || '');
     return {
       id: s.id,
-      firstName: s.first_name || '',
-      lastName: s.last_name || '',
-      name: [s.first_name, s.last_name].filter(Boolean).join(' '),
+      firstName,
+      lastName,
+      name: [firstName, lastName].filter(Boolean).join(' '),
       email: s.email || '',
       major: s.major || '',
       advisor: s.advisor || '',
