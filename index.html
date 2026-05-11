@@ -116,7 +116,7 @@ body.dark .reason-bar-fill  { background: #5ab57d; }
 .legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 
 /* ── Hold cards ── */
-.hold-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
+.hold-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 18px; }
 .hold-card { background: white; border-radius: 10px; border: 1px solid #e0e4ec; padding: 14px; cursor: pointer; transition: box-shadow 0.15s, border-color 0.15s; }
 .hold-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.09); border-color: #2563eb; }
 .hold-card.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
@@ -1259,7 +1259,13 @@ const EXPORT_COLUMNS = {
 function getHoldsExportData() {
   if (!currentHold) return { visible: [], all: [] };
   const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
-  const all = (holdGroups[currentHold] || []).map(r => ({...r, __holdType: currentHold, __onNR: nrIds.has(r.id)}));
+  // All Holds: deduped union with __holdType set to a comma-joined list
+  // of every hold the student has.
+  const isAllHolds = currentHold === 'All Holds';
+  const sourceRows = isAllHolds
+    ? getAllHoldsStudents().map(r => ({...r, __holdType: (r.__holdTypes || []).join(', ')}))
+    : (holdGroups[currentHold] || []).map(r => ({...r, __holdType: currentHold}));
+  const all = sourceRows.map(r => ({...r, __onNR: nrIds.has(r.id)}));
   // Apply same filters as holdsApply
   const retOnly = document.getElementById('h-returning').value === 'returning';
   const cls     = document.getElementById('h-class').value.toLowerCase();
@@ -2546,7 +2552,8 @@ function renderHoldsPage() {
   const activeCanReg = canRegisterStudents.filter(s => !gradIds.has(s.id));
   const totalUnreg = Object.values(holdGroups).reduce((a,g)=>a+g.filter(s=>!gradIds.has(s.id)).length,0) + activeCanReg.length;
   const container = document.getElementById('hold-cards-container');
-  container.innerHTML = HOLD_DISPLAY.map((h,i) => {
+  // Per-hold cards
+  const perHoldCards = HOLD_DISPLAY.map((h,i) => {
     const students = (holdGroups[h] || []).filter(s => !gradIds.has(s.id));
     const cnt = students.length;
     const likelyRet = students.filter(s => !nrIds.has(s.id)).length;
@@ -2572,9 +2579,36 @@ function renderHoldsPage() {
     </div>`;
   }).join('');
 
+  // Tony 2026-05-11: "All Holds" card — clicking it shows every student
+  // with at least one blocking hold (deduped by ID), with the table
+  // rendering each student's hold types as separate chips. Count is the
+  // unique-students-with-any-hold total, not the sum of holdGroups
+  // (which would double-count multi-hold students).
+  const allHoldsStudents = getAllHoldsStudents().filter(s => !gradIds.has(s.id));
+  const allHoldsCnt      = allHoldsStudents.length;
+  const allHoldsLikelyRet = allHoldsStudents.filter(s => !nrIds.has(s.id)).length;
+  const allHoldsNotRet    = allHoldsCnt - allHoldsLikelyRet;
+  const allHoldsPct       = totalUnreg ? Math.round(allHoldsCnt / totalUnreg * 1000) / 10 : 0;
+  const allHoldsGreenPct  = allHoldsCnt > 0 ? (allHoldsLikelyRet / allHoldsCnt) * 100 : 0;
+  const allHoldsRedPct    = allHoldsCnt > 0 ? (allHoldsNotRet    / allHoldsCnt) * 100 : 0;
+  const allHoldsCard = `<div class="hold-card${currentHold==='All Holds'?' selected':''}" onclick="holdsFilter('All Holds',this)" style="border-left:4px solid #2563eb;">
+    <div class="hold-type">All Holds</div>
+    <div class="hold-count">${n(allHoldsCnt)}</div>
+    <div class="hold-pct">${allHoldsPct}% of unregistered</div>
+    <div style="margin-top:8px;font-size:11px;display:flex;gap:10px;">
+      <span style="color:#16a34a;font-weight:600;">${n(allHoldsLikelyRet)} likely returning</span>
+      ${nrIds.size > 0 ? `<span style="color:#dc2626;font-weight:600;">${n(allHoldsNotRet)} not returning</span>` : ''}
+    </div>
+    <div class="hold-bar-bg" title="All students with any blocking hold — green = likely returning, red = declared not returning">
+      <div class="hold-bar-fill hold-bar-fill-green" style="width:${allHoldsGreenPct}%;"></div>
+      <div class="hold-bar-fill hold-bar-fill-red"   style="width:${allHoldsRedPct}%;"></div>
+    </div>
+  </div>`;
+  container.innerHTML = allHoldsCard + perHoldCards;
+
   if (!currentHold && HOLD_DISPLAY.length) {
     currentHold = HOLD_DISPLAY[0];
-    container.querySelector('.hold-card').classList.add('selected');
+    container.querySelectorAll('.hold-card')[1]?.classList.add('selected');
   }
   holdsApply();
 }
@@ -2691,6 +2725,25 @@ function holdsSort(col) {
   if (hSort.col===col) hSort.dir*=-1; else { hSort.col=col; hSort.dir=1; }
   holdsApply();
 }
+// Builds the "All Holds" student list: every student with at least one
+// blocking hold, deduped by ID. Each entry carries an __holdTypes array
+// of every hold name they're tagged with, so the Holds Breakdown table
+// can render multiple chips per row when the All Holds card is active.
+function getAllHoldsStudents() {
+  const byId = new Map();
+  HOLD_DISPLAY.forEach(h => {
+    (holdGroups[h] || []).forEach(s => {
+      const existing = byId.get(s.id);
+      if (existing) {
+        if (!existing.__holdTypes.includes(h)) existing.__holdTypes.push(h);
+      } else {
+        byId.set(s.id, { ...s, __holdTypes: [h] });
+      }
+    });
+  });
+  return [...byId.values()];
+}
+
 function holdsApply() {
   if (!currentHold) return;
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
@@ -2702,7 +2755,13 @@ function holdsApply() {
   const sport   = document.getElementById('h-sport').value;
   const team    = document.getElementById('h-team').value;
   const q       = document.getElementById('h-search').value.toLowerCase();
-  let rows = (holdGroups[currentHold]||[]).filter(r => !gradIds.has(r.id));
+  // Source: a single hold group, OR the deduped union for All Holds.
+  const isAllHolds = currentHold === 'All Holds';
+  const sourceStudents = isAllHolds
+    ? getAllHoldsStudents()
+    : (holdGroups[currentHold] || []);
+  const activeStudents = sourceStudents.filter(r => !gradIds.has(r.id));
+  let rows = [...activeStudents];
   if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
   if (major)   rows=rows.filter(r=>r.major===major);
@@ -2714,24 +2773,67 @@ function holdsApply() {
   rows = applySort(rows, hSort);
   const holdIdx = HOLD_DISPLAY.indexOf(currentHold);
   const chip = holdIdx>=0 ? HOLD_CHIPS[holdIdx] : 'chip-blue';
-  const activeStudents = (holdGroups[currentHold]||[]).filter(r => !gradIds.has(r.id));
   const total = activeStudents.length;
-  const retCount = total - activeStudents.filter(r=>nrIds.has(r.id)).length;
-  // Tony 2026-05-11: when any filter narrows the visible rows, show
-  // "showing X of Y" so it's clear how aggressive the active filters are.
-  // The "Returning Only" dropdown already affects the baseline count
-  // (retCount vs. total), so we measure "filtered" against that baseline.
-  const baseline = retOnly ? retCount : total;
-  const visible  = rows.length;
-  const baseLabel = retOnly
-    ? `${currentHold} — ${n(retCount)} Likely Returning`
-    : `${currentHold} — ${n(total)} Students`;
-  const titleEl = document.getElementById('h-title');
-  if (visible !== baseline) {
-    titleEl.innerHTML = `${baseLabel} <span style="color:#666;font-weight:500;font-size:13px;">— showing ${n(visible)}</span>`;
-  } else {
-    titleEl.textContent = baseLabel;
+
+  // Tony 2026-05-11: title shows a cascading breakdown of every active
+  // filter, each annotated with the running count after applying it.
+  // Example: "Account — 27 Likely Returning, 8 Freshman, 3 CS Major".
+  // Falls back to "Account — 47 Students" when nothing is filtered.
+  const segments = [];
+  let working = activeStudents;
+  if (retOnly) {
+    working = working.filter(r => !nrIds.has(r.id));
+    segments.push(`${n(working.length)} Likely Returning`);
   }
+  if (cls) {
+    working = working.filter(r => (r.classYear||'').toLowerCase().includes(cls));
+    const className = cls.charAt(0).toUpperCase() + cls.slice(1);
+    segments.push(`${n(working.length)} ${className}`);
+  }
+  if (major) {
+    working = working.filter(r => r.major === major);
+    segments.push(`${n(working.length)} ${major}`);
+  }
+  if (advisor) {
+    working = working.filter(r => r.advisor === advisor);
+    segments.push(`${n(working.length)} w/ ${advisor}`);
+  }
+  if (sport === 'Athletes Only') {
+    working = working.filter(r => (r.sports||[]).length > 0);
+    segments.push(`${n(working.length)} Athletes`);
+  } else if (sport === 'Non-Athletes Only') {
+    working = working.filter(r => !(r.sports||[]).length);
+    segments.push(`${n(working.length)} Non-Athletes`);
+  }
+  if (team) {
+    working = working.filter(r => (r.sports||[]).some(s => s === team));
+    segments.push(`${n(working.length)} on ${team}`);
+  }
+  if (q) {
+    working = working.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+    segments.push(`${n(working.length)} matching "${q}"`);
+  }
+  const titleEl = document.getElementById('h-title');
+  const baseHead = `${currentHold} — ${n(total)} Students`;
+  titleEl.innerHTML = segments.length
+    ? `${currentHold} — <span style="color:#1a1d23;">${segments.join(', ')}</span>`
+    : baseHead;
+
+  // Render the chip cell. In All Holds mode each row shows ALL of that
+  // student's hold types as separate chips (using each hold's accent
+  // color), so the user can see at a glance who's stacked up multiple
+  // holds. Single-hold view keeps the original single-chip behavior.
+  const renderHoldChips = (r) => {
+    if (isAllHolds && r.__holdTypes) {
+      return r.__holdTypes.map(ht => {
+        const idx = HOLD_DISPLAY.indexOf(ht);
+        const c = idx >= 0 ? HOLD_CHIPS[idx] : 'chip-blue';
+        return `<span class="chip ${c}" style="margin-right:3px;">${ht}</span>`;
+      }).join('');
+    }
+    return `<span class="chip ${chip}">${currentHold}</span>`;
+  };
+
   const tbody = document.getElementById('holds-tbody');
   tbody.innerHTML = rows.length
     ? rows.map(r => {
@@ -2743,7 +2845,7 @@ function holdsApply() {
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
           <td>${r.firstName||r.name||''}</td>
           <td style="color:#555;">${r.email}</td>
-          <td><span class="chip ${chip}">${currentHold}</span></td>
+          <td>${renderHoldChips(r)}</td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
