@@ -4509,12 +4509,15 @@ async function fetchLatestMetrics() {
 // Surface specific errors so RLS misconfig / network issues are visible.
 async function fetchDashboardData() {
   if (!sb || !isCommittee()) return null;
-  const [students, withdrawals, nrReports, terms, snapshots] = await Promise.all([
+  const [students, withdrawals, nrReports, terms, snapshots, ftft] = await Promise.all([
     sb.from('students').select('*').limit(10000),
     sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }).limit(10000),
     sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('updated_at', { ascending: false }).limit(10000),
     sb.from('terms').select('*').order('start_date', { ascending: true }),
     sb.from('csv_snapshots').select('*').order('uploaded_at', { ascending: false }).limit(1),
+    // FTFT roster — separate table, just IDs. Missing table is non-fatal
+    // (the dashboard still renders, just without FTFT badges/donuts).
+    sb.from('ftft_students').select('id').limit(10000),
   ]);
   const errs = [];
   if (students.error)    errs.push(`students: ${students.error.message}`);
@@ -4522,6 +4525,9 @@ async function fetchDashboardData() {
   if (nrReports.error)   errs.push(`not_returning_reports: ${nrReports.error.message}`);
   if (terms.error)       errs.push(`terms: ${terms.error.message}`);
   if (snapshots.error)   errs.push(`csv_snapshots: ${snapshots.error.message}`);
+  // ftft.error is logged but doesn't block the dashboard — the table may
+  // not exist yet on older deployments.
+  if (ftft.error) console.warn('ftft_students fetch failed (non-fatal):', ftft.error.message);
   if (errs.length) {
     console.error('fetchDashboardData errors:', errs);
     alert('Could not read from the database. Errors:\n\n' + errs.join('\n') +
@@ -4535,6 +4541,7 @@ async function fetchDashboardData() {
     nrReports: nrReports.data || [],
     terms: terms.data || [],
     latestSnapshot: snapshots.data?.[0] || null,
+    ftft: ftft.data || [],
   };
 }
 
@@ -4789,6 +4796,15 @@ async function loadHostedDashboardData() {
     }
     if (nxt) termSettings.nextStart = nxt.start_date;
   }
+  // FTFT roster: replace local set with whatever Supabase has. Persist back
+  // to localStorage so the badges still render if the page reloads offline.
+  // Tony 2026-05-11.
+  if (Array.isArray(data.ftft)) {
+    ftftIds = new Set(data.ftft.map(r => r.id).filter(Boolean));
+    saveFTFTIds();
+    csvLoaded.ftft = ftftIds.size > 0;
+  }
+
   // Mark CSV-loaded flags so existing render code shows the data
   csvLoaded.unreg = csvLoaded.reg = csvLoaded.new = csvLoaded.withdrawals = (data.students.length > 0);
   // Header subtitle: show data summary so Tony can confirm at a glance that
@@ -5002,6 +5018,29 @@ async function pushDataToSupabase() {
     }
     // Note: getNextTermLabel() always returns a value now (date-based fallback),
     // so the previous "snapshot skipped" branch is unreachable.
+
+    // 5c) Push the FTFT roster if the admin uploaded one this round.
+    //     The roster is meant to represent the current cohort — replace it
+    //     wholesale rather than upserting, so removed students drop off.
+    //     Skip when pendingFiles.ftft is absent (partial upload preservation).
+    if (pendingFiles.ftft) {
+      status('Step 5c/6: writing FTFT roster…');
+      const delRes = await sb.from('ftft_students').delete().not('id', 'is', null);
+      if (delRes.error) {
+        console.warn('FTFT delete failed:', delRes.error);
+      } else if (ftftIds.size) {
+        const rows = [...ftftIds].map(id => ({ id, snapshot_id: snapshotId }));
+        const insRes = await sb.from('ftft_students').insert(rows);
+        if (insRes.error) {
+          console.warn('FTFT insert failed:', insRes.error);
+          alert('Warning: main upload succeeded, but the FTFT roster failed to save.\n\n' +
+            `Error: ${insRes.error.message}\n\n` +
+            'Most likely cause: ftft_students table missing (apply migration 0003) or RLS blocks insert.');
+        } else {
+          console.log(`FTFT roster saved: ${rows.length} students`);
+        }
+      }
+    }
 
     // 6) Sync current-term withdrawals into not_returning_reports.
     //    Per Tony 2026-05-07: CSV is the final answer per student. So for
