@@ -65,6 +65,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-row-3 { grid-template-columns: repeat(3, 1fr); }
 .kpi-row-4 { grid-template-columns: repeat(4, 1fr); }
 .kpi-row-5 { grid-template-columns: repeat(5, 1fr); }
+.kpi-row-7 { grid-template-columns: repeat(7, 1fr); }
 .kpi-card { background: white; border-radius: 10px; padding: 16px 18px; border: 1px solid #e0e4ec; position: relative; overflow: hidden; }
 .kpi-clickable { cursor: pointer; transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s; }
 .kpi-clickable:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.07); border-color: #cbd5e1; }
@@ -79,6 +80,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-card.teal::before   { background:#0d9488; }
 .kpi-card.indigo::before { background:#4f46e5; }
 .kpi-card.sky::before    { background:#0284c7; }
+.kpi-card.purple::before { background:#7c3aed; }
 .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: #888; margin-bottom: 5px; }
 .kpi-value { font-size: 26px; font-weight: 800; color: #1a1d23; line-height: 1; }
 .kpi-sub { font-size: 11px; color: #888; margin-top: 4px; }
@@ -215,8 +217,11 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
 .alert-warn  { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
 
 /* ── Responsive ── */
+@media (max-width: 1300px) and (min-width: 901px) {
+  .kpi-row-7 { grid-template-columns: repeat(4, 1fr); }
+}
 @media (max-width: 900px) {
-  .kpi-row-4, .kpi-row-5 { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row-4, .kpi-row-5, .kpi-row-7 { grid-template-columns: repeat(2, 1fr); }
   .hold-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
   .nr-add-row { flex-direction: column; align-items: stretch; }
@@ -649,12 +654,14 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
   <div id="summary-content" style="display:none;">
     <div class="section-label">Headline Totals</div>
-    <div class="kpi-row kpi-row-5">
+    <div class="kpi-row kpi-row-7">
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
+      <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
@@ -2131,9 +2138,15 @@ function renderFTFTDonuts(nrIdsActive) {
   const row  = document.getElementById('status-cards-row');
   const container = document.getElementById('ftft-donuts-grid');
   if (!card || !container) return;
+  // Headline KPIs (Total FTFT + Retention Rate) live in the kpi-row above.
+  // We always update them so they reflect either real counts or "—".
+  const totalEl = document.getElementById('s-ftft-total');
+  const rateEl  = document.getElementById('s-ftft-rate');
   if (!ftftIds.size) {
     card.style.display = 'none';
     if (row) row.style.gridTemplateColumns = '1fr';
+    if (totalEl) totalEl.textContent = '—';
+    if (rateEl)  rateEl.textContent  = '—';
     return;
   }
   card.style.display = '';
@@ -2159,6 +2172,14 @@ function renderFTFTDonuts(nrIdsActive) {
     // else: in the FTFT roster but not in any current CSV → silently
     // dropped from the four donuts (shows up in the count gap).
   });
+
+  // Headline KPIs: Total FTFT cohort + Retention Rate.
+  // Retention Rate = Registered FTFT ÷ Total FTFT (Tony 2026-05-11). 0% when
+  // there are no FTFT students; matches True Persistence Rate's rounding
+  // (one decimal place) so the two numbers read together.
+  if (totalEl) totalEl.textContent = n(total);
+  const ftftRate = total ? Math.round(registered / total * 1000) / 10 : 0;
+  if (rateEl)  rateEl.textContent  = ftftRate + '%';
 
   // Tab order: Summary=0, Registered=1, Holds=2, CanReg=3, NewStudents=4,
   // NotReturning=5, FTFT=6. Donut clicks navigate to the most useful tab
