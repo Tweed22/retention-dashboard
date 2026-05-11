@@ -330,6 +330,7 @@ body.dark .table-search,
 body.dark input[type="text"],
 body.dark input[type="email"],
 body.dark input[type="number"],
+body.dark input[type="date"],
 body.dark select,
 body.dark textarea,
 body.dark .nr-edit-input,
@@ -338,8 +339,36 @@ body.dark .nr-cell-input {
   color: #e0e0e0 !important;
   border-color: #353535 !important;
 }
+/* Native date-picker indicator (the little calendar icon inside
+   input[type=date]) renders pitch-black on dark surfaces without
+   this hint. Telling the browser the control is on a dark surface
+   inverts the indicator to white so it's actually visible. */
+body.dark input[type="date"] { color-scheme: dark; }
 body.dark .filter-label { color: #a8a8a8; }
 body.dark .nr-add-row .nr-field label { color: #707070; }
+
+/* Update Data panel — drop zones + term-window block.
+   Tony 2026-05-11: when a drop zone was empty the "Unregistered Students"
+   etc. titles were hard-coded #1a1d23 and disappeared against the dark
+   panel surface. The term-window block was still rendering with its
+   light-mode #f8f9fb background; date inputs kept their white pickers.
+   Match the look of the NR add-row block (card-style surface, recessed
+   inputs, muted gray labels). */
+body.dark .drop-zone               { border-color: #404040; background: transparent; }
+body.dark .drop-zone:hover,
+body.dark .drop-zone.drag-over     { border-color: #6ba5d4; background: #1f2a3a; }
+body.dark .drop-zone.loaded        { border-color: #5ab57d; background: #1f3528; }
+body.dark .drop-zone .drop-label   { color: #e0e0e0; }
+body.dark .drop-zone .drop-hint    { color: #a8a8a8; }
+body.dark .drop-zone:not(.loaded) .drop-status { color: #a8a8a8; }
+body.dark .drop-zone.loaded .drop-status       { color: #5ab57d; }
+
+body.dark .term-settings           { background: #262626; border-color: #353535; }
+body.dark .term-settings .ts-label { color: #a8a8a8; }
+body.dark .term-settings .ts-field label { color: #a8a8a8; }
+body.dark .term-settings .ts-hint  { color: #a8a8a8; }
+body.dark .term-settings code      { background: #1a1a1a; color: #e0e0e0; padding: 1px 6px; border-radius: 4px; }
+body.dark .upload-panel-note       { background: #1f3528 !important; border-color: #2a4a36 !important; color: #5ab57d; }
 body.dark .reason-bar-label { color: #e0e0e0; }
 body.dark .reason-bar-track { background: #353535; }
 body.dark .hold-bar-bg { background: #353535; }
@@ -1396,8 +1425,47 @@ function processAllCSVs() {
   // Run the auto-sync after buildData so registeredIds + students maps are populated
   // and the NR rows we create can reconcile against them.
   if (csvLoaded.withdrawals) syncWithdrawalsToNR();
+  // Tony 2026-05-11: a student who graduated will not appear on ANY of the
+  // four source CSVs (registered, unregistered, new, withdrawals). When that
+  // happens, drop them from the NR list and headline count so the dashboard
+  // stops tracking them. Only safe to run when all four CSVs are present —
+  // otherwise we'd be removing students just because their bucket wasn't
+  // uploaded yet.
+  purgeGraduatedFromNR();
   renderAll();
   toggleUploadPanel();
+}
+
+// Remove NR rows for students who graduated. A student is considered graduated
+// when their ID does not appear in registeredStudents, returningStudents,
+// newStudents, OR withdrawalsList — i.e. they're gone from every source CSV.
+// Only runs when all four CSVs are currently loaded; partial uploads can't
+// distinguish "missing because graduated" from "missing because that CSV
+// wasn't part of this upload." Rows without an ID can't be matched reliably
+// and are left untouched. Returns the number of rows removed (used by the
+// Supabase wrapper to soft-delete the matching server rows).
+function purgeGraduatedFromNR() {
+  if (!(csvLoaded.unreg && csvLoaded.reg && csvLoaded.new && csvLoaded.withdrawals)) return [];
+  const withdrawalIds = new Set(withdrawalsList.map(w => w.id).filter(Boolean));
+  const removed = [];
+  for (let i = nrList.length - 1; i >= 0; i--) {
+    const r = nrList[i];
+    if (!r.id) continue;            // can't tell — skip
+    const stillPresent =
+      registeredStudents[r.id] ||
+      returningStudents[r.id]  ||
+      newStudents[r.id]        ||
+      withdrawalIds.has(r.id);
+    if (!stillPresent) {
+      removed.push(r);
+      nrList.splice(i, 1);
+    }
+  }
+  if (removed.length) saveNRList();
+  // Stash the just-purged rows so the hosted-mode wrapper can soft-delete
+  // them in Supabase too. Cleared by the wrapper after it processes them.
+  window._lastPurgedGradRows = removed;
+  return removed;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4532,7 +4600,21 @@ function chunk(arr, n) {
 const _origProcessAll = processAllCSVs;
 processAllCSVs = async function processAllCSVsWithSupabase() {
   _origProcessAll();
+  // After the local purge runs, soft-delete any graduated rows in Supabase
+  // too. Doing it BEFORE pushDataToSupabase() so the snapshot reflects the
+  // already-cleaned NR list.
   if (HOSTED && isAdmin()) {
+    const purged = window._lastPurgedGradRows || [];
+    for (const row of purged) {
+      if (!row._supabaseId) continue; // never made it to the server — nothing to do
+      const { error } = await sb.from('not_returning_reports')
+        .update({ is_hidden: true })
+        .eq('id', row._supabaseId);
+      if (error) {
+        console.warn(`Failed to soft-delete graduated NR row ${row._supabaseId}:`, error.message);
+      }
+    }
+    window._lastPurgedGradRows = [];
     const ok = await pushDataToSupabase();
     if (ok) await loadHostedDashboardData();
   }
