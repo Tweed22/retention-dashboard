@@ -754,7 +754,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="holdsSort('id')">Student ID</th>
         <th class="sortable" onclick="holdsSort('lastName')">Last Name</th>
         <th class="sortable" onclick="holdsSort('firstName')">First Name</th>
-        <th>Email</th>
         <th>Hold</th>
         <th class="sortable" onclick="holdsSort('classYear')">Class</th>
         <th class="sortable" onclick="holdsSort('major')">Major</th>
@@ -796,7 +795,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="crSort('id')">Student ID</th>
         <th class="sortable" onclick="crSort('lastName')">Last Name</th>
         <th class="sortable" onclick="crSort('firstName')">First Name</th>
-        <th>Email</th>
         <th class="sortable" onclick="crSort('classYear')">Class</th>
         <th class="sortable" onclick="crSort('major')">Major</th>
         <th class="sortable" onclick="crSort('advisor')">Advisor</th>
@@ -844,7 +842,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="nsSort('id')">Student ID</th>
         <th class="sortable" onclick="nsSort('lastName')">Last Name</th>
         <th class="sortable" onclick="nsSort('firstName')">First Name</th>
-        <th>Email</th>
         <th class="sortable" onclick="nsSort('status')">Status</th>
         <th class="sortable" onclick="nsSort('classYear')">Class</th>
         <th class="sortable" onclick="nsSort('major')">Major</th>
@@ -893,7 +890,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="ftftSort('id')">Student ID</th>
         <th class="sortable" onclick="ftftSort('lastName')">Last Name</th>
         <th class="sortable" onclick="ftftSort('firstName')">First Name</th>
-        <th class="sortable" onclick="ftftSort('email')">Email</th>
         <th class="sortable" onclick="ftftSort('__status')">Status</th>
         <th class="sortable" onclick="ftftSort('major')">Major</th>
         <th class="sortable" onclick="ftftSort('advisor')">Advisor</th>
@@ -2952,7 +2948,7 @@ function ftftApply() {
 
   const tbody = document.getElementById('ftft-tbody');
   if (!rows.length) {
-    tbody.innerHTML = emptyRow(7, 'No FTFT students match the current filters.');
+    tbody.innerHTML = emptyRow(6, 'No FTFT students match the current filters.');
     return;
   }
   const statusChip = (s) =>
@@ -2964,7 +2960,6 @@ function ftftApply() {
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
     <td>${r.firstName||r.name||''}</td>
-    <td style="color:#555;">${r.email||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td><span class="chip ${statusChip(r.__status)}">${r.__status}</span></td>
     <td>${r.major||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td>${r.advisor||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
@@ -3183,13 +3178,12 @@ function holdsApply() {
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
-          <td style="color:#555;">${r.email}</td>
           <td>${renderHoldChips(r)}</td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
-    : emptyRow(9,'No students match.');
+    : emptyRow(8,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3231,12 +3225,11 @@ function crApply() {
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
-          <td style="color:#555;">${r.email}</td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
-    : emptyRow(8,'No students match.');
+    : emptyRow(7,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3337,13 +3330,12 @@ function nsApply() {
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
-          <td style="color:#555;">${r.email}</td>
           <td><span class="chip ${r.status==='Registered'?'chip-green':r.status==='Withdrawn'?'chip-red':'chip-amber'}">${r.status}</span></td>
           <td>${classChip(r.classYear)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
-    : emptyRow(9,'No students match.');
+    : emptyRow(8,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
