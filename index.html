@@ -1935,16 +1935,25 @@ function renderSummary() {
   // Returning Student Status: three donuts at a glance — Registered, Has Blocking
   // Hold, Can Register. Each shows its count in the center, % of total returning
   // below, with the donut ring filled to the percentage in its segment color.
-  // Tony 2026-05-11: count each student ONCE in "Has Blocking Hold". Previously
-  // this summed holdGroups lengths, so a student with two blocking holds was
-  // counted twice and the donut percentage could exceed the share of unique
-  // students with holds. Dedupe by student id (falls back to the object
-  // identity if id is missing) so multi-hold students contribute once.
+  //
+  // Tony 2026-05-11: count each student ONCE in "Has Blocking Hold" (dedupe by
+  // ID so multi-hold students contribute one). Also apply the same exclusions
+  // the Registered donut uses — graduating AND NR — to the other two donuts,
+  // so the three counts are mutually exclusive and exhaustive of totalReturning.
+  // They should sum to ~totalReturning (and the percentages to ~100%) because:
+  //   Registered      = registered.csv ∩ returning ∩ !NR ∩ !grad
+  //   Has Blocking    = unreg.csv ∩ has-hold     ∩ !NR ∩ !grad
+  //   Can Register    = unreg.csv ∩ no-hold      ∩ !NR ∩ !grad
+  // registered.csv and unreg.csv are disjoint by definition, and has-hold /
+  // no-hold partition unreg.csv.
+  const nrIdsActive = new Set(dedupedNR.map(s => s.id).filter(Boolean));
   const uniqueWithHold = new Set();
   Object.values(holdGroups).forEach(g => g.forEach(s => {
-    if (isActive(s.id)) uniqueWithHold.add(s.id || s);  // graduating excluded
+    if (isActive(s.id) && !nrIdsActive.has(s.id)) uniqueWithHold.add(s.id || s);
   }));
-  renderReturningDonuts(retRegisteredCount, uniqueWithHold.size, canReg, totalRet);
+  const canRegActive = canRegisterStudents
+    .filter(s => isActive(s.id) && !nrIdsActive.has(s.id)).length;
+  renderReturningDonuts(retRegisteredCount, uniqueWithHold.size, canRegActive, totalRet);
 
   // Per-hold donuts: one circle graph per hold type. Center number = students
   // with this hold who are still likely returning (i.e. NOT on the NR list).
