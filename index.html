@@ -23,7 +23,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .upload-panel.open { display: block; }
 .upload-panel-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
 .upload-panel-note { font-size: 12px; color: #555; margin-bottom: 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 7px; padding: 9px 13px; display: flex; align-items: flex-start; gap: 8px; }
-.upload-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.upload-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
 .term-settings { background: #f8f9fb; border: 1px solid #e0e4ec; border-radius: 8px; padding: 12px 14px; margin-top: 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .term-settings .ts-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #888; }
 .term-settings .ts-field { display: flex; flex-direction: column; gap: 3px; }
@@ -163,6 +163,12 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 .chip-indigo { background:#e0e7ff; color:#3730a3; }
 .chip-gray   { background:#f3f4f6; color:#374151; }
 .athlete-badge { display:inline-flex; align-items:center; gap:3px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:20px; padding:2px 7px; font-size:11px; color:#15803d; font-weight:600; }
+/* FTFT (First-Time Full-Time) badge — appears next to a student's last
+   name everywhere they're listed when their ID is in the FTFT roster.
+   Distinct purple/indigo so it doesn't collide with the existing chip
+   colors (class year, hold type, withdrawal status). */
+.ftft-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; vertical-align:middle; }
+body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a; }
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 40px 20px; color: #888; }
@@ -595,6 +601,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="drop-hint">Completed withdrawals<br>Filtered by Last Active Date, not processed date</div>
       <div class="drop-status" id="dz-withdrawals-status">No file loaded</div>
     </div>
+    <div class="drop-zone" id="dz-ftft" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'ftft',this)">
+      <input type="file" accept=".csv" onchange="fileInput(event,'ftft','dz-ftft')" />
+      <div class="drop-label">First-Time Full-Time</div>
+      <div class="drop-hint">FTFT roster — only the ID column is required<br>Tags students wherever they appear</div>
+      <div class="drop-status" id="dz-ftft-status">No file loaded</div>
+    </div>
   </div>
   <div class="term-settings">
     <span class="ts-label">Term window:</span>
@@ -626,6 +638,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div class="nav-tab gated-only" onclick="showPage('holds',this)">Holds Breakdown</div>
   <div class="nav-tab gated-only" onclick="showPage('canreg',this)">Can Register</div>
   <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
+  <div class="nav-tab gated-only" onclick="showPage('ftft',this)">FTFT</div>
   <div class="nav-tab gated-only" onclick="showPage('notreturning',this)">Not Returning</div>
 </div>
 
@@ -643,11 +656,16 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
     </div>
-    <div class="charts-row" style="grid-template-columns: 1fr;">
+    <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
         <div class="card-title">Returning Student Status</div>
         <div class="card-subtitle">Registered · Has Blocking Hold · Can Register — Each segment of the returning population at a glance</div>
         <div id="returning-donuts-grid" class="returning-donuts-grid"></div>
+      </div>
+      <div class="card" id="ftft-status-card" style="display:none;">
+        <div class="card-title">First-Time Full-Time Status</div>
+        <div class="card-subtitle">Registered · Has Hold · Can Register · Not Returning — Each segment of the FTFT cohort</div>
+        <div id="ftft-donuts-grid" class="returning-donuts-grid" style="grid-template-columns: repeat(4, 1fr);"></div>
       </div>
     </div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
@@ -831,6 +849,52 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
 </div>
 
+
+<!-- ══════════════════════════ FTFT ══════════════════════════ -->
+<div class="page" id="page-ftft">
+  <div id="ftft-empty" class="empty-state"><p>No FTFT roster loaded yet.<br><a onclick="toggleUploadPanel()">Upload your FTFT CSV</a> to see the cohort here.</p></div>
+  <div id="ftft-content" style="display:none;">
+    <div class="kpi-row kpi-row-5">
+      <div class="kpi-card indigo"><div class="kpi-label">FTFT Total</div><div class="kpi-value" id="ftft-total">0</div><div class="kpi-sub">Students on the FTFT roster</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Registered</div><div class="kpi-value" id="ftft-reg">0</div><div class="kpi-sub">In Registered CSV, not on NR</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="ftft-hold">0</div><div class="kpi-sub">In a blocking-hold group, not on NR</div></div>
+      <div class="kpi-card teal"><div class="kpi-label">Can Register</div><div class="kpi-value" id="ftft-canreg">0</div><div class="kpi-sub">Unregistered, no blocking hold</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">FTFT student on the NR list</div></div>
+    </div>
+    <div class="section-label">First-Time Full-Time Roster</div>
+    <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="ftft-status" onchange="ftftApply()">
+        <option value="">All Statuses</option>
+        <option>Registered</option>
+        <option>Has Hold</option>
+        <option>Can Register</option>
+        <option>Not Returning</option>
+        <option>Unknown</option>
+      </select>
+      <input class="table-search" type="text" id="ftft-search" placeholder="Search name or ID…" oninput="ftftApply()" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="ftft-title">FTFT Students</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('ftft','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('ftft','all')" title="Download every FTFT student">Download all (.csv)</button>
+        </div>
+      </div>
+      <table><thead><tr>
+        <th class="sortable" onclick="ftftSort('id')">Student ID</th>
+        <th class="sortable" onclick="ftftSort('lastName')">Last Name</th>
+        <th class="sortable" onclick="ftftSort('firstName')">First Name</th>
+        <th class="sortable" onclick="ftftSort('email')">Email</th>
+        <th class="sortable" onclick="ftftSort('__status')">Status</th>
+        <th class="sortable" onclick="ftftSort('major')">Major</th>
+        <th class="sortable" onclick="ftftSort('advisor')">Advisor</th>
+      </tr></thead>
+      <tbody id="ftft-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════ NOT RETURNING ══════════════════════════ -->
 <div class="page" id="page-notreturning">
@@ -1035,9 +1099,31 @@ function normalizeSportList(commaJoined) {
   return out.join(', ');
 }
 
-let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [];
-let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false };
+let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [], rawFTFT = [];
+let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false, ftft: false };
 let pendingFiles = {};
+
+// First-Time Full-Time roster — Set of student IDs from the FTFT CSV upload.
+// Persisted to localStorage so a refresh restores the badge without needing
+// a re-upload. Tony 2026-05-11.
+let ftftIds = new Set();
+function loadFTFTIds() {
+  try {
+    const raw = localStorage.getItem('ftft_ids');
+    if (raw) ftftIds = new Set(JSON.parse(raw));
+  } catch(e) { ftftIds = new Set(); }
+}
+function saveFTFTIds() {
+  try { localStorage.setItem('ftft_ids', JSON.stringify([...ftftIds])); } catch(e) {}
+}
+function isFTFT(id) { return id && ftftIds.has(id); }
+// Markup helper used inside table cells to render an FTFT pill next to
+// a student's name when their ID is in the FTFT roster. Returns a leading
+// space + span, or an empty string. Designed to be appended to whatever
+// cell already shows the student's name.
+function ftftBadge(id) {
+  return isFTFT(id) ? ' <span class="ftft-badge" title="First-Time Full-Time">FTFT</span>' : '';
+}
 
 // Processed data
 let returningStudents   = {}; // id -> student obj
@@ -1251,6 +1337,16 @@ const EXPORT_COLUMNS = {
     { header: 'Source',         getter: r => r._sourceWithdrawalId ? 'CSV import' : 'Human entry' },
     { header: 'Withdrawal LDA', getter: r => r._withdrawalLDA || '' },
   ],
+  ftft: [
+    { header: 'Student ID', getter: r => r.id },
+    { header: 'Last Name',  getter: r => r.lastName },
+    { header: 'First Name', getter: r => r.firstName },
+    { header: 'Email',      getter: r => r.email },
+    { header: 'Status',     getter: r => r.__status },
+    { header: 'Major',      getter: r => r.major },
+    { header: 'Advisor',    getter: r => r.advisor },
+    { header: 'Class Year', getter: r => r.classYear },
+  ],
 };
 
 // Per-tab data accessors. Each returns {visible, all}. `visible` mirrors
@@ -1379,6 +1475,20 @@ function getNRExportData() {
   return { visible, all };
 }
 
+function getFTFTExportData() {
+  const gradIds = getGraduatingIdSet();
+  const all = buildFTFTRows().filter(r => !gradIds.has(r.id));
+  const statusFilter = document.getElementById('ftft-status')?.value || '';
+  const q = (document.getElementById('ftft-search')?.value || '').toLowerCase();
+  let visible = [...all];
+  if (statusFilter) visible = visible.filter(r => r.__status === statusFilter);
+  if (q) visible = visible.filter(r =>
+    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q)
+  );
+  visible = applySort(visible, ftftSort_);
+  return { visible, all };
+}
+
 // Top-level handler — wired to the buttons. `tab` is one of the EXPORT_COLUMNS keys.
 function exportTabCSV(tab, scope /* 'visible' | 'all' */) {
   const cols = EXPORT_COLUMNS[tab];
@@ -1391,6 +1501,7 @@ function exportTabCSV(tab, scope /* 'visible' | 'all' */) {
     case 'newstudents':  data = getNewStudentsExportData(); break;
     case 'withdrawals':  data = getWithdrawalsExportData(); break;
     case 'notreturning': data = getNRExportData(); break;
+    case 'ftft':         data = getFTFTExportData(); break;
     default: return;
   }
   const rows = scope === 'all' ? data.all : data.visible;
@@ -1426,6 +1537,18 @@ function processAllCSVs() {
   if (pendingFiles.reg)         { rawReg         = parseCSV(pendingFiles.reg);         csvLoaded.reg         = true; }
   if (pendingFiles.new)         { rawNew         = parseCSV(pendingFiles.new);         csvLoaded.new         = true; }
   if (pendingFiles.withdrawals) { rawWithdrawals = parseCSV(pendingFiles.withdrawals); csvLoaded.withdrawals = true; }
+  if (pendingFiles.ftft) {
+    rawFTFT       = parseCSV(pendingFiles.ftft);
+    csvLoaded.ftft = true;
+    // Build ftftIds from whichever column matches an ID candidate. Other
+    // columns are ignored — only IDs are needed to drive the badge. The
+    // existing findField() resolver matches loose header names like "Student ID".
+    ftftIds = new Set(
+      rawFTFT.map(r => findField(r, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim())
+            .filter(Boolean)
+    );
+    saveFTFTIds();
+  }
 
   buildData();
   // Run the auto-sync after buildData so registeredIds + students maps are populated
@@ -1820,6 +1943,7 @@ function renderAll() {
   renderNewStudents();
   renderRegistered();
   renderWithdrawals();
+  renderFTFT();
   // Recompute NR KPIs so the "Registered for Courses" count reflects the new
   // registeredIds set after a CSV upload (existing rows can flip status).
   nrUpdateKpis();
@@ -1955,6 +2079,10 @@ function renderSummary() {
     .filter(s => isActive(s.id) && !nrIdsActive.has(s.id)).length;
   renderReturningDonuts(retRegisteredCount, uniqueWithHold.size, canRegActive, totalRet);
 
+  // First-Time Full-Time donuts — mirror Returning Student Status but
+  // restricted to ftftIds. Tony 2026-05-11.
+  renderFTFTDonuts(nrIdsActive);
+
   // Per-hold donuts: one circle graph per hold type. Center number = students
   // with this hold who are still likely returning (i.e. NOT on the NR list).
   // Smaller number below = total students with this hold. Ring shows the not-returning
@@ -1986,6 +2114,69 @@ function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
     label: seg.label,
     count: seg.count,
     total: totalRet,
+    color: seg.color,
+    onclick: seg.onclick,
+  })).join('');
+}
+
+// First-Time Full-Time cohort breakdown — four donuts mirroring the
+// Returning Student Status block, but restricted to ftftIds. The card
+// auto-hides when no FTFT data has been uploaded yet.
+//   Registered    : FTFT ID in registeredIds, not on NR
+//   Has Hold      : FTFT ID in any holdGroup,  not on NR
+//   Can Register  : FTFT ID in canRegisterStudents, not on NR
+//   Not Returning : FTFT ID on the NR list (any reason except graduating)
+function renderFTFTDonuts(nrIdsActive) {
+  const card = document.getElementById('ftft-status-card');
+  const row  = document.getElementById('status-cards-row');
+  const container = document.getElementById('ftft-donuts-grid');
+  if (!card || !container) return;
+  if (!ftftIds.size) {
+    card.style.display = 'none';
+    if (row) row.style.gridTemplateColumns = '1fr';
+    return;
+  }
+  card.style.display = '';
+  if (row) row.style.gridTemplateColumns = '1fr 1fr';
+
+  // Exclude graduating IDs from the FTFT cohort total too.
+  const gradIds = getGraduatingIdSet();
+  const ftft    = [...ftftIds].filter(id => !gradIds.has(id));
+  const total   = ftft.length;
+
+  // Bucketize. Mutually exclusive: a student is either on the NR list
+  // (counts toward Not Returning) or one of the three return states.
+  let registered = 0, hasHold = 0, canReg = 0, notReturning = 0;
+  const holdIdSet = new Set();
+  Object.values(holdGroups).forEach(g => g.forEach(s => holdIdSet.add(s.id)));
+  const canRegIdSet = new Set(canRegisterStudents.map(s => s.id));
+
+  ftft.forEach(id => {
+    if (nrIdsActive.has(id))             notReturning++;
+    else if (registeredIds.has(id))      registered++;
+    else if (holdIdSet.has(id))          hasHold++;
+    else if (canRegIdSet.has(id))        canReg++;
+    // else: in the FTFT roster but not in any current CSV → silently
+    // dropped from the four donuts (shows up in the count gap).
+  });
+
+  // Tab order: Summary=0, Registered=1, Holds=2, CanReg=3, NewStudents=4,
+  // NotReturning=5, FTFT=6. Donut clicks navigate to the most useful tab
+  // for that segment.
+  const segments = [
+    { label:'Registered',    count: registered,   color:'#16a34a',
+      onclick: "showPage('registered', document.querySelectorAll('.nav-tab')[1])" },
+    { label:'Has Hold',      count: hasHold,      color:'#dc2626',
+      onclick: "showPage('holds', document.querySelectorAll('.nav-tab')[2])" },
+    { label:'Can Register',  count: canReg,       color:'#0d9488',
+      onclick: "showPage('canreg', document.querySelectorAll('.nav-tab')[3])" },
+    { label:'Not Returning', count: notReturning, color:'#d97706',
+      onclick: "goToNRPage()" },
+  ];
+  container.innerHTML = segments.map(seg => svgSegmentDonut({
+    label: seg.label,
+    count: seg.count,
+    total,
     color: seg.color,
     onclick: seg.onclick,
   })).join('');
@@ -2642,6 +2833,124 @@ function renderNewStudents() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  FTFT (First-Time Full-Time) — Tony 2026-05-11
+// ══════════════════════════════════════════════════════════════
+// Sort state for the FTFT roster table.
+let ftftSort_ = { col: null, dir: 1 };
+function ftftSort(col) {
+  if (ftftSort_.col === col) ftftSort_.dir *= -1;
+  else { ftftSort_.col = col; ftftSort_.dir = 1; }
+  ftftApply();
+}
+
+// Compose a single row per FTFT student. We pull identity fields from
+// whichever roster the student appears in (registered → returning →
+// new), with the NR list as a fall-back so withdrawn-only students
+// still get rendered. The __status field drives the chip + filter
+// dropdown and falls back to "Unknown" when the FTFT student isn't in
+// any current CSV (likely a roster mismatch — surfaces for cleanup).
+function buildFTFTRows() {
+  const nrIds = new Set(nrList.map(s => s.id).filter(Boolean));
+  const holdIdSet = new Set();
+  Object.values(holdGroups).forEach(g => g.forEach(s => holdIdSet.add(s.id)));
+  const canRegIdSet = new Set(canRegisterStudents.map(s => s.id));
+  const nrById = new Map(nrList.filter(r => r.id).map(r => [r.id, r]));
+
+  return [...ftftIds].map(id => {
+    const stu = registeredStudents[id]
+             || returningStudents[id]
+             || newStudents[id]
+             || nrById.get(id)
+             || { id };
+    let status;
+    if (nrIds.has(id))             status = 'Not Returning';
+    else if (registeredIds.has(id)) status = 'Registered';
+    else if (holdIdSet.has(id))     status = 'Has Hold';
+    else if (canRegIdSet.has(id))   status = 'Can Register';
+    else                            status = 'Unknown';
+    return {
+      id,
+      lastName:  stu.lastName  || '',
+      firstName: stu.firstName || '',
+      name:      stu.name      || '',
+      email:     stu.email     || '',
+      major:     stu.major     || '',
+      advisor:   stu.advisor   || '',
+      classYear: stu.classYear || '',
+      __status:  status,
+    };
+  });
+}
+
+function renderFTFT() {
+  const emptyEl = document.getElementById('ftft-empty');
+  const contentEl = document.getElementById('ftft-content');
+  if (!emptyEl || !contentEl) return;
+  if (!ftftIds.size) {
+    emptyEl.style.display = 'block';
+    contentEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  contentEl.style.display = 'block';
+
+  const all = buildFTFTRows();
+  // KPI counts — match what the Summary card shows. Graduating students
+  // are excluded the same way the other dashboards exclude them.
+  const gradIds = getGraduatingIdSet();
+  const active  = all.filter(r => !gradIds.has(r.id));
+  const by = (status) => active.filter(r => r.__status === status).length;
+  document.getElementById('ftft-total').textContent  = n(active.length);
+  document.getElementById('ftft-reg').textContent    = n(by('Registered'));
+  document.getElementById('ftft-hold').textContent   = n(by('Has Hold'));
+  document.getElementById('ftft-canreg').textContent = n(by('Can Register'));
+  document.getElementById('ftft-nr').textContent     = n(by('Not Returning'));
+
+  ftftApply();
+}
+
+function ftftApply() {
+  if (!ftftIds.size) return;
+  const statusFilter = document.getElementById('ftft-status')?.value || '';
+  const q = (document.getElementById('ftft-search')?.value || '').toLowerCase();
+  const gradIds = getGraduatingIdSet();
+  let rows = buildFTFTRows().filter(r => !gradIds.has(r.id));
+  if (statusFilter) rows = rows.filter(r => r.__status === statusFilter);
+  if (q) rows = rows.filter(r =>
+    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q)
+  );
+  rows = applySort(rows, ftftSort_);
+
+  const total = buildFTFTRows().filter(r => !gradIds.has(r.id)).length;
+  const titleEl = document.getElementById('ftft-title');
+  if (titleEl) {
+    titleEl.innerHTML = rows.length !== total
+      ? `FTFT Students <span style="color:#666;font-weight:500;font-size:13px;">— showing ${n(rows.length)} of ${n(total)}</span>`
+      : `FTFT Students <span style="color:#666;font-weight:500;font-size:13px;">— ${n(total)} total</span>`;
+  }
+
+  const tbody = document.getElementById('ftft-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = emptyRow(7, 'No FTFT students match the current filters.');
+    return;
+  }
+  const statusChip = (s) =>
+    s === 'Registered'    ? 'chip-green'  :
+    s === 'Has Hold'      ? 'chip-red'    :
+    s === 'Can Register'  ? 'chip-teal'   :
+    s === 'Not Returning' ? 'chip-amber'  : 'chip-gray';
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
+    <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
+    <td>${r.firstName||r.name||''}</td>
+    <td style="color:#555;">${r.email||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td><span class="chip ${statusChip(r.__status)}">${r.__status}</span></td>
+    <td>${r.major||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td>${r.advisor||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+  </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
 //  DROPDOWN POPULATION
 // ══════════════════════════════════════════════════════════════
 function populateDropdowns() {
@@ -2851,7 +3160,7 @@ function holdsApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
           <td style="color:#555;">${r.email}</td>
           <td>${renderHoldChips(r)}</td>
@@ -2899,7 +3208,7 @@ function crApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
           <td style="color:#555;">${r.email}</td>
           <td>${classChip(r.classYear)}</td>
@@ -2963,7 +3272,7 @@ function regApply() {
         const creditCell = credits ? (Number.isInteger(credits) ? credits : credits.toFixed(1)) : '<span style="color:#bbb;font-size:11px;">—</span>';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${displayName}${nrBadge}</td>
+          <td style="font-weight:600;">${displayName}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${classChip(r.classYear)}</td>
           <td style="font-weight:600;text-align:right;">${creditCell}</td>
         </tr>`;
@@ -3005,7 +3314,7 @@ function nsApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
           <td style="color:#555;">${r.email}</td>
           <td><span class="chip ${r.status==='Registered'?'chip-green':r.status==='Withdrawn'?'chip-red':'chip-amber'}">${r.status}</span></td>
@@ -3421,7 +3730,7 @@ function nrRenderStaticRow(r) {
   const classCell = r.classYear ? classChip(r.classYear) : '<span style="color:#bbb;font-size:11px;">—</span>';
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
-    <td style="font-weight:600;">${lastCell}</td>
+    <td style="font-weight:600;">${lastCell}${ftftBadge(r.id)}</td>
     <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td>${classCell}</td>
     <td style="font-size:11px;">${sportCell}</td>
@@ -3835,7 +4144,7 @@ function _wdRenderLegacy_DEAD() {
     else                            nrCell = '<span style="color:#bbb;font-size:11px;">—</span>';
     return `<tr>
       <td style="font-family:monospace;font-size:11px;color:#555;">${w.id||'—'}</td>
-      <td style="font-weight:600;">${w.name||'—'}</td>
+      <td style="font-weight:600;">${w.name||'—'}${ftftBadge(w.id)}</td>
       <td style="font-family:monospace;font-size:11px;">${w.lastActiveDate||'—'}</td>
       <td style="font-family:monospace;font-size:11px;color:#888;">${w.processedDate||'—'}</td>
       <td>${w.reason||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
@@ -5157,6 +5466,7 @@ function startRealtime() {
 loadNRList();
 loadIgnoredWithdrawals();
 loadTermSettings();
+loadFTFTIds();
 nrPopulateAddReason();
 nrPopulateReasonFilter();
 nrUpdateKpis();
