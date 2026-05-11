@@ -84,6 +84,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: #888; margin-bottom: 5px; }
 .kpi-value { font-size: 26px; font-weight: 800; color: #1a1d23; line-height: 1; }
 .kpi-sub { font-size: 11px; color: #888; margin-top: 4px; }
+/* "Potential" sub-line on the Persistence and Retention cards — shows
+   the upper-bound rate if every student who could still return did
+   register. Lighter than the main value but heavier than .kpi-sub
+   so it reads as a related secondary metric, not body copy. */
+.kpi-potential { font-size: 12px; color: #b0b6c2; font-weight: 600; margin-top: 2px; }
+body.dark .kpi-potential { color: #6e7280; }
 
 /* ── Charts row ── */
 .charts-row { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 20px; }
@@ -660,8 +666,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
-      <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
+      <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
@@ -2050,6 +2056,16 @@ function renderSummary() {
   document.getElementById('s-new-total').textContent = n(newTotal);
   document.getElementById('s-ret-rate').textContent = retRate + '%';
 
+  // "Potential" Persistence Rate — if every returning student who isn't on
+  // the NR list ended up registered. Numerator: Registered + Has Hold +
+  // Can Register (= totalReturning). Denominator: Eligible to Return.
+  // Tony 2026-05-11.
+  const potentialRet = eligibleReturn
+    ? Math.round(totalReturning / eligibleReturn * 1000) / 10
+    : 0;
+  const retPotEl = document.getElementById('s-ret-potential');
+  if (retPotEl) retPotEl.textContent = 'Potential: ' + potentialRet + '%';
+
   // Variables the donuts and existing computation expect; alias to current
   // values so existing render code keeps working.
   const totalRet = totalReturning;
@@ -2144,11 +2160,13 @@ function renderFTFTDonuts(nrIdsActive) {
   // We always update them so they reflect either real counts or "—".
   const totalEl = document.getElementById('s-ftft-total');
   const rateEl  = document.getElementById('s-ftft-rate');
+  const potEl   = document.getElementById('s-ftft-potential');
   if (!ftftIds.size) {
     card.style.display = 'none';
     if (row) row.style.gridTemplateColumns = '1fr';
     if (totalEl) totalEl.textContent = '—';
     if (rateEl)  rateEl.textContent  = '—';
+    if (potEl)   potEl.textContent   = 'Potential: —';
     return;
   }
   card.style.display = '';
@@ -2182,6 +2200,13 @@ function renderFTFTDonuts(nrIdsActive) {
   if (totalEl) totalEl.textContent = n(total);
   const ftftRate = total ? Math.round(registered / total * 1000) / 10 : 0;
   if (rateEl)  rateEl.textContent  = ftftRate + '%';
+  // "Potential" Retention Rate — Registered + Has Hold + Can Register
+  // (= every FTFT student NOT on the NR list) ÷ Total FTFT. Upper bound
+  // if every FTFT student who could still return registered.
+  const ftftPotential = total
+    ? Math.round((registered + hasHold + canReg) / total * 1000) / 10
+    : 0;
+  if (potEl) potEl.textContent = 'Potential: ' + ftftPotential + '%';
 
   // Tab order: Summary=0, Registered=1, Holds=2, CanReg=3, NewStudents=4,
   // NotReturning=5, FTFT=6. Donut clicks navigate to the most useful tab
