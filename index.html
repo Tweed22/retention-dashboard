@@ -2664,10 +2664,19 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
             const labelText = weeks > 0
               ? `Wk ${weeks} of cycle: ${closest.registration_rate}%`
               : `Day 0: ${closest.registration_rate}%`;
+            // Tony 2026-05-11: when the marker sits near the right edge
+            // (always true on the Current Term chart, where elapsedDays =
+            // today and the chart ends at today), the default left-anchored
+            // text overflows past W-MR and gets clipped — the user only
+            // sees "W". Flip to right-anchored text on the right half of
+            // the chart so the label stays inside the plot area.
+            const onRightHalf = xMark > ML + innerW / 2;
+            const labelX = onRightHalf ? xMark - 5 : xMark + 5;
+            const labelAnchor = onRightHalf ? 'end' : 'start';
             weekMarkup = `
               <line x1="${xMark}" y1="${MT}" x2="${xMark}" y2="${MT+innerH}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
               <circle cx="${xMark}" cy="${y(closest.registration_rate)}" r="2" fill="#dc2626" stroke="white" stroke-width="1" />
-              <text x="${xMark+5}" y="${MT+10}" font-size="9" fill="#dc2626" font-weight="600">${labelText}</text>
+              <text x="${labelX}" y="${MT+10}" text-anchor="${labelAnchor}" font-size="9" fill="#dc2626" font-weight="600">${labelText}</text>
             `;
           }
         }
