@@ -1908,7 +1908,14 @@ function renderSummary() {
   // Returning Student Status: three donuts at a glance — Registered, Has Blocking
   // Hold, Can Register. Each shows its count in the center, % of total returning
   // below, with the donut ring filled to the percentage in its segment color.
-  renderReturningDonuts(retRegisteredCount, Object.values(holdGroups).reduce((a,g)=>a+g.length,0), canReg, totalRet);
+  // Tony 2026-05-11: count each student ONCE in "Has Blocking Hold". Previously
+  // this summed holdGroups lengths, so a student with two blocking holds was
+  // counted twice and the donut percentage could exceed the share of unique
+  // students with holds. Dedupe by student id (falls back to the object
+  // identity if id is missing) so multi-hold students contribute once.
+  const uniqueWithHold = new Set();
+  Object.values(holdGroups).forEach(g => g.forEach(s => uniqueWithHold.add(s.id || s)));
+  renderReturningDonuts(retRegisteredCount, uniqueWithHold.size, canReg, totalRet);
 
   // Per-hold donuts: one circle graph per hold type. Center number = students
   // with this hold who are still likely returning (i.e. NOT on the NR list).
