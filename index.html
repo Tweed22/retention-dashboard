@@ -1828,6 +1828,10 @@ function n(num) { return num.toLocaleString(); }
 
 function renderSummary() {
   // ── Tony's clarified retention formulas (2026-05-11, deduped) ─────────
+  //   Graduating students are excluded from EVERY count below (Tony's rule:
+  //   they shouldn't count toward any number on the dashboard). Every Total,
+  //   numerator, and denominator below first filters out graduating IDs.
+  //
   //   returningRegistered = all registered − new students (raw R_returning)
   //   returningUnregistered = students in unreg.csv (already excludes new)
   //   notReturning = nrList.length (Pending + Withdrawn, ex-Graduating)
@@ -1839,13 +1843,19 @@ function renderSummary() {
   //   Eligible to Return       = totalReturning + notReturning
   //                              (everything counted minus new students)
   //   Persistence Rate         = effectiveReturningReg / Eligible to Return
-  //   Total Registered         = all registered students
+  //   Total Registered         = all registered students (ex-Graduating)
   // ──────────────────────────────────────────────────────────────────────
-  const newTotal              = Object.keys(newStudents).length;
+  // Tony 2026-05-11: Graduating students should not count toward any number
+  // on the dashboard. Build a set of their IDs first and use it to filter
+  // every Total, every numerator, every denominator below.
+  const gradIds               = getGraduatingIdSet();
+  const isActive              = id => !gradIds.has(id);
+
+  const newTotal              = Object.keys(newStudents).filter(isActive).length;
   const newReg                = newTotal;  // Tony 2026-05-05: new students CSV always represents registered ones
-  const allRegistered         = registeredIds.size;
+  const allRegistered         = [...registeredIds].filter(isActive).length;
   const returningRegistered   = allRegistered - newReg;          // raw R_returning
-  const returningUnregistered = Object.keys(returningStudents).length;
+  const returningUnregistered = Object.keys(returningStudents).filter(isActive).length;
   // Tony 2026-05-05: Graduating students aren't "returning" or "not returning" —
   // they're completing their degree. Exclude them from the Total Not Returning
   // count and from the Eligible to Return denominator.
@@ -1856,16 +1866,19 @@ function renderSummary() {
   const notReturning          = dedupedNR.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
 
   // Dedupe: students who are both returning-registered AND on NR list count
-  // once (in the NR bucket, not in the registered bucket).
+  // once (in the NR bucket, not in the registered bucket). Graduating IDs are
+  // already excluded above (gradIds filter), so we don't need to subtract
+  // them again here.
   const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
   const overlapRegNR = [...registeredIds]
-    .filter(id => !newStudents[id] && nrIdSet.has(id)).length;
+    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
   const effectiveReturningReg = returningRegistered - overlapRegNR;
 
-  // Total Returning: unique returning IDs (unreg ∪ registered_returning) NOT on NR
+  // Total Returning: unique returning IDs (unreg ∪ registered_returning) NOT on NR.
+  // Graduating IDs are filtered out at source so they never enter this set.
   const returningIdSet = new Set([
-    ...Object.keys(returningStudents),
-    ...[...registeredIds].filter(id => !newStudents[id]),
+    ...Object.keys(returningStudents).filter(isActive),
+    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
   ]);
   const totalReturning  = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
   // Tony 2026-05-11: Eligible to Return = every student we're tracking minus
@@ -1879,7 +1892,8 @@ function renderSummary() {
   const retRate = eligibleReturn
     ? Math.round(effectiveReturningReg / eligibleReturn * 1000) / 10
     : 0;
-  const canReg = canRegisterStudents.length;
+  // Can Register count excludes graduating students per the rule above.
+  const canReg = canRegisterStudents.filter(s => isActive(s.id)).length;
 
   // Grand Total = students who are still returning + students declared NR + new students.
   // These three categories are conceptually disjoint in Tony's framing
@@ -1921,7 +1935,9 @@ function renderSummary() {
   // students with holds. Dedupe by student id (falls back to the object
   // identity if id is missing) so multi-hold students contribute once.
   const uniqueWithHold = new Set();
-  Object.values(holdGroups).forEach(g => g.forEach(s => uniqueWithHold.add(s.id || s)));
+  Object.values(holdGroups).forEach(g => g.forEach(s => {
+    if (isActive(s.id)) uniqueWithHold.add(s.id || s);  // graduating excluded
+  }));
   renderReturningDonuts(retRegisteredCount, uniqueWithHold.size, canReg, totalRet);
 
   // Per-hold donuts: one circle graph per hold type. Center number = students
@@ -2378,9 +2394,12 @@ function renderHoldDonuts() {
   const container = document.getElementById('hold-donuts-grid');
   if (!container) return;
   const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
+  // Tony 2026-05-11: graduating students don't count toward any number,
+  // so they're filtered out of each hold's total + not-returning portion.
+  const gradIds = getGraduatingIdSet();
   const shortLabels = ['Advising','Account','Registrar Office','Missing Docs','Immunization'];
   container.innerHTML = HOLD_DISPLAY.map((h, i) => {
-    const students = holdGroups[h] || [];
+    const students = (holdGroups[h] || []).filter(s => !gradIds.has(s.id));
     const total = students.length;
     const notReturning = students.filter(s => nrIds.has(s.id)).length;
     const returning = total - notReturning;
@@ -2445,10 +2464,14 @@ function renderHoldsPage() {
   document.getElementById('holds-content').style.display = 'block';
 
   const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
-  const totalUnreg = Object.values(holdGroups).reduce((a,g)=>a+g.length,0) + canRegisterStudents.length;
+  // Tony 2026-05-11: graduating students shouldn't count toward any number,
+  // including the hold-card counts on this page.
+  const gradIds = getGraduatingIdSet();
+  const activeCanReg = canRegisterStudents.filter(s => !gradIds.has(s.id));
+  const totalUnreg = Object.values(holdGroups).reduce((a,g)=>a+g.filter(s=>!gradIds.has(s.id)).length,0) + activeCanReg.length;
   const container = document.getElementById('hold-cards-container');
   container.innerHTML = HOLD_DISPLAY.map((h,i) => {
-    const students = holdGroups[h];
+    const students = (holdGroups[h] || []).filter(s => !gradIds.has(s.id));
     const cnt = students.length;
     const likelyRet = students.filter(s => !nrIds.has(s.id)).length;
     const notRet    = cnt - likelyRet;
@@ -2595,6 +2618,7 @@ function holdsSort(col) {
 function holdsApply() {
   if (!currentHold) return;
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const gradIds = getGraduatingIdSet(); // graduating rows are not counted anywhere
   const retOnly = document.getElementById('h-returning').value === 'returning';
   const cls     = document.getElementById('h-class').value.toLowerCase();
   const major   = document.getElementById('h-major').value;
@@ -2602,7 +2626,7 @@ function holdsApply() {
   const sport   = document.getElementById('h-sport').value;
   const team    = document.getElementById('h-team').value;
   const q       = document.getElementById('h-search').value.toLowerCase();
-  let rows = [...(holdGroups[currentHold]||[])];
+  let rows = (holdGroups[currentHold]||[]).filter(r => !gradIds.has(r.id));
   if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
   if (major)   rows=rows.filter(r=>r.major===major);
@@ -2614,8 +2638,9 @@ function holdsApply() {
   rows = applySort(rows, hSort);
   const holdIdx = HOLD_DISPLAY.indexOf(currentHold);
   const chip = holdIdx>=0 ? HOLD_CHIPS[holdIdx] : 'chip-blue';
-  const total = (holdGroups[currentHold]||[]).length;
-  const retCount = total - (holdGroups[currentHold]||[]).filter(r=>nrIds.has(r.id)).length;
+  const activeStudents = (holdGroups[currentHold]||[]).filter(r => !gradIds.has(r.id));
+  const total = activeStudents.length;
+  const retCount = total - activeStudents.filter(r=>nrIds.has(r.id)).length;
   document.getElementById('h-title').textContent = retOnly
     ? `${currentHold} — ${n(retCount)} Likely Returning`
     : `${currentHold} — ${n(total)} Students`;
@@ -2644,6 +2669,7 @@ function holdsApply() {
 function crSort(col) { if(crSort_.col===col)crSort_.dir*=-1;else{crSort_.col=col;crSort_.dir=1;} crApply(); }
 function crApply() {
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
+  const gradIds = getGraduatingIdSet(); // graduating rows are not counted anywhere
   const retOnly = document.getElementById('cr-returning').value === 'returning';
   const cls     = document.getElementById('cr-class').value.toLowerCase();
   const major   = document.getElementById('cr-major').value;
@@ -2651,7 +2677,8 @@ function crApply() {
   const sport   = document.getElementById('cr-sport').value;
   const team    = document.getElementById('cr-team').value;
   const q       = document.getElementById('cr-search').value.toLowerCase();
-  let rows = [...canRegisterStudents];
+  const activeCanReg = canRegisterStudents.filter(r => !gradIds.has(r.id));
+  let rows = [...activeCanReg];
   if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
   if (major)   rows=rows.filter(r=>r.major===major);
@@ -2661,10 +2688,10 @@ function crApply() {
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,crSort_);
-  const retCount = canRegisterStudents.filter(r=>!nrIds.has(r.id)).length;
+  const retCount = activeCanReg.filter(r=>!nrIds.has(r.id)).length;
   document.getElementById('cr-title').textContent = retOnly
     ? `${n(retCount)} Likely Returning — No Blocking Holds`
-    : `${n(canRegisterStudents.length)} Students — No Blocking Holds`;
+    : `${n(activeCanReg.length)} Students — No Blocking Holds`;
   const tbody=document.getElementById('cr-tbody');
   tbody.innerHTML = rows.length
     ? rows.map(r => {
@@ -2870,6 +2897,22 @@ function getDedupedNRList() {
   return dedupeNRForDisplay(nrList);
 }
 
+// Set of student IDs whose NR row is tagged "Graduating." Graduating students
+// are completing their degree, not attrition — Tony 2026-05-11: they should
+// not contribute to any count or percentage on the dashboard. Anywhere a
+// total or ratio is computed, filter with `!gradIds.has(id)` so graduating
+// students drop out of every numerator and every denominator. Their rows
+// still appear on the Not Returning tab so the committee can see them, but
+// they don't move any number.
+function getGraduatingIdSet() {
+  return new Set(
+    nrList
+      .filter(r => (r.reason || '').toLowerCase() === 'graduating')
+      .map(r => r.id)
+      .filter(Boolean)
+  );
+}
+
 function dedupeNRForDisplay(rows) {
   // Pick the row that the user most recently touched. _updatedAt comes
   // from Supabase and is auto-bumped by the trg_nrr_set_updated_at
@@ -3045,19 +3088,18 @@ function nrUpdateKpis() {
   // KPIs reflect the deduped list (one row per student) so the numbers match
   // what the table actually shows after dedupeNRForDisplay runs.
   const dedupedNR = getDedupedNRList();
-  // Per Tony 2026-05-07: graduating students aren't really "not returning"
-  // (they're completing their degree), so exclude them from both the
-  // Total Not Returning headline and the Withdrawal Pending sub-count.
-  // Withdrawn count is left as-is — once the registrar has formally
-  // processed the withdrawal we count it regardless of reason.
+  // Tony 2026-05-11: graduating students shouldn't count toward any number.
+  // Every KPI on this tab now uses the non-graduating slice, including the
+  // Withdrawn and Registered-for-Courses sub-counts that previously slipped
+  // graduating rows through.
   const nonGrad = dedupedNR.filter(s => (s.reason || '').toLowerCase() !== 'graduating');
   document.getElementById('nr-count').textContent    = n(nonGrad.length);
   document.getElementById('nr-pending').textContent  = n(nonGrad.filter(s=>s.withdrawal==='Pending').length);
-  document.getElementById('nr-withdrawn').textContent = n(dedupedNR.filter(s=>s.withdrawal==='Withdrawn').length);
+  document.getElementById('nr-withdrawn').textContent = n(nonGrad.filter(s=>s.withdrawal==='Withdrawn').length);
   // "Registered for Courses" count: students on the NR list who are also enrolled
   // in at least one course. Surfaces the discrepancy between "flagged not returning"
   // and "actually still registered" so the committee can reconcile.
-  const regNRCount = dedupedNR.filter(s => isNRRegistered(s)).length;
+  const regNRCount = nonGrad.filter(s => isNRRegistered(s)).length;
   const regEl = document.getElementById('nr-registered');
   if (regEl) regEl.textContent = n(regNRCount);
 }
