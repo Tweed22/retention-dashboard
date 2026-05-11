@@ -4533,7 +4533,12 @@ async function fetchDashboardData() {
     nrReports: nrReports.data || [],
     terms: terms.data || [],
     latestSnapshot: snapshots.data?.[0] || null,
-    ftft: ftft.data || [],
+    // ftft uses null (not []) when the fetch erred so the consumer can
+    // distinguish "Supabase confirmed: no FTFT" (array, possibly empty)
+    // from "Supabase fetch failed, don't know" (null). Without this the
+    // localStorage roster gets wiped whenever the table is missing or
+    // RLS blocks the read. Tony 2026-05-11.
+    ftft: ftft.error ? null : (ftft.data || []),
   };
 }
 
@@ -4788,14 +4793,19 @@ async function loadHostedDashboardData() {
     }
     if (nxt) termSettings.nextStart = nxt.start_date;
   }
-  // FTFT roster: replace local set with whatever Supabase has. Persist back
-  // to localStorage so the badges still render if the page reloads offline.
-  // Tony 2026-05-11.
+  // FTFT roster: replace local set with whatever Supabase has — but only
+  // when the fetch actually succeeded. fetchDashboardData passes null
+  // when the read failed (table missing / RLS blocked / network), in which
+  // case we KEEP whatever ftftIds was loaded from localStorage instead of
+  // wiping it. This protects an admin's locally-uploaded roster when the
+  // 0003 migration hasn't been applied yet. Tony 2026-05-11.
   if (Array.isArray(data.ftft)) {
     ftftIds = new Set(data.ftft.map(r => r.id).filter(Boolean));
     saveFTFTIds();
-    csvLoaded.ftft = ftftIds.size > 0;
+  } else {
+    console.warn('FTFT roster fetch failed — keeping localStorage copy:', ftftIds.size, 'IDs');
   }
+  csvLoaded.ftft = ftftIds.size > 0;
 
   // Mark CSV-loaded flags so existing render code shows the data
   csvLoaded.unreg = csvLoaded.reg = csvLoaded.new = csvLoaded.withdrawals = (data.students.length > 0);
