@@ -4794,14 +4794,22 @@ async function loadHostedDashboardData() {
     if (nxt) termSettings.nextStart = nxt.start_date;
   }
   // FTFT roster: replace local set with whatever Supabase has — but only
-  // when the fetch actually succeeded. fetchDashboardData passes null
-  // when the read failed (table missing / RLS blocked / network), in which
-  // case we KEEP whatever ftftIds was loaded from localStorage instead of
-  // wiping it. This protects an admin's locally-uploaded roster when the
-  // 0003 migration hasn't been applied yet. Tony 2026-05-11.
+  // when the fetch actually succeeded AND the result isn't suspiciously
+  // empty compared to what we just had locally. Two guards:
+  //   1. fetch errored (data.ftft === null) → keep local
+  //   2. fetch returned empty but local had a populated roster → keep local
+  //      and warn (likely a failed push the user hasn't fixed yet)
+  // This protects an admin's freshly-uploaded roster from a silent push
+  // failure that would otherwise wipe their view on the auto-reload.
+  // Tony 2026-05-11.
   if (Array.isArray(data.ftft)) {
-    ftftIds = new Set(data.ftft.map(r => r.id).filter(Boolean));
-    saveFTFTIds();
+    if (data.ftft.length === 0 && ftftIds.size > 0) {
+      console.warn(`FTFT fetch returned empty but local has ${ftftIds.size} IDs — keeping local. ` +
+        'Most likely the upload push silently failed; check the previous step\'s console output.');
+    } else {
+      ftftIds = new Set(data.ftft.map(r => r.id).filter(Boolean));
+      saveFTFTIds();
+    }
   } else {
     console.warn('FTFT roster fetch failed — keeping localStorage copy:', ftftIds.size, 'IDs');
   }
@@ -5022,25 +5030,42 @@ async function pushDataToSupabase() {
     // so the previous "snapshot skipped" branch is unreachable.
 
     // 5c) Push the FTFT roster if the admin uploaded one this round.
-    //     The roster is meant to represent the current cohort — replace it
-    //     wholesale rather than upserting, so removed students drop off.
-    //     Skip when pendingFiles.ftft is absent (partial upload preservation).
+    //
+    // Tony 2026-05-11: switched from DELETE-all + INSERT to UPSERT + targeted
+    // DELETE of the diff. The old pattern left the table empty whenever the
+    // INSERT failed (e.g., RLS, malformed row), which then wiped every
+    // viewer's badge on the next page load. UPSERT is idempotent and survives
+    // partial failures.
     if (pendingFiles.ftft) {
       status('Step 5c/6: writing FTFT roster…');
-      const delRes = await sb.from('ftft_students').delete().not('id', 'is', null);
-      if (delRes.error) {
-        console.warn('FTFT delete failed:', delRes.error);
-      } else if (ftftIds.size) {
-        const rows = [...ftftIds].map(id => ({ id, snapshot_id: snapshotId }));
-        const insRes = await sb.from('ftft_students').insert(rows);
-        if (insRes.error) {
-          console.warn('FTFT insert failed:', insRes.error);
-          alert('Warning: main upload succeeded, but the FTFT roster failed to save.\n\n' +
-            `Error: ${insRes.error.message}\n\n` +
-            'Most likely cause: ftft_students table missing (apply migration 0003) or RLS blocks insert.');
-        } else {
-          console.log(`FTFT roster saved: ${rows.length} students`);
+      const newIds = [...ftftIds];
+      console.log(`FTFT push: ${newIds.length} IDs to upsert`);
+      let upErr = null;
+      if (newIds.length) {
+        const rows = newIds.map(id => ({ id, snapshot_id: snapshotId }));
+        const upRes = await sb.from('ftft_students').upsert(rows, { onConflict: 'id' });
+        upErr = upRes.error;
+      }
+      // Remove any old IDs that aren't in the new roster (cohort replacement).
+      if (!upErr) {
+        const existing = await sb.from('ftft_students').select('id');
+        if (!existing.error) {
+          const stale = (existing.data || []).map(r => r.id).filter(id => !ftftIds.has(id));
+          if (stale.length) {
+            const delRes = await sb.from('ftft_students').delete().in('id', stale);
+            if (delRes.error) console.warn('FTFT stale-row cleanup failed:', delRes.error);
+            else console.log(`FTFT push: removed ${stale.length} stale rows`);
+          }
         }
+      }
+      if (upErr) {
+        console.warn('FTFT upsert failed:', upErr);
+        alert('Warning: main upload succeeded, but the FTFT roster failed to save.\n\n' +
+          `Error: ${upErr.message}\n\n` +
+          'Most likely cause: ftft_students table missing (apply migration 0003) or RLS blocks the write. ' +
+          'Your local browser still has the roster — committee viewers won\'t see it until this is fixed.');
+      } else {
+        console.log(`FTFT push OK: ${newIds.length} IDs persisted`);
       }
     }
 
