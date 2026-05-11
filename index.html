@@ -2661,9 +2661,10 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
               if (dist < bestDist) { bestDist = dist; closest = d; }
             });
             const weeks = Math.round(elapsedDays / 7);
-            const labelText = weeks > 0
-              ? `Wk ${weeks} of cycle: ${closest.registration_rate}%`
-              : `Day 0: ${closest.registration_rate}%`;
+            // Tony 2026-05-11: dropped the "of cycle: X%" suffix — the
+            // percentage is already shown on the "Today:" line and the
+            // "of cycle" phrasing was redundant clutter.
+            const labelText = weeks > 0 ? `Week ${weeks}` : `Day 0`;
             // Tony 2026-05-11: when the marker sits near the right edge
             // (always true on the Current Term chart, where elapsedDays =
             // today and the chart ends at today), the default left-anchored
