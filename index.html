@@ -2005,6 +2005,82 @@ function svgSegmentDonut({label, count, total, color, onclick}) {
   </div>`;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// ONE-TIME backfill — Tony 2026-05-11
+// The three most recent term_history rows were written before the
+// graduating-student exclusion fix landed, so their numbers are inflated.
+// Overwrite their registered_count / holds_count / registration_rate
+// with today's freshly-computed values (using the now-correct formulas),
+// leaving snapshot_date and term_label untouched so the chart's x-axis
+// stays put.
+//
+// Run from the browser console (admin session in hosted mode):
+//   await backfillRecentHistoryToToday();
+// Then `renderTrendChart()` to refresh the chart.
+//
+// Safe to call repeatedly — each call recomputes from the live data.
+// Remove this function once the historical record is clean.
+// ──────────────────────────────────────────────────────────────────────
+async function backfillRecentHistoryToToday() {
+  if (!sb)          { console.error('Supabase client not initialized — open the dashboard in hosted mode.'); return; }
+  if (!isAdmin())   { console.error('Must be signed in as an admin (RLS blocks term_history updates otherwise).'); return; }
+
+  // Recompute today's snapshot values using the graduating-aware formulas.
+  const gradIds = getGraduatingIdSet();
+  const isActive = id => !gradIds.has(id);
+  const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.filter(s => isActive(s.id)).length, 0);
+  const allRegistered = [...registeredIds].filter(isActive).length;
+  const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered' && isActive(s.id)).length;
+  const returningRegistered = allRegistered - newRegCount;
+  const dedupedNR = getDedupedNRList();
+  const notReturningCount = dedupedNR.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+  const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
+  const overlap = [...registeredIds]
+    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
+  const effReg = returningRegistered - overlap;
+  const returningIdSet = new Set([
+    ...Object.keys(returningStudents).filter(isActive),
+    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
+  ]);
+  const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  const eligibleReturn = totalReturning + notReturningCount;
+  const rate = eligibleReturn ? Math.round(effReg / eligibleReturn * 1000) / 10 : 0;
+
+  console.log('Backfill values:', { registered_count: returningRegistered, holds_count: totalHolds, registration_rate: rate });
+
+  // Fetch the 3 most recent rows. id is the PK; we update by id so the
+  // snapshot_date/term_label of each row is preserved.
+  const { data, error } = await sb
+    .from('term_history')
+    .select('id, snapshot_date, term_label, registered_count, holds_count, registration_rate')
+    .order('snapshot_date', { ascending: false })
+    .limit(3);
+  if (error) { console.error('Could not fetch term_history:', error); return; }
+  if (!data || !data.length) { console.warn('No term_history rows found.'); return; }
+
+  console.log('Overwriting these rows:', data);
+
+  let updated = 0, failed = 0;
+  for (const row of data) {
+    const res = await sb.from('term_history').update({
+      registered_count: returningRegistered,
+      holds_count: totalHolds,
+      registration_rate: rate,
+    }).eq('id', row.id);
+    if (res.error) {
+      console.error(`Failed to update row ${row.id} (${row.snapshot_date}):`, res.error.message);
+      failed++;
+    } else {
+      updated++;
+    }
+  }
+  console.log(`Backfill done — ${updated} updated, ${failed} failed.`);
+  if (updated) renderTrendChart();
+  return { updated, failed };
+}
+// Expose on window so the function is reachable from the console.
+window.backfillRecentHistoryToToday = backfillRecentHistoryToToday;
+
 // Active tab in the Historical Term Trends section. Module-level so it
 // survives re-renders triggered by tab clicks. Reset to null when no
 // historical data exists; on next render we pick the most-recent term.
@@ -4423,17 +4499,32 @@ async function pushDataToSupabase() {
     status('Step 5b/6: writing daily snapshot to history…');
     const termLabel = getNextTermLabel();
     if (termLabel) {
-      const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
-      const allRegistered = registeredIds.size;
-      const newRegCount = Object.values(newStudents).filter(s=>s.status==='Registered').length;
+      // Tony 2026-05-11: graduating students don't count toward any number.
+      // Same filter the Summary page applies — keep this in sync so the
+      // historical snapshot matches what the user sees live.
+      const gradIdsSnap = getGraduatingIdSet();
+      const isActiveSnap = id => !gradIdsSnap.has(id);
+
+      const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.filter(s => isActiveSnap(s.id)).length, 0);
+      const allRegistered = [...registeredIds].filter(isActiveSnap).length;
+      const newRegCount = Object.values(newStudents).filter(s=>s.status==='Registered' && isActiveSnap(s.id)).length;
       const returningRegistered = allRegistered - newRegCount;
       // Use the deduped list so duplicates don't inflate the daily snapshot.
       const dedupedSnap = getDedupedNRList();
       const notReturningCount = dedupedSnap.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
       const nrIdSetSnap = new Set(dedupedSnap.map(s => s.id).filter(Boolean));
-      const overlapSnap = [...registeredIds].filter(id => !newStudents[id] && nrIdSetSnap.has(id)).length;
+      const overlapSnap = [...registeredIds]
+        .filter(id => isActiveSnap(id) && !newStudents[id] && nrIdSetSnap.has(id)).length;
       const effRegSnap = returningRegistered - overlapSnap;
-      const eligibleSnap = effRegSnap + notReturningCount;
+      // Eligible to Return uses the Summary's new "everything counted minus
+      // new students" definition. Build the same returning ID set Summary
+      // builds, then dedupe against NR.
+      const returningIdSetSnap = new Set([
+        ...Object.keys(returningStudents).filter(isActiveSnap),
+        ...[...registeredIds].filter(id => isActiveSnap(id) && !newStudents[id]),
+      ]);
+      const totalReturningSnap = [...returningIdSetSnap].filter(id => !nrIdSetSnap.has(id)).length;
+      const eligibleSnap = totalReturningSnap + notReturningCount;
       const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
       const today = todayLocalISO();
       const histRes = await sb.from('term_history').upsert({
