@@ -5152,12 +5152,12 @@ async function pushDataToSupabase() {
       const hides   = []; // NR row ids to mark is_hidden=true
 
       for (const w of wdsForSync) {
-        // Fields that the CSV is authoritative for. NOTE: sport is
-        // intentionally NOT in this object — withdrawal CSVs from the
-        // registrar never contain athletics data, and Tony 2026-05-07
-        // wants sport preserved across the Pending → Withdrawn transition.
-        // So updates leave sport alone; only fresh inserts try to populate
-        // sport (from the in-memory students map) below.
+        // Tony 2026-05-11: split csvFields into "always-overwrite" (status +
+        // source data) vs "only-fill-if-empty" (descriptive fields a committee
+        // member might edit). Class year was getting clobbered to null on
+        // every withdrawal sync because withdrawal CSVs are inconsistent
+        // about including class_year — same risk applies to major. Sport
+        // was already excluded for the same reason.
         const csvFields = {
           student_id: w.student_id,
           student_name: [w.first_name, w.last_name].filter(Boolean).join(' '),
@@ -5165,8 +5165,6 @@ async function pushDataToSupabase() {
           withdrawal_status: 'Withdrawn',
           source_withdrawal_id: w.id,
           notes: `Auto-imported. Last active ${w.last_active_date}.`,
-          major: w.major || null,
-          class_year: w.class_year || null,
         };
         const existing = byStudent.get(w.student_id) || [];
         if (existing.length === 0) {
@@ -5182,6 +5180,8 @@ async function pushDataToSupabase() {
           const sportFromCSV = stu && stu.sports ? stu.sports.join(', ') : null;
           inserts.push({
             ...csvFields,
+            major: w.major || null,
+            class_year: w.class_year || null,
             sport: sportFromCSV,
             submitter_name: '[CSV import]',
             submitter_uid: currentUser?.id,
@@ -5191,7 +5191,16 @@ async function pushDataToSupabase() {
           // by NOT overwriting submitter_name/submitter_uid on update.
           existing.sort((a,b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
           const keep = existing[0];
-          updates.push({ id: keep.id, fields: csvFields });
+          // Only fill major / class_year from the withdrawal CSV when the
+          // existing NR row has nothing for them. Preserves any manual
+          // edits the committee made — the registrar's roster export
+          // often omits or mis-categorizes these fields for withdrawn
+          // students. Same fill-don't-clobber rule that already applies
+          // to sport.
+          const fillFields = { ...csvFields };
+          if (!keep.major)      fillFields.major      = w.major || null;
+          if (!keep.class_year) fillFields.class_year = w.class_year || null;
+          updates.push({ id: keep.id, fields: fillFields });
           for (const dup of existing.slice(1)) hides.push(dup.id);
         }
       }
