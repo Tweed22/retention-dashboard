@@ -2105,17 +2105,17 @@ function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
   if (!container) return;
   // Click handlers route to the corresponding gated tab. Tab order: Summary=0,
   // Registered=1, Holds=2, CanReg=3, NewStudents=4, NotReturning=5.
-  // Subtitles describe how each slice is computed; denominator for all three
-  // is totalReturning (returning students not on the NR list).
+  // Subtitles spell out the percentage formula. Denominator for all three
+  // slices is totalReturning, which equals (Eligible to Return − NR).
   const segments = [
     { label:'Registered',        count: registered,  color:'#16a34a',
-      subtitle:'Returning + enrolled, not on NR',
+      subtitle:'Returning + Registered ÷ (Eligible − NR)',
       onclick: "showPage('registered', document.querySelectorAll('.nav-tab')[1])" },
     { label:'Has Blocking Hold', count: hasHold,     color:'#dc2626',
-      subtitle:'Returning, ≥1 hold, not on NR',
+      subtitle:'Returning + Hold ÷ (Eligible − NR)',
       onclick: "showPage('holds', document.querySelectorAll('.nav-tab')[2])" },
     { label:'Can Register',      count: canRegister, color:'#0d9488',
-      subtitle:'Returning, no holds, not on NR',
+      subtitle:'Returning + Can Reg ÷ (Eligible − NR)',
       onclick: "showPage('canreg', document.querySelectorAll('.nav-tab')[3])" },
   ];
   container.innerHTML = segments.map(seg => svgSegmentDonut({
@@ -2185,20 +2185,20 @@ function renderFTFTDonuts(nrIdsActive) {
 
   // Tab order: Summary=0, Registered=1, Holds=2, CanReg=3, NewStudents=4,
   // NotReturning=5, FTFT=6. Donut clicks navigate to the most useful tab
-  // for that segment. Subtitles describe how each slice is computed;
+  // for that segment. Subtitles spell out the percentage formula;
   // denominator for all four is Total FTFT (the full cohort minus graduating).
   const segments = [
     { label:'Registered',    count: registered,   color:'#16a34a',
-      subtitle:'FTFT enrolled, not on NR',
+      subtitle:'FTFT Registered ÷ Total FTFT',
       onclick: "showPage('registered', document.querySelectorAll('.nav-tab')[1])" },
     { label:'Has Hold',      count: hasHold,      color:'#dc2626',
-      subtitle:'FTFT with ≥1 blocking hold',
+      subtitle:'FTFT with Hold ÷ Total FTFT',
       onclick: "showPage('holds', document.querySelectorAll('.nav-tab')[2])" },
     { label:'Can Register',  count: canReg,       color:'#0d9488',
-      subtitle:'FTFT unregistered, no holds',
+      subtitle:'FTFT Can Reg ÷ Total FTFT',
       onclick: "showPage('canreg', document.querySelectorAll('.nav-tab')[3])" },
     { label:'Not Returning', count: notReturning, color:'#d97706',
-      subtitle:'FTFT on the NR list',
+      subtitle:'FTFT NR ÷ Total FTFT',
       onclick: "goToNRPage()" },
   ];
   container.innerHTML = segments.map(seg => svgSegmentDonut({
