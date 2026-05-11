@@ -638,7 +638,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-5">
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning Reg + Not Returning</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning (everything counted − new students)</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn) — click to open</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
@@ -1827,16 +1827,17 @@ function renderAll() {
 function n(num) { return num.toLocaleString(); }
 
 function renderSummary() {
-  // ── Tony's clarified retention formulas (2026-05-05, deduped) ─────────
+  // ── Tony's clarified retention formulas (2026-05-11, deduped) ─────────
   //   returningRegistered = all registered − new students (raw R_returning)
   //   returningUnregistered = students in unreg.csv (already excludes new)
-  //   notReturning = nrList.length (Pending + Withdrawn)
+  //   notReturning = nrList.length (Pending + Withdrawn, ex-Graduating)
   //   overlapRegNR = students in registered AND on NR list
   //                  (deduped so they're counted once, in the NR bucket)
   //
   //   Effective Returning Reg = returningReg − overlapRegNR
   //   Total Returning Students = unique returning IDs not on NR
-  //   Eligible to Return       = effectiveReturningReg + notReturning
+  //   Eligible to Return       = totalReturning + notReturning
+  //                              (everything counted minus new students)
   //   Persistence Rate         = effectiveReturningReg / Eligible to Return
   //   Total Registered         = all registered students
   // ──────────────────────────────────────────────────────────────────────
@@ -1867,7 +1868,13 @@ function renderSummary() {
     ...[...registeredIds].filter(id => !newStudents[id]),
   ]);
   const totalReturning  = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
-  const eligibleReturn  = effectiveReturningReg + notReturning;
+  // Tony 2026-05-11: Eligible to Return = every student we're tracking minus
+  // new students. That's the full returning pool (registered + unregistered,
+  // excluding NR) plus the NR list (excluding graduating). Including the
+  // unregistered-in-limbo group in the denominator makes the rate stricter
+  // and guarantees the Registered donut % ≥ True Persistence Rate, since the
+  // donut's denominator (totalReturning) is a subset of this one.
+  const eligibleReturn  = totalReturning + notReturning;
   const totalRegistered = allRegistered;
   const retRate = eligibleReturn
     ? Math.round(effectiveReturningReg / eligibleReturn * 1000) / 10
@@ -1884,8 +1891,8 @@ function renderSummary() {
   // Total Returning      = unique returning IDs (unreg ∪ registered_returning) NOT on NR
   // Total Not Returning  = nrList.length (every row, pending + withdrawn, with or without ID)
   // Total New            = Object.keys(newStudents).length (all are registered by Tony's model)
-  // Eligible to Return   = effectiveReturningReg + notReturning
-  //                        (deduped: a student on NR + registered counts once, in NR)
+  // Eligible to Return   = totalReturning + notReturning
+  //                        (everyone counted minus new students)
   // ──────────────────────────────────────────────────────────────────────
 
   // Headline row only — Returning Detail row was removed (its info is now
