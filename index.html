@@ -638,22 +638,22 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-5">
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning (everything counted − new students)</div></div>
-      <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn) — click to open</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
+      <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">True Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div></div>
     </div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
         <div class="card-title">Returning Student Status</div>
-        <div class="card-subtitle">Registered · Has Blocking Hold · Can Register — each segment of the returning population at a glance</div>
+        <div class="card-subtitle">Registered · Has Blocking Hold · Can Register — Each segment of the returning population at a glance</div>
         <div id="returning-donuts-grid" class="returning-donuts-grid"></div>
       </div>
     </div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
         <div class="card-title">Registration-Blocking Holds</div>
-        <div class="card-subtitle">Center number = students still likely returning · below = total with this hold</div>
+        <div class="card-subtitle">Center number = students still likely returning · Below = total with this hold</div>
         <div id="hold-donuts-grid" class="hold-donuts-grid"></div>
       </div>
     </div>
