@@ -2717,9 +2717,21 @@ function holdsApply() {
   const activeStudents = (holdGroups[currentHold]||[]).filter(r => !gradIds.has(r.id));
   const total = activeStudents.length;
   const retCount = total - activeStudents.filter(r=>nrIds.has(r.id)).length;
-  document.getElementById('h-title').textContent = retOnly
+  // Tony 2026-05-11: when any filter narrows the visible rows, show
+  // "showing X of Y" so it's clear how aggressive the active filters are.
+  // The "Returning Only" dropdown already affects the baseline count
+  // (retCount vs. total), so we measure "filtered" against that baseline.
+  const baseline = retOnly ? retCount : total;
+  const visible  = rows.length;
+  const baseLabel = retOnly
     ? `${currentHold} — ${n(retCount)} Likely Returning`
     : `${currentHold} — ${n(total)} Students`;
+  const titleEl = document.getElementById('h-title');
+  if (visible !== baseline) {
+    titleEl.innerHTML = `${baseLabel} <span style="color:#666;font-weight:500;font-size:13px;">— showing ${n(visible)}</span>`;
+  } else {
+    titleEl.textContent = baseLabel;
+  }
   const tbody = document.getElementById('holds-tbody');
   tbody.innerHTML = rows.length
     ? rows.map(r => {
