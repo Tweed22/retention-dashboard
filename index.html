@@ -4659,6 +4659,20 @@ async function renderPublicSummary() {
   document.getElementById('s-all-total').textContent  = n((m.total_returning || 0) + (m.total_new || 0));
   document.getElementById('s-all-reg').textContent    = n((m.total_registered || 0) + (m.new_registered || 0));
   document.getElementById('s-can-reg').textContent    = n(m.can_register || 0);
+  // Fall-to-Fall Persistence Rate — pulled from snapshot_metrics so anon
+  // viewers see the same value as committee members. Falls back to "—"
+  // when the column is missing (pre-0010 snapshot) or N is 0 and there's
+  // no point showing a redundant copy of Semester Persistence.
+  const f2fRateEl = document.getElementById('s-fall2fall-rate');
+  const f2fSubEl  = document.getElementById('s-fall2fall-sub');
+  const f2fPotEl  = document.getElementById('s-fall2fall-potential');
+  const pl = parseInt(m.prior_term_leavers, 10) || 0;
+  const f2fRate = m.fall_to_fall_rate != null ? Number(m.fall_to_fall_rate) : null;
+  if (f2fRateEl) f2fRateEl.textContent = (pl > 0 && f2fRate != null) ? f2fRate + '%' : '—';
+  if (f2fSubEl)  f2fSubEl.textContent  = pl > 0
+    ? `Returning Reg ÷ (Eligible + ${pl})`
+    : 'Returning Reg ÷ (Eligible + N) — pending admin setup';
+  if (f2fPotEl)  f2fPotEl.textContent  = 'Potential: —';
   // Hide widgets that need raw student data when we're on the public side
   document.getElementById('returning-donuts-grid').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the per-segment breakdown.</div>';
   document.getElementById('hold-donuts-grid').innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:24px;">Sign in for the per-hold breakdown.</div>';
@@ -4884,8 +4898,18 @@ async function loadHostedDashboardData() {
     if (cur) {
       termSettings.currentName = cur.name;
       termSettings.currentStart = cur.start_date;
+      // Restore Fall→Fall N from Supabase so every committee viewer renders
+      // the same Fall-to-Fall denominator the admin set. Coerced to a
+      // non-negative integer; null/missing column from a pre-0010 deploy
+      // becomes 0 and the card falls back to Semester Persistence behavior.
+      termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
     }
     if (nxt) termSettings.nextStart = nxt.start_date;
+    // Keep the Settings input in sync with what came back from Supabase so
+    // an admin opening the panel sees the canonical value, not whatever
+    // their localStorage had cached.
+    const pl = document.getElementById('ts-prior-leavers');
+    if (pl) pl.value = termSettings.priorTermLeavers ? String(termSettings.priorTermLeavers) : '';
   }
   // FTFT roster: replace local set with whatever Supabase has — but only
   // when the fetch actually succeeded AND the result isn't suspiciously
@@ -5012,11 +5036,16 @@ async function pushDataToSupabase() {
     }
 
     // 3) Sync `terms` table from local termSettings (so other admins see same window)
+    // prior_term_leavers is stamped onto the CURRENT term row so it
+    // propagates to every committee viewer on their next load. The value is
+    // global (one number per academic year) but living on the current-term
+    // row means it auto-rolls forward when Tony advances the term window.
     status('Step 3/6: syncing term window…');
     if (termSettings.currentStart) {
       expect('terms upsert (current)', await sb.from('terms').upsert({
         name: termSettings.currentName || 'Current term',
         start_date: termSettings.currentStart,
+        prior_term_leavers: Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0),
       }, { onConflict: 'start_date' }));
     }
     if (termSettings.nextStart) {
@@ -5310,6 +5339,15 @@ function computeSnapshotMetrics() {
   const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
   const holdsBy = HOLD_DISPLAY.map(h => (holdGroups[h] || []).length);
   const wdThisTerm = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate)).length;
+  // Fall-to-Fall rate — same numerator as the public registration_rate
+  // above, but denominator gets the prior Fall→Spring leavers added back.
+  // When N=0 the rate equals registration_rate (which is the Semester
+  // Persistence value the public Summary already shows). Persisting both
+  // here lets renderPublicSummary populate the Fall-to-Fall card without
+  // joining the terms table.
+  const priorLeavers = Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0);
+  const f2fDenom = totalRet + priorLeavers;
+  const fallToFall = f2fDenom ? Math.round(retRegistered / f2fDenom * 1000) / 10 : 0;
   // Slice breakdowns
   function tally(getter) {
     const t = {};
@@ -5338,6 +5376,8 @@ function computeSnapshotMetrics() {
     withdrawals_this_term: wdThisTerm,
     high_risk_count: 0,
     critical_risk_count: 0,
+    prior_term_leavers: priorLeavers,
+    fall_to_fall_rate: fallToFall,
     by_class_year: tally(s => s.classYear),
     by_advisor: tally(s => s.advisor),
     by_major: tally(s => s.major),
