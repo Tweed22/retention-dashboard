@@ -666,7 +666,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
       <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
@@ -1981,7 +1981,7 @@ function renderSummary() {
   //   Total Returning Students = unique returning IDs not on NR
   //   Eligible to Return       = totalReturning + notReturning
   //                              (everything counted minus new students)
-  //   Persistence Rate         = effectiveReturningReg / Eligible to Return
+  //   Semester Persistence Rate = effectiveReturningReg / Eligible to Return
   //   Total Registered         = all registered students (ex-Graduating)
   // ──────────────────────────────────────────────────────────────────────
   // Tony 2026-05-11: Graduating students should not count toward any number
@@ -2024,7 +2024,7 @@ function renderSummary() {
   // new students. That's the full returning pool (registered + unregistered,
   // excluding NR) plus the NR list (excluding graduating). Including the
   // unregistered-in-limbo group in the denominator makes the rate stricter
-  // and guarantees the Registered donut % ≥ True Persistence Rate, since the
+  // and guarantees the Registered donut % ≥ Semester Persistence Rate, since the
   // donut's denominator (totalReturning) is a subset of this one.
   const eligibleReturn  = totalReturning + notReturning;
   const totalRegistered = allRegistered;
@@ -2056,7 +2056,7 @@ function renderSummary() {
   document.getElementById('s-new-total').textContent = n(newTotal);
   document.getElementById('s-ret-rate').textContent = retRate + '%';
 
-  // "Potential" Persistence Rate — if every returning student who isn't on
+  // "Potential" Semester Persistence Rate — if every returning student who isn't on
   // the NR list ended up registered. Numerator: Registered + Has Hold +
   // Can Register (= totalReturning). Denominator: Eligible to Return.
   // Tony 2026-05-11.
@@ -2195,7 +2195,7 @@ function renderFTFTDonuts(nrIdsActive) {
 
   // Headline KPIs: Total FTFT cohort + Retention Rate.
   // Retention Rate = Registered FTFT ÷ Total FTFT (Tony 2026-05-11). 0% when
-  // there are no FTFT students; matches True Persistence Rate's rounding
+  // there are no FTFT students; matches Semester Persistence Rate's rounding
   // (one decimal place) so the two numbers read together.
   if (totalEl) totalEl.textContent = n(total);
   const ftftRate = total ? Math.round(registered / total * 1000) / 10 : 0;
@@ -2452,7 +2452,7 @@ async function renderTrendChart() {
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
   // Build current-term data so the curve and subtitle always reflect the
-  // LIVE True Persistence Rate, even if today's row in term_history was
+  // LIVE Semester Persistence Rate, even if today's row in term_history was
   // written earlier (e.g. by an earlier upload, before NR list edits).
   // Strategy: if today's row exists, override its rate; if not, append.
   let currentPts = currentLabel ? byTerm[currentLabel] : null;
@@ -5522,7 +5522,7 @@ nrSave = async function nrSaveWithSupabase(idx) {
 // triggers a Supabase write with reason='' (transient state) which is
 // then immediately superseded by the user's typed value via
 // nrCellReasonText — two cheap writes, last one wins.
-// Each wrapper also calls renderSummary() so the True Persistence Rate
+// Each wrapper also calls renderSummary() so the Semester Persistence Rate
 // recomputes and the trend chart's Today line + synthetic last point
 // reflect the change immediately. Without this, the chart stayed stale
 // until the next CSV upload or page refresh (Tony 2026-05-06).
