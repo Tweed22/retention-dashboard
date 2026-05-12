@@ -66,6 +66,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-row-4 { grid-template-columns: repeat(4, 1fr); }
 .kpi-row-5 { grid-template-columns: repeat(5, 1fr); }
 .kpi-row-7 { grid-template-columns: repeat(7, 1fr); }
+.kpi-row-8 { grid-template-columns: repeat(8, 1fr); }
 .kpi-card { background: white; border-radius: 10px; padding: 16px 18px; border: 1px solid #e0e4ec; position: relative; overflow: hidden; }
 .kpi-clickable { cursor: pointer; transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s; }
 .kpi-clickable:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.07); border-color: #cbd5e1; }
@@ -81,6 +82,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-card.indigo::before { background:#4f46e5; }
 .kpi-card.sky::before    { background:#0284c7; }
 .kpi-card.purple::before { background:#7c3aed; }
+.kpi-card.orange::before { background:#ea580c; }
 .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: #888; margin-bottom: 5px; }
 .kpi-value { font-size: 26px; font-weight: 800; color: #1a1d23; line-height: 1; }
 .kpi-sub { font-size: 11px; color: #888; margin-top: 4px; }
@@ -224,10 +226,10 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
 
 /* ── Responsive ── */
 @media (max-width: 1300px) and (min-width: 901px) {
-  .kpi-row-7 { grid-template-columns: repeat(4, 1fr); }
+  .kpi-row-7, .kpi-row-8 { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 900px) {
-  .kpi-row-4, .kpi-row-5, .kpi-row-7 { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row-4, .kpi-row-5, .kpi-row-7, .kpi-row-8 { grid-template-columns: repeat(2, 1fr); }
   .hold-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
   .nr-add-row { flex-direction: column; align-items: stretch; }
@@ -633,6 +635,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <label for="ts-next-start">Next term starts</label>
       <input type="date" id="ts-next-start" />
     </div>
+    <div class="ts-field">
+      <label for="ts-prior-leavers" title="Students who started the previous Fall but did NOT enroll in the current Spring (excluding graduates). Used as the +N adjustment in the Fall-to-Fall Persistence Rate denominator.">Prior Fall→Spring leavers</label>
+      <input type="number" id="ts-prior-leavers" min="0" step="1" placeholder="0" style="width:90px;" />
+    </div>
     <button class="nr-row-btn nr-row-btn-primary" onclick="saveTermSettings()" style="height:28px;">Save term window</button>
     <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are surfaced in the Withdrawals tab and auto-fed into Not Returning. If "Next term starts" is blank, the upper bound is today.</span>
   </div>
@@ -660,13 +666,14 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
   <div id="summary-content" style="display:none;">
     <div class="section-label">Headline Totals</div>
-    <div class="kpi-row kpi-row-7">
+    <div class="kpi-row kpi-row-8">
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
       <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
+      <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior Fall→Spring leavers)&#10;&#10;The denominator adds back students who started last Fall but didn't enroll this Spring (excluding graduates) — they were eligible to come back this Fall but didn't, so they belong in the denominator for a true Fall-to-Fall rate.&#10;&#10;Set the +N count under Settings → 'Prior Fall→Spring leavers'. While that's 0, this rate equals the Semester Persistence Rate."><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
       <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
@@ -1156,7 +1163,7 @@ let nrList = [];
 // Term settings: persisted to localStorage. Drives the current-term filter on
 // Withdrawals + the auto-NR-sync. Window is [currentStart, nextStart); if
 // nextStart is blank, upper bound is today.
-let termSettings = { currentName: '', currentStart: '', nextStart: '' };
+let termSettings = { currentName: '', currentStart: '', nextStart: '', priorTermLeavers: 0 };
 
 // (No external chart library needed — all charts are SVG)
 
@@ -2065,6 +2072,32 @@ function renderSummary() {
     : 0;
   const retPotEl = document.getElementById('s-ret-potential');
   if (retPotEl) retPotEl.textContent = 'Potential: ' + potentialRet + '%';
+
+  // Fall-to-Fall Persistence Rate — Tony 2026-05-12.
+  // Same numerator as Semester Persistence (currently registered returning
+  // students from the prior Fall cohort) but the denominator adds back the
+  // students who started last Fall and didn't enroll this Spring (excluding
+  // graduates). Those students were eligible to come back this Fall but
+  // didn't, so they belong in the denominator for a full-year rate.
+  //   FallToFall = effectiveReturningReg / (eligibleReturn + priorTermLeavers)
+  // While priorTermLeavers is 0 the rate equals Semester Persistence — the
+  // card still renders so Tony can see the formula and sub-label.
+  const priorLeavers = Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0);
+  const f2fDenom = eligibleReturn + priorLeavers;
+  const f2fRate = f2fDenom
+    ? Math.round(effectiveReturningReg / f2fDenom * 1000) / 10
+    : 0;
+  const f2fPotential = f2fDenom
+    ? Math.round(totalReturning / f2fDenom * 1000) / 10
+    : 0;
+  const f2fRateEl = document.getElementById('s-fall2fall-rate');
+  const f2fSubEl  = document.getElementById('s-fall2fall-sub');
+  const f2fPotEl  = document.getElementById('s-fall2fall-potential');
+  if (f2fRateEl) f2fRateEl.textContent = f2fDenom ? f2fRate + '%' : '—';
+  if (f2fSubEl)  f2fSubEl.textContent  = priorLeavers > 0
+    ? `Returning Reg ÷ (Eligible + ${priorLeavers}) = ${effectiveReturningReg} ÷ ${f2fDenom}`
+    : 'Returning Reg ÷ (Eligible + N) — set N in Settings';
+  if (f2fPotEl)  f2fPotEl.textContent  = 'Potential: ' + f2fPotential + '%';
 
   // Variables the donuts and existing computation expect; alias to current
   // values so existing render code keeps working.
@@ -3968,15 +4001,20 @@ function nrSave(idx) {
 function loadTermSettings() {
   try {
     const raw = localStorage.getItem('term_settings');
-    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:''}, JSON.parse(raw));
+    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:'',priorTermLeavers:0}, JSON.parse(raw));
   } catch(e) {}
+  // Coerce priorTermLeavers to a non-negative integer so a malformed
+  // localStorage value can't poison the Fall-to-Fall denominator.
+  termSettings.priorTermLeavers = Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0);
   // Reflect into the form
   const cn = document.getElementById('ts-current-name');
   const cs = document.getElementById('ts-current-start');
   const ns = document.getElementById('ts-next-start');
+  const pl = document.getElementById('ts-prior-leavers');
   if (cn) cn.value = termSettings.currentName || '';
   if (cs) cs.value = termSettings.currentStart || '';
   if (ns) ns.value = termSettings.nextStart || '';
+  if (pl) pl.value = termSettings.priorTermLeavers ? String(termSettings.priorTermLeavers) : '';
   updateTermWindowDisplay();
 }
 
@@ -3985,6 +4023,7 @@ function saveTermSettings() {
     currentName:  (document.getElementById('ts-current-name').value || '').trim(),
     currentStart: document.getElementById('ts-current-start').value || '',
     nextStart:    document.getElementById('ts-next-start').value || '',
+    priorTermLeavers: Math.max(0, parseInt(document.getElementById('ts-prior-leavers')?.value, 10) || 0),
   };
   try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
   updateTermWindowDisplay();
