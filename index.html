@@ -640,6 +640,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <input type="number" id="ts-prior-leavers" min="0" step="1" placeholder="0" style="width:90px;" />
     </div>
     <button class="nr-row-btn nr-row-btn-primary" onclick="saveTermSettings()" style="height:28px;">Save term window</button>
+    <span id="ts-save-status" style="font-size:11px;color:#888;min-width:140px;"></span>
     <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are surfaced in the Withdrawals tab and auto-fed into Not Returning. If "Next term starts" is blank, the upper bound is today.</span>
   </div>
   <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
@@ -4031,6 +4032,18 @@ async function saveTermSettings() {
   try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
   updateTermWindowDisplay();
 
+  // Status pill helper — gives Tony immediate visual feedback so he can see
+  // whether the DB write reached Supabase. Without this, every silent
+  // failure mode (migration missing, RLS blocking write, admin role
+  // mismatch, currentStart empty) looked identical to a successful save.
+  const status = document.getElementById('ts-save-status');
+  const setStatus = (text, color) => {
+    if (!status) return;
+    status.textContent = text;
+    status.style.color = color || '#888';
+  };
+  const ts = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
   // Hosted mode: push the term window + priorTermLeavers to Supabase
   // immediately, NOT just on the next CSV upload. Without this, an admin
   // who only edits the prior-withdraws field and clicks Save would never
@@ -4038,28 +4051,35 @@ async function saveTermSettings() {
   // wipe the local 74 (see loadHostedDashboardData). Pushing on save means
   // "Save term window" actually saves the term window everywhere.
   if (HOSTED && sb && isAdmin() && termSettings.currentStart) {
+    setStatus('Saving to Supabase…', '#888');
+    console.log('saveTermSettings: pushing prior_term_leavers =', termSettings.priorTermLeavers, 'to terms.start_date =', termSettings.currentStart);
     const upsertCur = await sb.from('terms').upsert({
       name: termSettings.currentName || 'Current term',
       start_date: termSettings.currentStart,
       prior_term_leavers: termSettings.priorTermLeavers,
-    }, { onConflict: 'start_date' });
+    }, { onConflict: 'start_date' }).select();
+    console.log('saveTermSettings: upsert response =', upsertCur);
     if (upsertCur.error) {
       const msg = upsertCur.error.message || String(upsertCur.error);
       console.warn('saveTermSettings: terms upsert (current) failed:', upsertCur.error);
       // The most likely failure mode is migration 0010 not being applied —
       // the prior_term_leavers column doesn't exist yet, so the upsert
       // rejects the whole row. Surface that explicitly so Tony knows what
-      // to fix instead of silently losing the value on the next reload.
-      if (/prior_term_leavers/i.test(msg)) {
+      // to fix instead of losing the value on the next reload.
+      if (/prior_term_leavers/i.test(msg) || /column.*not.*exist/i.test(msg) || /schema cache/i.test(msg)) {
+        setStatus('✗ DB column missing — apply migration 0010', '#dc2626');
         alert(
           'Saved locally only. The "prior_term_leavers" column is missing ' +
           'in Supabase.\n\nApply migration 0010_prior_term_leavers.sql in ' +
           'the Supabase SQL editor, then save again. Until then, this value ' +
-          'lives only in your browser and will reset on the next page load.'
+          'lives only in your browser; other committee members will see 0.'
         );
       } else {
+        setStatus('✗ Save failed: ' + msg.slice(0, 60), '#dc2626');
         alert('Could not save the term window to Supabase:\n\n' + msg);
       }
+    } else {
+      setStatus(`✓ Saved at ${ts()} (N=${termSettings.priorTermLeavers})`, '#16a34a');
     }
     if (termSettings.nextStart) {
       const upsertNxt = await sb.from('terms').upsert({
@@ -4068,6 +4088,15 @@ async function saveTermSettings() {
       }, { onConflict: 'start_date' });
       if (upsertNxt.error) console.warn('saveTermSettings: terms upsert (next) failed:', upsertNxt.error);
     }
+  } else if (HOSTED && !termSettings.currentStart) {
+    // Without a current term start_date there's no row to anchor the upsert
+    // on. Tell the admin so they don't think the save succeeded.
+    setStatus('✗ Set "Current term starts" date first', '#dc2626');
+  } else if (HOSTED && !isAdmin()) {
+    setStatus('✗ Admin role required to save', '#dc2626');
+  } else {
+    // Local-file mode — localStorage is the only persistence layer anyway.
+    setStatus(`✓ Saved locally at ${ts()}`, '#16a34a');
   }
 
   // If withdrawals are already loaded, re-sync NR + re-render so the new window takes effect
@@ -4946,13 +4975,20 @@ async function loadHostedDashboardData() {
       termSettings.currentStart = cur.start_date;
       // Restore Fall→Fall N from Supabase so every committee viewer renders
       // the same Fall-to-Fall denominator the admin set. CRITICAL: only
-      // overwrite the local value when the DB column is present (not null
-      // and not undefined). When migration 0010 hasn't been applied yet,
-      // cur.prior_term_leavers is `undefined` — falling through to 0 would
-      // silently wipe the admin's localStorage 74 on every reload. The
-      // null-check below keeps the local value in that case.
-      if (cur.prior_term_leavers != null) {
-        termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
+      // overwrite the local value when the DB has an authoritative non-zero
+      // value. Three failure modes this guards against:
+      //   1) Migration 0010 not applied → cur.prior_term_leavers is undefined
+      //   2) Migration applied but save silently failed → column defaults to 0
+      //   3) Admin reduced 74 → 0 cross-device → other device's local stays
+      //      at the prior value; trade-off accepted because the dominant use
+      //      case is a single admin setting a single non-zero number per term.
+      // Treating DB 0 as "not yet synced" means the admin's localStorage 74
+      // survives reloads even when the round-trip to Supabase is broken,
+      // and the Fall-to-Fall card keeps working locally while Tony sorts
+      // out the migration / connectivity issue.
+      const dbVal = parseInt(cur.prior_term_leavers, 10);
+      if (cur.prior_term_leavers != null && dbVal > 0) {
+        termSettings.priorTermLeavers = dbVal;
       }
     }
     if (nxt) termSettings.nextStart = nxt.start_date;
