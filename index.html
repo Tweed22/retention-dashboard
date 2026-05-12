@@ -4021,7 +4021,7 @@ function loadTermSettings() {
   updateTermWindowDisplay();
 }
 
-function saveTermSettings() {
+async function saveTermSettings() {
   termSettings = {
     currentName:  (document.getElementById('ts-current-name').value || '').trim(),
     currentStart: document.getElementById('ts-current-start').value || '',
@@ -4030,6 +4030,46 @@ function saveTermSettings() {
   };
   try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
   updateTermWindowDisplay();
+
+  // Hosted mode: push the term window + priorTermLeavers to Supabase
+  // immediately, NOT just on the next CSV upload. Without this, an admin
+  // who only edits the prior-leavers field and clicks Save would never
+  // sync the value — the DB would still hold 0 and the next reload would
+  // wipe the local 74 (see loadHostedDashboardData). Pushing on save means
+  // "Save term window" actually saves the term window everywhere.
+  if (HOSTED && sb && isAdmin() && termSettings.currentStart) {
+    const upsertCur = await sb.from('terms').upsert({
+      name: termSettings.currentName || 'Current term',
+      start_date: termSettings.currentStart,
+      prior_term_leavers: termSettings.priorTermLeavers,
+    }, { onConflict: 'start_date' });
+    if (upsertCur.error) {
+      const msg = upsertCur.error.message || String(upsertCur.error);
+      console.warn('saveTermSettings: terms upsert (current) failed:', upsertCur.error);
+      // The most likely failure mode is migration 0010 not being applied —
+      // the prior_term_leavers column doesn't exist yet, so the upsert
+      // rejects the whole row. Surface that explicitly so Tony knows what
+      // to fix instead of silently losing the value on the next reload.
+      if (/prior_term_leavers/i.test(msg)) {
+        alert(
+          'Saved locally only. The "prior_term_leavers" column is missing ' +
+          'in Supabase.\n\nApply migration 0010_prior_term_leavers.sql in ' +
+          'the Supabase SQL editor, then save again. Until then, this value ' +
+          'lives only in your browser and will reset on the next page load.'
+        );
+      } else {
+        alert('Could not save the term window to Supabase:\n\n' + msg);
+      }
+    }
+    if (termSettings.nextStart) {
+      const upsertNxt = await sb.from('terms').upsert({
+        name: 'Next term',
+        start_date: termSettings.nextStart,
+      }, { onConflict: 'start_date' });
+      if (upsertNxt.error) console.warn('saveTermSettings: terms upsert (next) failed:', upsertNxt.error);
+    }
+  }
+
   // If withdrawals are already loaded, re-sync NR + re-render so the new window takes effect
   if (csvLoaded.withdrawals) {
     syncWithdrawalsToNR();
@@ -4037,6 +4077,9 @@ function saveTermSettings() {
   } else {
     // Even without withdrawal data, the current-term filter affects the Withdrawals tab empty state
     renderWithdrawals();
+    // Still re-render the Summary so the Fall-to-Fall card picks up the
+    // new priorTermLeavers value without requiring a CSV upload.
+    if (typeof renderSummary === 'function' && csvLoaded.reg) renderSummary();
   }
 }
 
@@ -4902,15 +4945,20 @@ async function loadHostedDashboardData() {
       termSettings.currentName = cur.name;
       termSettings.currentStart = cur.start_date;
       // Restore Fall→Fall N from Supabase so every committee viewer renders
-      // the same Fall-to-Fall denominator the admin set. Coerced to a
-      // non-negative integer; null/missing column from a pre-0010 deploy
-      // becomes 0 and the card falls back to Semester Persistence behavior.
-      termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
+      // the same Fall-to-Fall denominator the admin set. CRITICAL: only
+      // overwrite the local value when the DB column is present (not null
+      // and not undefined). When migration 0010 hasn't been applied yet,
+      // cur.prior_term_leavers is `undefined` — falling through to 0 would
+      // silently wipe the admin's localStorage 74 on every reload. The
+      // null-check below keeps the local value in that case.
+      if (cur.prior_term_leavers != null) {
+        termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
+      }
     }
     if (nxt) termSettings.nextStart = nxt.start_date;
-    // Keep the Settings input in sync with what came back from Supabase so
-    // an admin opening the panel sees the canonical value, not whatever
-    // their localStorage had cached.
+    // Keep the Settings input in sync with whatever value we ended up with
+    // (DB if present, localStorage fallback otherwise) so an admin opening
+    // the panel sees the canonical value.
     const pl = document.getElementById('ts-prior-leavers');
     if (pl) pl.value = termSettings.priorTermLeavers ? String(termSettings.priorTermLeavers) : '';
   }
