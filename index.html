@@ -666,14 +666,17 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
   <div id="summary-content" style="display:none;">
     <div class="section-label">Headline Totals</div>
-    <div class="kpi-row kpi-row-8">
+    <div class="kpi-row kpi-row-4">
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
-      <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
+    </div>
+    <div class="section-label">Persistence &amp; Retention</div>
+    <div class="kpi-row kpi-row-4">
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
       <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior Fall→Spring leavers)&#10;&#10;The denominator adds back students who started last Fall but didn't enroll this Spring (excluding graduates) — they were eligible to come back this Fall but didn't, so they belong in the denominator for a true Fall-to-Fall rate.&#10;&#10;Set the +N count under Settings → 'Prior Fall→Spring leavers'. While that's 0, this rate equals the Semester Persistence Rate."><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
