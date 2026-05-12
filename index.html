@@ -636,7 +636,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <input type="date" id="ts-next-start" />
     </div>
     <div class="ts-field">
-      <label for="ts-prior-leavers" title="Students who started the previous Fall but did NOT enroll in the current Spring (excluding graduates). Used as the +N adjustment in the Fall-to-Fall Persistence Rate denominator.">Prior Fall→Spring withdraws</label>
+      <label for="ts-prior-leavers" title="Students who started the previous semester but did NOT enroll in the current semester (excluding graduates). Used as the +N adjustment in the Fall-to-Fall Persistence Rate denominator. Rolls forward automatically each semester — update the count whenever you advance the term window.">Prior semester withdraws</label>
       <input type="number" id="ts-prior-leavers" min="0" step="1" placeholder="0" style="width:90px;" />
     </div>
     <button class="nr-row-btn nr-row-btn-primary" onclick="saveTermSettings()" style="height:28px;">Save term window</button>
@@ -676,7 +676,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="section-label">Persistence &amp; Retention</div>
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
-      <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior Fall→Spring withdraws)"><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
+      <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior semester withdraws)"><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
       <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div></div>
     </div>
@@ -2079,10 +2079,12 @@ function renderSummary() {
 
   // Fall-to-Fall Persistence Rate — Tony 2026-05-12.
   // Same numerator as Semester Persistence (currently registered returning
-  // students from the prior Fall cohort) but the denominator adds back the
-  // students who started last Fall and didn't enroll this Spring (excluding
-  // graduates). Those students were eligible to come back this Fall but
-  // didn't, so they belong in the denominator for a full-year rate.
+  // students from the prior period's cohort) but the denominator adds back
+  // the students who started the previous semester and didn't enroll the
+  // current semester (excluding graduates). Those students were eligible to
+  // come back but didn't, so they belong in the denominator for a full-year
+  // Fall-to-Fall rate regardless of which semester the dashboard is
+  // currently displaying.
   //   FallToFall = effectiveReturningReg / (eligibleReturn + priorTermLeavers)
   // While priorTermLeavers is 0 the rate equals Semester Persistence — the
   // card still renders so Tony can see the formula and sub-label.
@@ -5427,7 +5429,7 @@ function computeSnapshotMetrics() {
   const holdsBy = HOLD_DISPLAY.map(h => (holdGroups[h] || []).length);
   const wdThisTerm = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate)).length;
   // Fall-to-Fall rate — same numerator as the public registration_rate
-  // above, but denominator gets the prior Fall→Spring withdraws added back.
+  // above, but denominator gets the prior semester's withdraws added back.
   // When N=0 the rate equals registration_rate (which is the Semester
   // Persistence value the public Summary already shows). Persisting both
   // here lets renderPublicSummary populate the Fall-to-Fall card without
