@@ -1891,18 +1891,36 @@ function buildData() {
   // Only rebuild from rawNew if it has fresh data; otherwise preserve
   // previously loaded newStudents (e.g. from Supabase on a page load) and
   // just refresh their status against the current registeredIds.
+  // Tony 2026-05-13: enrich new students with the authoritative
+  // hrs_enrolled and pt_ft_sts values from the registered CSV. The new
+  // students CSV doesn't carry those columns, so without this merge a
+  // registered new student would have creditHours = 0 in their newStudents
+  // record. That zero would then be pushed to Supabase as credit_hours =
+  // null, and the load-time `hasHours > 0` filter would demote the student
+  // back to is_registered=false on the next reload — exactly the
+  // "registered new students show as Not Yet Registered" symptom Tony
+  // reported. Pulling from registeredStudents keeps credit_hours coherent
+  // across all the maps and survives the push/load round-trip.
+  function enrichNewFromRegistered(s) {
+    const regData = registeredStudents[s.id];
+    if (!regData) return;
+    if (regData.creditHours) s.creditHours = regData.creditHours;
+    if (regData.ptFt)        s.ptFt        = regData.ptFt;
+  }
   if (rawNew.length > 0) {
     newStudents = {};
     rawNew.forEach(r => {
       const s = normalizeStudent(r);
       if (s.id) {
         s.status = registeredIds.has(s.id) ? 'Registered' : 'Not Yet Registered';
+        enrichNewFromRegistered(s);
         newStudents[s.id] = s;
       }
     });
   } else {
     Object.values(newStudents).forEach(s => {
       s.status = registeredIds.has(s.id) ? 'Registered' : 'Not Yet Registered';
+      enrichNewFromRegistered(s);
     });
   }
   const newIds = new Set(Object.keys(newStudents));
