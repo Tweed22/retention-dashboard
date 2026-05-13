@@ -1839,21 +1839,30 @@ function buildData() {
   registeredIds = new Set(Object.keys(registeredStudents));
 
   // ── New students ──
-  // Per Tony 2026-05-05: every entry in new_students.csv represents a
-  // registered new student. Total = Registered for new students always.
-  // Only rebuild if rawNew has data; otherwise preserve previously loaded
-  // newStudents (e.g. from Supabase on a fresh page load).
+  // A new student is "Registered" only if their ID also appears in the
+  // registered CSV — i.e., they actually have one or more course enrollments.
+  // Tony 2026-05-13: previously this hardcoded status='Registered' for every
+  // row of new_students.csv (assumed all new admits had registered), which
+  // overcounted "Total New" on the Summary tab whenever the new-students CSV
+  // included admits who hadn't enrolled yet. Now status is derived from
+  // registeredIds so the Summary's Total New KPI and the New Students tab's
+  // Registered / Not Yet Registered counters all agree.
+  // Only rebuild from rawNew if it has fresh data; otherwise preserve
+  // previously loaded newStudents (e.g. from Supabase on a page load) and
+  // just refresh their status against the current registeredIds.
   if (rawNew.length > 0) {
     newStudents = {};
     rawNew.forEach(r => {
       const s = normalizeStudent(r);
       if (s.id) {
-        s.status = 'Registered';
+        s.status = registeredIds.has(s.id) ? 'Registered' : 'Not Yet Registered';
         newStudents[s.id] = s;
       }
     });
   } else {
-    Object.values(newStudents).forEach(s => { s.status = 'Registered'; });
+    Object.values(newStudents).forEach(s => {
+      s.status = registeredIds.has(s.id) ? 'Registered' : 'Not Yet Registered';
+    });
   }
   const newIds = new Set(Object.keys(newStudents));
 
@@ -2001,8 +2010,15 @@ function renderSummary() {
   const gradIds               = getGraduatingIdSet();
   const isActive              = id => !gradIds.has(id);
 
-  const newTotal              = Object.keys(newStudents).filter(isActive).length;
-  const newReg                = newTotal;  // Tony 2026-05-05: new students CSV always represents registered ones
+  // Tony 2026-05-13: "Total New" on the Summary tab counts only NEW students
+  // who are currently registered for the upcoming term. Not-yet-registered
+  // new admits stay visible on the New Students tab (with their separate
+  // Registered / Not Yet Registered counters) but don't inflate the headline.
+  // status is set by buildData based on registeredIds, so this filter follows
+  // the authoritative source even when only one CSV is re-uploaded.
+  const newTotal              = Object.values(newStudents)
+                                  .filter(s => isActive(s.id) && s.status === 'Registered').length;
+  const newReg                = newTotal;  // by definition now: Total New === registered new
   const allRegistered         = [...registeredIds].filter(isActive).length;
   const returningRegistered   = allRegistered - newReg;          // raw R_returning
   const returningUnregistered = Object.keys(returningStudents).filter(isActive).length;
@@ -2054,7 +2070,7 @@ function renderSummary() {
   // Grand Total          = totalReturning + notReturning + newTotal
   // Total Returning      = unique returning IDs (unreg ∪ registered_returning) NOT on NR
   // Total Not Returning  = nrList.length (every row, pending + withdrawn, with or without ID)
-  // Total New            = Object.keys(newStudents).length (all are registered by Tony's model)
+  // Total New            = count of new students with status==='Registered' only
   // Eligible to Return   = totalReturning + notReturning
   //                        (everyone counted minus new students)
   // ──────────────────────────────────────────────────────────────────────
@@ -4731,7 +4747,10 @@ async function renderPublicSummary() {
   document.getElementById('s-ret-reg').textContent    = n(m.total_registered || 0);
   document.getElementById('s-ret-unreg').textContent  = n((m.total_returning || 0) - (m.total_registered || 0));
   document.getElementById('s-ret-rate').textContent   = (m.registration_rate != null ? Math.round(m.registration_rate * 10)/10 : 0) + '%';
-  document.getElementById('s-new-total').textContent  = n(m.total_new || 0);
+  // "Total New" on the public Summary mirrors the committee Summary: only
+  // currently-registered new students, not the raw new-students-CSV count.
+  // m.new_registered comes from computeSnapshotMetrics' status filter.
+  document.getElementById('s-new-total').textContent  = n(m.new_registered || 0);
   document.getElementById('s-new-reg').textContent    = n(m.new_registered || 0);
   document.getElementById('s-all-total').textContent  = n((m.total_returning || 0) + (m.total_new || 0));
   document.getElementById('s-all-reg').textContent    = n((m.total_registered || 0) + (m.new_registered || 0));
