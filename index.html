@@ -4916,15 +4916,27 @@ async function loadHostedDashboardData() {
   registeredStudents = {};
   data.students.forEach(s => {
     const c = toClient(s);
-    if (s.is_registered) {
+    // Tony 2026-05-13: "registered" means credit_hours > 0. The DB's
+    // is_registered flag can linger from a prior upload (the new
+    // 0-hour filter in buildData doesn't actively flip stale rows
+    // back to is_registered=false), so re-evaluate at load time from
+    // credit_hours. A student previously marked registered but now
+    // showing 0 hours becomes "returning unregistered" until the next
+    // upload pushes the corrected flag back.
+    const hasHours = Number(s.credit_hours || 0) > 0;
+    const isRegisteredNow = !!s.is_registered && hasHours;
+    if (isRegisteredNow) {
       registeredIds.add(s.id);
       registeredStudents[s.id] = c;
     }
     if (s.is_new_student) {
-      c.status = s.is_registered ? 'Registered' : 'Not Yet Registered';
+      c.status = isRegisteredNow ? 'Registered' : 'Not Yet Registered';
       newStudents[s.id] = c;
-    } else if (!s.is_registered) {
-      // Returning unregistered = appears in students with neither registered nor new
+    } else if (!isRegisteredNow) {
+      // Returning unregistered = neither new nor actively registered. This
+      // catches the formerly-registered-now-0-hours case so the Summary's
+      // Returning Student Status donuts categorize them correctly (Has
+      // Hold or Can Register, depending on their holds).
       returningStudents[s.id] = c;
     }
   });
@@ -5390,8 +5402,16 @@ async function pushDataToSupabase() {
       // of current-term withdrawals. Group by student_id so we can find the
       // matching row(s) for each withdrawal in O(1) below.
       const studentIds = [...new Set(wdsForSync.map(w => w.student_id))];
+      // Tony 2026-05-13: the SELECT must include every column the guard
+      // logic below checks ("only fill if existing is empty"). Originally
+      // this only fetched id/student_id/source_withdrawal_id/updated_at,
+      // so `keep.class_year` was always undefined and the !keep.class_year
+      // guard ALWAYS fired — meaning committee edits to class_year were
+      // silently overwritten on every withdrawal re-upload. Same risk
+      // applied to major, sport, reason, withdrawal_status, notes — pull
+      // them all so the guards have real values to compare against.
       const exRes = await sb.from('not_returning_reports')
-        .select('id, student_id, source_withdrawal_id, updated_at')
+        .select('id, student_id, source_withdrawal_id, updated_at, class_year, major, sport, reason, withdrawal_status, notes')
         .in('student_id', studentIds)
         .eq('is_hidden', false);
       expect('NR existing-by-student select', exRes);
