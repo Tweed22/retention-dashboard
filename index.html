@@ -671,13 +671,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
-      <div class="kpi-card sky clickable" onclick="showPage('new',document.querySelectorAll('.nav-tab')[4])"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
+      <div class="kpi-card sky kpi-clickable" onclick="goToNewPage()" title="Open the New Students tab"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
     </div>
     <div class="section-label">Persistence &amp; Retention</div>
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
       <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior semester withdraws)"><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
-      <div class="kpi-card purple"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
+      <div class="kpi-card purple kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
       <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
@@ -831,10 +831,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="new-empty" class="empty-state"><p>No new student data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your new student CSV</a>.</p></div>
   <div id="new-content" style="display:none;">
     <div class="kpi-row kpi-row-4">
-      <div class="kpi-card indigo"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="ns-total">—</div><div class="kpi-sub">From new student report</div></div>
-      <div class="kpi-card sky"><div class="kpi-label">Registered</div><div class="kpi-value" id="ns-reg">—</div><div class="kpi-sub">New students with ≥1 enrollment</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Not Yet Registered</div><div class="kpi-value" id="ns-unreg">—</div><div class="kpi-sub">New students with no enrollments</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="ns-withdrawn">—</div><div class="kpi-sub">Formally withdrew before attendance (NW)</div></div>
+      <div class="kpi-card indigo kpi-clickable" onclick="nsFilterByStatus('')" title="Click to clear the status filter and show all new students"><div class="kpi-label">Total New Students</div><div class="kpi-value" id="ns-total">—</div><div class="kpi-sub">From new student report</div></div>
+      <div class="kpi-card sky kpi-clickable" onclick="nsFilterByStatus('Registered')" title="Click to filter to Registered new students"><div class="kpi-label">Registered</div><div class="kpi-value" id="ns-reg">—</div><div class="kpi-sub">New students with ≥1 enrollment</div></div>
+      <div class="kpi-card amber kpi-clickable" onclick="nsFilterByStatus('Not Yet Registered')" title="Click to filter to Not-Yet-Registered new students"><div class="kpi-label">Not Yet Registered</div><div class="kpi-value" id="ns-unreg">—</div><div class="kpi-sub">New students with no enrollments</div></div>
+      <div class="kpi-card red kpi-clickable" onclick="nsFilterByStatus('Withdrawn')" title="Click to filter to Withdrawn new students"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="ns-withdrawn">—</div><div class="kpi-sub">Formally withdrew before attendance (NW)</div></div>
     </div>
     <p style="font-size:11px;color:#888;font-style:italic;margin-bottom:14px;">New students are excluded from the returning registration rate on the Summary page.</p>
     <div class="filter-row">
@@ -880,11 +880,11 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="ftft-empty" class="empty-state"><p>No FTFT roster loaded yet.<br><a onclick="toggleUploadPanel()">Upload your FTFT CSV</a> to see the cohort here.</p></div>
   <div id="ftft-content" style="display:none;">
     <div class="kpi-row kpi-row-5">
-      <div class="kpi-card indigo"><div class="kpi-label">FTFT Total</div><div class="kpi-value" id="ftft-total">0</div><div class="kpi-sub">Students on the FTFT roster</div></div>
-      <div class="kpi-card green"><div class="kpi-label">Registered</div><div class="kpi-value" id="ftft-reg">0</div><div class="kpi-sub">In Registered CSV, not on NR</div></div>
-      <div class="kpi-card red"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="ftft-hold">0</div><div class="kpi-sub">In a blocking-hold group, not on NR</div></div>
-      <div class="kpi-card teal"><div class="kpi-label">Can Register</div><div class="kpi-value" id="ftft-canreg">0</div><div class="kpi-sub">Unregistered, no blocking hold</div></div>
-      <div class="kpi-card amber"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">FTFT student on the NR list</div></div>
+      <div class="kpi-card indigo kpi-clickable" onclick="ftftFilterByStatus('')" title="Click to clear the status filter and show all FTFT students"><div class="kpi-label">FTFT Total</div><div class="kpi-value" id="ftft-total">0</div><div class="kpi-sub">Students on the FTFT roster</div></div>
+      <div class="kpi-card green kpi-clickable" onclick="ftftFilterByStatus('Registered')" title="Click to filter to Registered FTFT students"><div class="kpi-label">Registered</div><div class="kpi-value" id="ftft-reg">0</div><div class="kpi-sub">In Registered CSV, not on NR</div></div>
+      <div class="kpi-card red kpi-clickable" onclick="ftftFilterByStatus('Has Hold')" title="Click to filter to FTFT students with a blocking hold"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="ftft-hold">0</div><div class="kpi-sub">In a blocking-hold group, not on NR</div></div>
+      <div class="kpi-card teal kpi-clickable" onclick="ftftFilterByStatus('Can Register')" title="Click to filter to FTFT students who can register"><div class="kpi-label">Can Register</div><div class="kpi-value" id="ftft-canreg">0</div><div class="kpi-sub">Unregistered, no blocking hold</div></div>
+      <div class="kpi-card amber kpi-clickable" onclick="ftftFilterByStatus('Not Returning')" title="Click to filter to FTFT students on the Not Returning list"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">FTFT student on the NR list</div></div>
     </div>
     <div class="section-label">First-Time Full-Time Roster</div>
     <div class="filter-row">
@@ -923,10 +923,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <!-- ══════════════════════════ NOT RETURNING ══════════════════════════ -->
 <div class="page" id="page-notreturning">
   <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
-    <div class="kpi-card red"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="nr-count">0</div><div class="kpi-sub">Students reported not returning</div></div>
-    <div class="kpi-card amber"><div class="kpi-label">Withdrawal Pending</div><div class="kpi-value" id="nr-pending">0</div><div class="kpi-sub">Formal withdrawal not processed</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="nr-withdrawn">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
-    <div class="kpi-card sky"><div class="kpi-label">Registered for Courses</div><div class="kpi-value" id="nr-registered">0</div><div class="kpi-sub">On NR list AND enrolled — needs reconciliation</div></div>
+    <div class="kpi-card red kpi-clickable" onclick="nrFilterByWithdrawal('')" title="Click to clear the status filter and show all NR rows"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="nr-count">0</div><div class="kpi-sub">Students reported not returning</div></div>
+    <div class="kpi-card amber kpi-clickable" onclick="nrFilterByWithdrawal('Pending')" title="Click to filter to Pending-withdrawal rows"><div class="kpi-label">Withdrawal Pending</div><div class="kpi-value" id="nr-pending">0</div><div class="kpi-sub">Formal withdrawal not processed</div></div>
+    <div class="kpi-card green kpi-clickable" onclick="nrFilterByWithdrawal('Withdrawn')" title="Click to filter to Withdrawn rows"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="nr-withdrawn">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
+    <div class="kpi-card sky kpi-clickable" onclick="nrFilterByWithdrawal('Registered')" title="Click to filter to NR rows whose students are still registered for courses"><div class="kpi-label">Registered for Courses</div><div class="kpi-value" id="nr-registered">0</div><div class="kpi-sub">On NR list AND enrolled — needs reconciliation</div></div>
   </div>
 
   <!-- ── Inline add row ── -->
@@ -4453,6 +4453,41 @@ function goToNRPage() {
   setTimeout(() => {
     document.getElementById('page-notreturning')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 50);
+}
+
+// Tony 2026-05-13: tab-launchers used by clickable Summary KPI cards. Each
+// finds its target nav tab by onclick-substring rather than a hard-coded
+// index so reordering the tabs doesn't break the navigation.
+function goToNewPage() {
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes("'new'"));
+  showPage('new', navTab);
+}
+function goToFTFTPage() {
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes("'ftft'"));
+  showPage('ftft', navTab);
+}
+
+// Card-click filter helpers. Each one sets the status filter on its page
+// and re-runs the apply function, so clicking e.g. "Withdrawn" on the
+// Not Returning tab acts as a shortcut to the dropdown. Other filters
+// (class, major, search, etc.) are preserved so the user can drill in
+// from an existing slice.
+function nsFilterByStatus(status) {
+  const sel = document.getElementById('ns-status');
+  if (sel) sel.value = status || '';
+  if (typeof nsApply === 'function') nsApply();
+}
+function ftftFilterByStatus(status) {
+  const sel = document.getElementById('ftft-status');
+  if (sel) sel.value = status || '';
+  if (typeof ftftApply === 'function') ftftApply();
+}
+function nrFilterByWithdrawal(status) {
+  const sel = document.getElementById('nr-filter-withdrawal');
+  if (sel) sel.value = status || '';
+  if (typeof nrRender === 'function') nrRender();
 }
 
 // Populate the filter dropdown with the current reasons list. Includes any custom
