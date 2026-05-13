@@ -719,6 +719,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="reg-ptft" onchange="regApply()" title="Filter by Part-Time vs Full-Time enrollment status"><option value="">All Enrollment</option><option value="F">Full-Time</option><option value="P">Part-Time</option></select>
       <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
     </div>
     <div class="table-wrap">
@@ -733,6 +734,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="regSort('id')">Student ID</th>
         <th class="sortable" onclick="regSort('lastName')">Name</th>
         <th class="sortable" onclick="regSort('classYear')">Class</th>
+        <th class="sortable" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
         <th class="sortable" onclick="regSort('creditHours')">Credits</th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
@@ -773,6 +775,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="holdsSort('firstName')">First Name</th>
         <th>Hold</th>
         <th class="sortable" onclick="holdsSort('classYear')">Class</th>
+        <th class="sortable" onclick="holdsSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
         <th class="sortable" onclick="holdsSort('major')">Major</th>
         <th class="sortable" onclick="holdsSort('advisor')">Advisor</th>
         <th class="sortable" onclick="holdsSort('sports')">Sport</th>
@@ -813,6 +816,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable" onclick="crSort('lastName')">Last Name</th>
         <th class="sortable" onclick="crSort('firstName')">First Name</th>
         <th class="sortable" onclick="crSort('classYear')">Class</th>
+        <th class="sortable" onclick="crSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
         <th class="sortable" onclick="crSort('major')">Major</th>
         <th class="sortable" onclick="crSort('advisor')">Advisor</th>
         <th class="sortable" onclick="crSort('sports')">Sport</th>
@@ -1289,6 +1293,7 @@ const EXPORT_COLUMNS = {
     { header: 'Email',      getter: r => r.email },
     { header: 'Hold Type',  getter: r => r.__holdType },
     { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
@@ -1301,6 +1306,7 @@ const EXPORT_COLUMNS = {
     { header: 'Name',       getter: r => r.name },
     { header: 'Email',      getter: r => r.email },
     { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
@@ -1313,6 +1319,8 @@ const EXPORT_COLUMNS = {
     { header: 'Name',       getter: r => r.name },
     { header: 'Email',      getter: r => r.email },
     { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
+    { header: 'Credits',    getter: r => r.creditHours || '' },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
@@ -1646,15 +1654,23 @@ function normalizeStudent(row) {
     if (single) holdValues.push(single);
   }
 
-  // Credit hours — present on the registered CSV, one numeric value per
-  // enrollment row. Parsed as float so half-credit courses (e.g., 1.5)
-  // are preserved. Missing/blank values are 0 so the per-student sum
-  // works without special-casing.
-  const creditRaw = findField(row, ['credit_hrs','credit hours','credit hrs','credits','creditHours','credit_hours']);
+  // Credit hours — Tony's 2026-05-13 registered CSV is one-row-per-student
+  // with `hrs_enrolled` already totaled. Older registrar exports were
+  // one-row-per-enrollment using `credit_hrs` / `credit hours`. Both column
+  // names are supported; the buildData merge logic picks max-on-duplicate
+  // so a malformed multi-row export doesn't double-count.
+  const creditRaw = findField(row, ['hrs_enrolled','hrs enrolled','credit_hrs','credit hours','credit hrs','credits','creditHours','credit_hours']);
   const creditNum = creditRaw ? parseFloat(creditRaw) : 0;
 
+  // Part-Time / Full-Time enrollment status — from the new registered CSV
+  // (column `pt_ft_sts`). Normalize to a single uppercase character so
+  // dashboard chips render consistently. Anything other than 'P' or 'F'
+  // becomes empty so the chip cell renders blank instead of guessing.
+  const ptFtRaw = (findField(row, ['pt_ft_sts','pt_ft','ptft','enrollment status','pt ft']) || '').trim().toUpperCase();
+  const ptFt = (ptFtRaw === 'P' || ptFtRaw === 'F') ? ptFtRaw : '';
+
   return {
-    id:        findField(row, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,''),
+    id:        findField(row, ['id_num','id#','id','student id','studentid','stu id','sid']).replace(/^#/,''),
     firstName,
     lastName,
     name,
@@ -1666,10 +1682,13 @@ function normalizeStudent(row) {
                  .split(/[,;|]/).map(s=>s.trim()).filter(Boolean),
     holds:     holdValues, // array of hold strings
     classYear: findField(row, ['class','class status','year','class year','classification','standing','student class']),
-    // Per-row credit hours. The buildData merger sums these across all
-    // enrollment rows so each student ends up with their total enrolled
-    // credit hours.
+    // Credit hours — total enrolled for the term. With the new one-row-
+    // per-student CSV this is the authoritative total; with the legacy
+    // one-row-per-enrollment CSV the buildData merger picks max across
+    // duplicates so the result still represents total enrolled hours.
     creditHours: isFinite(creditNum) ? creditNum : 0,
+    // 'P' (part-time), 'F' (full-time), or '' (unknown).
+    ptFt,
   };
 }
 
@@ -1818,20 +1837,42 @@ function buildData() {
     rawReg.forEach(r => {
       const s = normalizeStudent(r);
       if (!s.id) return;
+      // Tony 2026-05-13: a student is only "registered" if they have
+      // hrs_enrolled > 0. Rows with 0 hours represent students who appear
+      // on the registrar's report but haven't committed to courses for
+      // the upcoming term — they should NOT inflate registered counts.
+      // The new one-row-per-student CSV makes this a per-student filter;
+      // for the legacy one-row-per-enrollment CSV, summing previously
+      // protected against this case (any row with credits made the
+      // student count). Both formats now go through the same gate.
+      if ((s.creditHours || 0) <= 0) return;
       if (!registeredStudents[s.id]) {
-        // First enrollment row for this student — keep as-is. creditHours
-        // already holds this row's value; subsequent rows will add to it.
+        // First row for this student — keep as-is. With the new CSV this
+        // already holds the authoritative total hours.
         registeredStudents[s.id] = s;
       } else {
-        // Additional enrollment row for the same student — merge sports
-        // (de-duped) and ADD credit hours to the running total.
+        // Duplicate row for the same student. New CSV shouldn't have
+        // these; legacy CSV would. Strategy: merge sports (de-duped) and
+        // take the MAX credit-hour value. Max-on-duplicate is safe for
+        // both formats: the new CSV's "duplicate" would have the same
+        // total on both rows (max returns the value), and the legacy
+        // CSV's per-row credit can never exceed the per-student total
+        // (so max gives the largest per-enrollment value, which is the
+        // best single-row approximation). If you need exact per-enrollment
+        // summing for the legacy CSV again, revert to += here.
         s.sports.forEach(sp => {
           if (sp && !registeredStudents[s.id].sports.includes(sp)) {
             registeredStudents[s.id].sports.push(sp);
           }
         });
-        registeredStudents[s.id].creditHours =
-          (registeredStudents[s.id].creditHours || 0) + (s.creditHours || 0);
+        if ((s.creditHours || 0) > (registeredStudents[s.id].creditHours || 0)) {
+          registeredStudents[s.id].creditHours = s.creditHours;
+        }
+        // Preserve PT/FT from whichever row supplied it first; only fill
+        // in if the first row was blank.
+        if (!registeredStudents[s.id].ptFt && s.ptFt) {
+          registeredStudents[s.id].ptFt = s.ptFt;
+        }
       }
     });
   }
@@ -3120,6 +3161,17 @@ function classChip(val) {
   const key = Object.keys(map).find(k=>v.includes(k));
   return `<span class="chip ${key ? map[key] : 'chip-gray'}">${val}</span>`;
 }
+
+// Part-Time / Full-Time chip — 'F' renders as a green "FT" chip, 'P' as an
+// amber "PT" chip, anything else as a muted em-dash so the column reads
+// cleanly when the registrar didn't supply pt_ft_sts. Shared by the
+// Registered, Can Register, and Holds tables.
+function ptFtChip(val) {
+  const v = (val || '').toUpperCase();
+  if (v === 'F') return '<span class="chip chip-green" title="Full-Time">FT</span>';
+  if (v === 'P') return '<span class="chip chip-amber" title="Part-Time">PT</span>';
+  return '<span style="color:#bbb;font-size:11px;">—</span>';
+}
 function applySort(rows, state) {
   if (!state.col) return rows;
   return [...rows].sort((a,b) => {
@@ -3290,10 +3342,11 @@ function holdsApply() {
           <td>${r.firstName||r.name||''}</td>
           <td>${renderHoldChips(r)}</td>
           <td>${classChip(r.classYear)}</td>
+          <td>${ptFtChip(r.ptFt)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
-    : emptyRow(8,'No students match.');
+    : emptyRow(9,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3336,10 +3389,11 @@ function crApply() {
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${r.firstName||r.name||''}</td>
           <td>${classChip(r.classYear)}</td>
+          <td>${ptFtChip(r.ptFt)}</td>
           <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
         </tr>`;
       }).join('')
-    : emptyRow(7,'No students match.');
+    : emptyRow(8,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3368,9 +3422,11 @@ function renderRegistered() {
 function regApply() {
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
   const cls     = document.getElementById('reg-class').value.toLowerCase();
+  const ptft    = (document.getElementById('reg-ptft')?.value || '').toUpperCase();
   const q       = document.getElementById('reg-search').value.toLowerCase();
   let rows = returningRegisteredList();
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
+  if (ptft)    rows=rows.filter(r=>(r.ptFt||'').toUpperCase() === ptft);
   if (q) rows=rows.filter(r=>(r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,regSort_);
   document.getElementById('reg-title').textContent = `${n(rows.length)} of ${n(returningRegisteredList().length)} Returning Students Registered`;
@@ -3398,10 +3454,11 @@ function regApply() {
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${displayName}${nrBadge}${ftftBadge(r.id)}</td>
           <td>${classChip(r.classYear)}</td>
+          <td>${ptFtChip(r.ptFt)}</td>
           <td style="font-weight:600;text-align:right;">${creditCell}</td>
         </tr>`;
       }).join('')
-    : emptyRow(4,'No students match.');
+    : emptyRow(5,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4846,6 +4903,10 @@ async function loadHostedDashboardData() {
       holds: s.holds || [],
       // numeric or null in the DB; coerce to a number for display formatting.
       creditHours: s.credit_hours != null ? Number(s.credit_hours) : 0,
+      // Part-Time / Full-Time enrollment status from the registrar CSV.
+      // Empty string when the column is missing (pre-migration-0011 deploy)
+      // or NULL (older student record without the field populated).
+      ptFt: s.pt_ft_status || '',
     };
   }
   // Returning + new + registered maps
@@ -5125,10 +5186,17 @@ async function pushDataToSupabase() {
       sports: s.sports || [],
       class_year: s.classYear || null,
       holds: s.holds || [],
-      // Per-student total enrolled credit hours, summed across all rows
-      // of the registered CSV. Sent as null when zero/unknown so the column
-      // stays sparse for non-registered students.
+      // Per-student total enrolled credit hours. With the new one-row-per-
+      // student registered CSV this is the authoritative total from
+      // hrs_enrolled; with the legacy per-enrollment CSV the buildData
+      // merger picked max-on-duplicate. Sent as null when zero/unknown so
+      // the column stays sparse for non-registered students.
       credit_hours: s.creditHours ? s.creditHours : null,
+      // Part-Time / Full-Time enrollment status from pt_ft_sts. 'P'/'F'/null.
+      // Sent null when the field is empty so other admins' viewers don't
+      // see a misleading "PT" chip on a student whose row didn't have the
+      // column populated.
+      pt_ft_status: s.ptFt || null,
       is_new_student: s._isNew,
       is_registered: s._isReg || registeredIds.has(s.id),
       snapshot_id: snapshotId,
