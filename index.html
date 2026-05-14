@@ -255,6 +255,11 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
        full table layout is intact.
 */
 .nav-hamburger { display: none; }
+/* On desktop the wrapper is a flex strip so the tabs stay horizontal —
+   without this rule, the tabs become block children of a plain div and
+   stack vertically. Mobile CSS overrides this to a vertical drawer. */
+.nav-tabs-wrapper { display: flex; flex: 1; align-items: center; }
+.nav-active-label { display: none; }
 .mobile-detail-row { display: none; }
 .exp-btn { background: transparent; border: none; cursor: pointer; padding: 4px 6px; color: #1e2d4f; font-size: 13px; line-height: 1; transition: transform 0.15s; }
 .exp-btn:hover { color: #2563eb; }
