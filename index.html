@@ -275,12 +275,17 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
   .header-left h1 { font-size: 15px; }
   .header-left .subtitle { font-size: 10px; }
 
-  /* Tab bar becomes a hamburger drawer. */
-  .nav { padding: 0; position: sticky; top: 0; flex-wrap: nowrap; align-items: center; }
+  /* Tab bar becomes a hamburger drawer. Override the desktop's
+     overflow-x:auto — that scrolling context would clip the absolutely
+     positioned drawer below. */
+  .nav { padding: 0; position: sticky; top: 0; flex-wrap: nowrap; align-items: center; min-height: 44px; overflow: visible; }
+  /* Mobile row tap-target hint: lets users see when a row is interactive. */
+  tbody tr:not(.mobile-detail-row) { cursor: pointer; }
   .nav-hamburger {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 11px 16px; font-size: 20px; color: #1e2d4f;
+    padding: 11px 16px; font-size: 22px; color: #1e2d4f;
     background: transparent; border: 0; cursor: pointer;
+    z-index: 51; line-height: 1; min-width: 44px; min-height: 44px;
   }
   .nav-tabs-wrapper {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
@@ -298,8 +303,9 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
   .nav-active-label {
     display: inline-block !important;
     flex: 1; padding: 11px 16px; font-size: 13px; font-weight: 600;
-    color: #1e2d4f;
+    color: #1e2d4f; cursor: pointer; user-select: none;
   }
+  .nav-active-label:hover { color: #2563eb; }
 
   /* All KPI rows stack to one card per row on phones. */
   .kpi-row-3, .kpi-row-4, .kpi-row-5, .kpi-row-7, .kpi-row-8 { grid-template-columns: 1fr; }
@@ -365,6 +371,18 @@ body.dark .nav { background: #1f1f1f; border-bottom: 1px solid #353535; box-shad
 body.dark .nav-tab { color: #a8a8a8; }
 body.dark .nav-tab:hover { background: #2e2e2e; color: #e0e0e0; }
 body.dark .nav-tab.active { background: #353535; color: #e0e0e0; }
+/* Mobile drawer + active-label dark theme. The drawer's background was
+   white, which looked like a flashlight on a dark page. The detail-row
+   underlay was #f9fafb — also way too bright. Tony 2026-05-13. */
+body.dark .nav-hamburger { color: #e0e0e0; }
+body.dark .nav-active-label { color: #e0e0e0; }
+body.dark .nav-active-label:hover { color: #93c5fd; }
+body.dark .nav-tabs-wrapper { background: #262626; border-bottom-color: #353535; box-shadow: 0 6px 16px rgba(0,0,0,0.5); }
+body.dark .nav-tab { border-bottom-color: #2a2a2a; }
+body.dark .mobile-detail-row td { background: #1f1f1f; border-top-color: #353535; }
+body.dark .mobile-detail-pair .mdp-label { color: #9ca3af; }
+body.dark .exp-btn { color: #e0e0e0; }
+body.dark .exp-btn:hover { color: #93c5fd; }
 
 /* All card-style surfaces share one fill + one border. Previously .card
    wasn't covered, leaving the Summary panels white in dark mode. */
@@ -742,7 +760,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <!-- ── Nav ── -->
 <div class="nav">
   <button class="nav-hamburger" onclick="toggleMobileNav()" aria-label="Open navigation menu" aria-expanded="false">☰</button>
-  <span class="nav-active-label" id="nav-active-label" style="display:none;">Summary</span>
+  <span class="nav-active-label" id="nav-active-label" role="button" tabindex="0" onclick="toggleMobileNav()" onkeydown="if(event.key==='Enter'||event.key===' ')toggleMobileNav()">Summary</span>
   <div class="nav-tabs-wrapper" id="nav-tabs-wrapper">
     <div class="nav-tab active" onclick="showPage('summary',this)">Summary</div>
     <div class="nav-tab gated-only" onclick="showPage('registered',this)">Registered</div>
@@ -4644,21 +4662,47 @@ function toggleMobileNav() {
 // (so it becomes display:table-row). On desktop the chevron column is
 // still visible but tapping it just toggles the same row — harmless,
 // and useful for showing a quick preview without scrolling sideways.
-function toggleDetailRow(btn) {
-  const tr = btn.closest('tr');
+// Toggle a row's detail row. Accepts either the chevron <button> element
+// or a click Event (from row-level delegation). Tony 2026-05-13: tapping
+// the small chevron on a phone is hard — added a document-level click
+// listener (below) so tapping anywhere on the main row toggles too,
+// EXCEPT when the click landed inside an interactive child like a button,
+// input, select, etc. (so the NR row's Reason dropdown, Notes input, and
+// Edit/Remove buttons all keep working without triggering an expand).
+function toggleDetailRow(btnOrTr) {
+  const tr = (btnOrTr && btnOrTr.tagName === 'TR') ? btnOrTr : (btnOrTr ? btnOrTr.closest('tr') : null);
   if (!tr) return;
   const detail = tr.nextElementSibling;
   if (!detail || !detail.classList.contains('mobile-detail-row')) return;
   const wasOpen = detail.classList.toggle('open');
-  btn.classList.toggle('open', wasOpen);
-  btn.setAttribute('aria-expanded', wasOpen ? 'true' : 'false');
+  const btn = tr.querySelector('.exp-btn');
+  if (btn) {
+    btn.classList.toggle('open', wasOpen);
+    btn.setAttribute('aria-expanded', wasOpen ? 'true' : 'false');
+  }
 }
 
+// Document-level click delegation: tapping any main row inside a tbody
+// toggles its detail row. Sort headers, action buttons, dropdowns, and
+// inline edits inside cells are excluded so they keep working normally.
+document.addEventListener('click', (e) => {
+  if (!e.target) return;
+  if (e.target.closest('button, input, select, textarea, a, label')) return;
+  const tr = e.target.closest('tbody tr');
+  if (!tr) return;
+  // Only main rows have a sibling detail row; skip the detail row itself.
+  if (tr.classList.contains('mobile-detail-row')) return;
+  const detail = tr.nextElementSibling;
+  if (!detail || !detail.classList.contains('mobile-detail-row')) return;
+  toggleDetailRow(tr);
+});
+
 // Renders the chevron <td> that lives at the end of every main row.
-// Calling pattern: each renderer appends `${expandBtnCell()}` to the
-// row HTML right before closing </tr>.
+// The chevron is now purely visual — the document-level click delegation
+// above handles the actual toggle when the user taps anywhere on the row
+// (including the chevron itself, since chevron clicks bubble to the tr).
 function expandBtnCell() {
-  return '<td class="exp-td"><button class="exp-btn" onclick="toggleDetailRow(this)" aria-label="Show details" aria-expanded="false">▸</button></td>';
+  return '<td class="exp-td"><span class="exp-btn" aria-label="Show details" aria-expanded="false">▸</span></td>';
 }
 
 // Renders the sibling detail row that holds the secondary fields.
