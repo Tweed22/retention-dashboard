@@ -869,7 +869,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="summary-content" style="display:none;">
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-4">
-      <div class="kpi-card blue"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
+      <div class="kpi-card blue kpi-clickable" onclick="goToRegisteredPage()" title="Open the Registered tab"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
       <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
       <div class="kpi-card sky kpi-clickable" onclick="goToNewPage()" title="Open the New Students tab"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
@@ -938,6 +938,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary" onclick="regSort('classYear')">Class</th>
         <th class="sortable mobile-secondary" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
         <th class="sortable mobile-secondary" onclick="regSort('creditHours')">Credits</th>
+        <th class="sortable mobile-secondary admin-only" onclick="regSort('careerGpa')" title="Career GPA from the registered CSV (admin-only)">GPA</th>
         <th class="exp-th"></th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
@@ -1535,6 +1536,9 @@ const EXPORT_COLUMNS = {
     { header: 'Class Year', getter: r => r.classYear },
     { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
     { header: 'Credits',    getter: r => r.creditHours || '' },
+    // GPA column is admin-only — filtered out at export time when the
+    // current viewer isn't an admin. Tony 2026-05-13.
+    { header: 'GPA',        getter: r => (r.careerGpa != null && isFinite(r.careerGpa)) ? r.careerGpa.toFixed(2) : '', adminOnly: true },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
@@ -1733,8 +1737,11 @@ function getFTFTExportData() {
 
 // Top-level handler — wired to the buttons. `tab` is one of the EXPORT_COLUMNS keys.
 function exportTabCSV(tab, scope /* 'visible' | 'all' */) {
-  const cols = EXPORT_COLUMNS[tab];
-  if (!cols) return;
+  // Filter out admin-only columns when the viewer isn't an admin so a
+  // committee CSV download doesn't leak GPA or other restricted fields.
+  // Tony 2026-05-13.
+  const cols = (EXPORT_COLUMNS[tab] || []).filter(c => !c.adminOnly || isAdmin());
+  if (!cols.length) return;
   let data;
   switch (tab) {
     case 'holds':        data = getHoldsExportData(); break;
@@ -1892,6 +1899,15 @@ function normalizeStudent(row) {
   const ptFtRaw = (findField(row, ['pt_ft_sts','pt_ft','ptft','enrollment status','pt ft']) || '').trim().toUpperCase();
   const ptFt = (ptFtRaw === 'P' || ptFtRaw === 'F') ? ptFtRaw : '';
 
+  // Career GPA — Tony 2026-05-13. Visible to admins only via the
+  // .admin-only CSS class on the Registered tab; committee members
+  // never see it on screen. Be strict about the candidate name to avoid
+  // accidentally pulling trm_gpa, career_hrs_gpa, etc. (findField uses
+  // substring match — 'gpa' alone would be too broad).
+  const gpaRaw = findField(row, ['career_gpa','career gpa']);
+  const gpaNum = gpaRaw ? parseFloat(gpaRaw) : null;
+  const careerGpa = (gpaNum != null && isFinite(gpaNum)) ? gpaNum : null;
+
   return {
     id:        findField(row, ['id_num','id#','id','student id','studentid','stu id','sid']).replace(/^#/,''),
     firstName,
@@ -1912,6 +1928,8 @@ function normalizeStudent(row) {
     creditHours: isFinite(creditNum) ? creditNum : 0,
     // 'P' (part-time), 'F' (full-time), or '' (unknown).
     ptFt,
+    // Numeric career GPA (e.g., 3.45) or null when missing/unparseable.
+    careerGpa,
   };
 }
 
@@ -2095,6 +2113,10 @@ function buildData() {
         // in if the first row was blank.
         if (!registeredStudents[s.id].ptFt && s.ptFt) {
           registeredStudents[s.id].ptFt = s.ptFt;
+        }
+        // Same fill-don't-clobber rule for career GPA.
+        if (registeredStudents[s.id].careerGpa == null && s.careerGpa != null) {
+          registeredStudents[s.id].careerGpa = s.careerGpa;
         }
       }
     });
@@ -3836,20 +3858,32 @@ function regApply() {
         // credit hours, which usually means they aren't enrolled.
         const credits = r.creditHours;
         const creditCell = credits ? (Number.isInteger(credits) ? credits : credits.toFixed(1)) : '<span style="color:#bbb;font-size:11px;">—</span>';
+        // GPA: admin-only column + admin-only detail-row entry. The
+        // header column has .admin-only too, so for committee viewers
+        // the column is completely hidden (display:none from auth-gate
+        // CSS) and the cell collapses to zero width. The detail row's
+        // GPA pair is conditionally INCLUDED for admins only so the
+        // mobile drill-down doesn't ever surface GPA to committee.
+        const gpaCell = (r.careerGpa != null && isFinite(r.careerGpa))
+          ? r.careerGpa.toFixed(2)
+          : '<span style="color:#bbb;font-size:11px;">—</span>';
+        const gpaDetailField = isAdmin() ? [{ label: 'GPA', value: gpaCell }] : [];
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${displayName}${nrBadge}${ftftBadge(r.id)}</td>
           <td class="mobile-secondary">${classChip(r.classYear)}</td>
           <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
           <td class="mobile-secondary" style="font-weight:600;text-align:right;">${creditCell}</td>
+          <td class="mobile-secondary admin-only" style="font-weight:600;text-align:right;">${gpaCell}</td>
           ${expandBtnCell()}
-        </tr>${buildDetailRow(6, [
+        </tr>${buildDetailRow(7, [
           { label: 'Class', value: classChip(r.classYear) },
           { label: 'Enrollment', value: ptFtChip(r.ptFt) },
           { label: 'Credits', value: creditCell },
+          ...gpaDetailField,
         ])}`;
       }).join('')
-    : emptyRow(6,'No students match.');
+    : emptyRow(7,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -5280,6 +5314,11 @@ function goToFTFTPage() {
     .find(t => (t.getAttribute('onclick') || '').includes("'ftft'"));
   showPage('ftft', navTab);
 }
+function goToRegisteredPage() {
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes("'registered'"));
+  showPage('registered', navTab);
+}
 
 // Card-click filter helpers. Each one sets the status filter on its page
 // and re-runs the apply function, so clicking e.g. "Withdrawn" on the
@@ -5772,6 +5811,9 @@ async function loadHostedDashboardData() {
       // Empty string when the column is missing (pre-migration-0011 deploy)
       // or NULL (older student record without the field populated).
       ptFt: s.pt_ft_status || '',
+      // Career GPA — null when missing/unset. Admin-only on the client
+      // via the .admin-only column class on the Registered tab.
+      careerGpa: s.career_gpa != null ? Number(s.career_gpa) : null,
     };
   }
   // Returning + new + registered maps
@@ -6074,6 +6116,10 @@ async function pushDataToSupabase() {
       // see a misleading "PT" chip on a student whose row didn't have the
       // column populated.
       pt_ft_status: s.ptFt || null,
+      // Career GPA from the registered CSV — admin-only on the client.
+      // See migration 0014 for column-level confidentiality notes. Sent
+      // null when missing so the DB column stays sparse.
+      career_gpa: (s.careerGpa != null && isFinite(s.careerGpa)) ? s.careerGpa : null,
       is_new_student: s._isNew,
       is_registered: s._isReg || registeredIds.has(s.id),
       snapshot_id: snapshotId,
