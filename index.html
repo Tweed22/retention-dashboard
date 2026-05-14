@@ -4364,7 +4364,7 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
     const pct = total ? (it.count / total) * 100 : 0;
     const displayKey = labelOf(it.key);
     const pillText = `${displayKey} · ${Math.round(pct)}%`;
-    const click = filterId ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
+    const click = filterId ? ` onclick="nrBdClick('${filterId}', ${escAttr(JSON.stringify(it.key))})"` : '';
     const cls = click ? 'nr-bd-seg clickable' : 'nr-bd-seg';
     let radius = '';
     if (i === 0 && i === allBarItems.length - 1) radius = '6px';
@@ -4389,7 +4389,7 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
     const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
     const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
     const click = (!isOther && filterId)
-      ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
+      ? ` onclick="nrBdClick('${filterId}', ${escAttr(JSON.stringify(it.key))})"` : '';
     const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
     const tipAttr = isOther
       ? ` title="${restItems.length} smaller categor${restItems.length === 1 ? 'y' : 'ies'} — hover or click them directly on the bar above"`
