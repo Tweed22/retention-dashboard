@@ -240,6 +240,91 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
   .upload-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   Mobile (≤640px) — Tony 2026-05-13
+   ──────────────────────────────────────────────────────────────────
+   Goals:
+     • Tabs collapse to a hamburger drawer.
+     • Every KPI row stacks to a single column.
+     • Tables show ID + Name + chevron only; tapping the chevron
+       reveals a stacked "detail" row underneath with the rest of
+       the data. Achieved by marking secondary cells .mobile-secondary
+       and rendering a sibling .mobile-detail-row that's hidden by
+       default and revealed when the row is .open. Both on desktop
+       AND on tablet (>640px), the detail rows stay hidden so the
+       full table layout is intact.
+*/
+.nav-hamburger { display: none; }
+.mobile-detail-row { display: none; }
+.exp-btn { background: transparent; border: none; cursor: pointer; padding: 4px 6px; color: #1e2d4f; font-size: 13px; line-height: 1; transition: transform 0.15s; }
+.exp-btn:hover { color: #2563eb; }
+.exp-th { width: 28px; }
+.exp-td { text-align: center; padding: 4px 0; }
+.mobile-detail-stack { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.mobile-detail-pair { font-size: 12px; line-height: 1.5; }
+.mobile-detail-pair .mdp-label { font-weight: 600; color: #6b7280; margin-right: 6px; }
+
+@media (max-width: 640px) {
+  /* Header reflows so the title and auth pill stack cleanly. */
+  .header { padding: 10px 14px; gap: 6px; }
+  .header-left h1 { font-size: 15px; }
+  .header-left .subtitle { font-size: 10px; }
+
+  /* Tab bar becomes a hamburger drawer. */
+  .nav { padding: 0; position: sticky; top: 0; flex-wrap: nowrap; align-items: center; }
+  .nav-hamburger {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 11px 16px; font-size: 20px; color: #1e2d4f;
+    background: transparent; border: 0; cursor: pointer;
+  }
+  .nav-tabs-wrapper {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    background: white; flex-direction: column;
+    border-bottom: 1px solid #e0e4ec;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    z-index: 50;
+  }
+  .nav-tabs-wrapper.open { display: flex; }
+  .nav-tab {
+    padding: 14px 20px; border-bottom: 1px solid #f0f2f6;
+    width: 100%;
+  }
+  .nav-tab.active { border-bottom: 1px solid #f0f2f6; background: #f4f6f9; }
+  .nav-active-label {
+    display: inline-block !important;
+    flex: 1; padding: 11px 16px; font-size: 13px; font-weight: 600;
+    color: #1e2d4f;
+  }
+
+  /* All KPI rows stack to one card per row on phones. */
+  .kpi-row-3, .kpi-row-4, .kpi-row-5, .kpi-row-7, .kpi-row-8 { grid-template-columns: 1fr; }
+  .hold-grid { grid-template-columns: 1fr; }
+  .returning-donuts-grid, .ftft-donuts-grid { grid-template-columns: 1fr !important; }
+
+  /* Filter rows wrap; their selects + search inputs go full-width
+     so they stay tappable. */
+  .filter-row { flex-wrap: wrap; gap: 8px; }
+  .filter-row .filter-select, .filter-row .table-search { width: 100%; }
+
+  /* Tables: hide secondary cells, render detail row when expanded. */
+  table th.mobile-secondary, table td.mobile-secondary { display: none; }
+  .mobile-detail-row.open { display: table-row; }
+  .mobile-detail-row td { padding: 12px 14px; background: #f9fafb; border-top: none; }
+  .exp-btn.open { transform: rotate(90deg); }
+
+  /* Table-header padding is tighter on phones. */
+  table th, table td { padding: 8px 10px; font-size: 12px; }
+
+  /* Export-button cluster (Download visible / Download all) wraps. */
+  .table-header-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .export-cluster { flex-wrap: wrap; gap: 6px; }
+  .export-btn { flex: 1; }
+
+  /* Term-settings + upload panel get vertical stacks. */
+  .term-settings { flex-direction: column; align-items: stretch; }
+  .term-settings .ts-field { width: 100%; }
+}
+
 /* ── Auth UI ── */
 .auth-status { font-size: 11px; color: rgba(255,255,255,0.85); display: inline-flex; align-items: center; gap: 6px; }
 .auth-status .auth-name { font-weight: 600; color: white; }
@@ -651,13 +736,17 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 
 <!-- ── Nav ── -->
 <div class="nav">
-  <div class="nav-tab active" onclick="showPage('summary',this)">Summary</div>
-  <div class="nav-tab gated-only" onclick="showPage('registered',this)">Registered</div>
-  <div class="nav-tab gated-only" onclick="showPage('holds',this)">Holds Breakdown</div>
-  <div class="nav-tab gated-only" onclick="showPage('canreg',this)">Can Register</div>
-  <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
-  <div class="nav-tab gated-only" onclick="showPage('ftft',this)">FTFT</div>
-  <div class="nav-tab gated-only" onclick="showPage('notreturning',this)">Not Returning</div>
+  <button class="nav-hamburger" onclick="toggleMobileNav()" aria-label="Open navigation menu" aria-expanded="false">☰</button>
+  <span class="nav-active-label" id="nav-active-label" style="display:none;">Summary</span>
+  <div class="nav-tabs-wrapper" id="nav-tabs-wrapper">
+    <div class="nav-tab active" onclick="showPage('summary',this)">Summary</div>
+    <div class="nav-tab gated-only" onclick="showPage('registered',this)">Registered</div>
+    <div class="nav-tab gated-only" onclick="showPage('holds',this)">Holds Breakdown</div>
+    <div class="nav-tab gated-only" onclick="showPage('canreg',this)">Can Register</div>
+    <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
+    <div class="nav-tab gated-only" onclick="showPage('ftft',this)">FTFT</div>
+    <div class="nav-tab gated-only" onclick="showPage('notreturning',this)">Not Returning</div>
+  </div>
 </div>
 
 <!-- ══════════════════════════ SUMMARY ══════════════════════════ -->
@@ -733,9 +822,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="regSort('id')">Student ID</th>
         <th class="sortable" onclick="regSort('lastName')">Name</th>
-        <th class="sortable" onclick="regSort('classYear')">Class</th>
-        <th class="sortable" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
-        <th class="sortable" onclick="regSort('creditHours')">Credits</th>
+        <th class="sortable mobile-secondary" onclick="regSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
+        <th class="sortable mobile-secondary" onclick="regSort('creditHours')">Credits</th>
+        <th class="exp-th"></th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
     </div>
@@ -772,13 +862,14 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="holdsSort('id')">Student ID</th>
         <th class="sortable" onclick="holdsSort('lastName')">Last Name</th>
-        <th class="sortable" onclick="holdsSort('firstName')">First Name</th>
-        <th>Hold</th>
-        <th class="sortable" onclick="holdsSort('classYear')">Class</th>
-        <th class="sortable" onclick="holdsSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
-        <th class="sortable" onclick="holdsSort('major')">Major</th>
-        <th class="sortable" onclick="holdsSort('advisor')">Advisor</th>
-        <th class="sortable" onclick="holdsSort('sports')">Sport</th>
+        <th class="sortable mobile-secondary" onclick="holdsSort('firstName')">First Name</th>
+        <th class="mobile-secondary">Hold</th>
+        <th class="sortable mobile-secondary" onclick="holdsSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary" onclick="holdsSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
+        <th class="sortable mobile-secondary" onclick="holdsSort('major')">Major</th>
+        <th class="sortable mobile-secondary" onclick="holdsSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary" onclick="holdsSort('sports')">Sport</th>
+        <th class="exp-th"></th>
       </tr></thead>
       <tbody id="holds-tbody"></tbody></table>
     </div>
@@ -814,12 +905,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="crSort('id')">Student ID</th>
         <th class="sortable" onclick="crSort('lastName')">Last Name</th>
-        <th class="sortable" onclick="crSort('firstName')">First Name</th>
-        <th class="sortable" onclick="crSort('classYear')">Class</th>
-        <th class="sortable" onclick="crSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
-        <th class="sortable" onclick="crSort('major')">Major</th>
-        <th class="sortable" onclick="crSort('advisor')">Advisor</th>
-        <th class="sortable" onclick="crSort('sports')">Sport</th>
+        <th class="sortable mobile-secondary" onclick="crSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary" onclick="crSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary" onclick="crSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
+        <th class="sortable mobile-secondary" onclick="crSort('major')">Major</th>
+        <th class="sortable mobile-secondary" onclick="crSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary" onclick="crSort('sports')">Sport</th>
+        <th class="exp-th"></th>
       </tr></thead>
       <tbody id="cr-tbody"></tbody></table>
     </div>
@@ -862,12 +954,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="nsSort('id')">Student ID</th>
         <th class="sortable" onclick="nsSort('lastName')">Last Name</th>
-        <th class="sortable" onclick="nsSort('firstName')">First Name</th>
-        <th class="sortable" onclick="nsSort('status')">Status</th>
-        <th class="sortable" onclick="nsSort('classYear')">Class</th>
-        <th class="sortable" onclick="nsSort('major')">Major</th>
-        <th class="sortable" onclick="nsSort('advisor')">Advisor</th>
-        <th class="sortable" onclick="nsSort('sports')">Sport</th>
+        <th class="sortable mobile-secondary" onclick="nsSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary" onclick="nsSort('status')">Status</th>
+        <th class="sortable mobile-secondary" onclick="nsSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary" onclick="nsSort('major')">Major</th>
+        <th class="sortable mobile-secondary" onclick="nsSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary" onclick="nsSort('sports')">Sport</th>
+        <th class="exp-th"></th>
       </tr></thead>
       <tbody id="ns-tbody"></tbody></table>
     </div>
@@ -910,10 +1003,11 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="ftftSort('id')">Student ID</th>
         <th class="sortable" onclick="ftftSort('lastName')">Last Name</th>
-        <th class="sortable" onclick="ftftSort('firstName')">First Name</th>
-        <th class="sortable" onclick="ftftSort('__status')">Status</th>
-        <th class="sortable" onclick="ftftSort('major')">Major</th>
-        <th class="sortable" onclick="ftftSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary" onclick="ftftSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary" onclick="ftftSort('__status')">Status</th>
+        <th class="sortable mobile-secondary" onclick="ftftSort('major')">Major</th>
+        <th class="sortable mobile-secondary" onclick="ftftSort('advisor')">Advisor</th>
+        <th class="exp-th"></th>
       </tr></thead>
       <tbody id="ftft-tbody"></tbody></table>
     </div>
@@ -977,15 +1071,16 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <table><thead><tr>
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
       <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
-      <th class="sortable" onclick="nrSort('firstName')">First Name</th>
-      <th class="sortable" onclick="nrSort('classYear')">Class</th>
-      <th class="sortable" onclick="nrSort('sport')">Sport(s)</th>
-      <th class="sortable" onclick="nrSort('major')">Major</th>
-      <th class="sortable" onclick="nrSort('reason')">Reason</th>
-      <th>Notes</th>
-      <th class="sortable" onclick="nrSort('withdrawal')">Withdrawal</th>
-      <th class="sortable" onclick="nrSort('dateAdded')">Date Added</th>
-      <th></th>
+      <th class="sortable mobile-secondary" onclick="nrSort('firstName')">First Name</th>
+      <th class="sortable mobile-secondary" onclick="nrSort('classYear')">Class</th>
+      <th class="sortable mobile-secondary" onclick="nrSort('sport')">Sport(s)</th>
+      <th class="sortable mobile-secondary" onclick="nrSort('major')">Major</th>
+      <th class="sortable mobile-secondary" onclick="nrSort('reason')">Reason</th>
+      <th class="mobile-secondary">Notes</th>
+      <th class="sortable mobile-secondary" onclick="nrSort('withdrawal')">Withdrawal</th>
+      <th class="sortable mobile-secondary" onclick="nrSort('dateAdded')">Date Added</th>
+      <th class="mobile-secondary"></th>
+      <th class="exp-th"></th>
     </tr></thead>
     <tbody id="nr-tbody"></tbody></table>
   </div>
@@ -3126,7 +3221,7 @@ function ftftApply() {
 
   const tbody = document.getElementById('ftft-tbody');
   if (!rows.length) {
-    tbody.innerHTML = emptyRow(6, 'No FTFT students match the current filters.');
+    tbody.innerHTML = emptyRow(7, 'No FTFT students match the current filters.');
     return;
   }
   const statusChip = (s) =>
@@ -3134,14 +3229,26 @@ function ftftApply() {
     s === 'Has Hold'      ? 'chip-red'    :
     s === 'Can Register'  ? 'chip-teal'   :
     s === 'Not Returning' ? 'chip-amber'  : 'chip-gray';
-  tbody.innerHTML = rows.map(r => `<tr>
+  tbody.innerHTML = rows.map(r => {
+    const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>`;
+    const majorVal   = r.major || '';
+    const advisorVal = r.advisor || '';
+    const firstVal   = r.firstName || r.name || '';
+    return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
-    <td>${r.firstName||r.name||''}</td>
-    <td><span class="chip ${statusChip(r.__status)}">${r.__status}</span></td>
-    <td>${r.major||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    <td>${r.advisor||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-  </tr>`).join('');
+    <td class="mobile-secondary">${firstVal}</td>
+    <td class="mobile-secondary">${statusHtml}</td>
+    <td class="mobile-secondary">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td class="mobile-secondary">${advisorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    ${expandBtnCell()}
+  </tr>${buildDetailRow(7, [
+    { label: 'First Name', value: firstVal },
+    { label: 'Status', value: statusHtml },
+    { label: 'Major', value: majorVal },
+    { label: 'Advisor', value: advisorVal },
+  ])}`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3366,14 +3473,25 @@ function holdsApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td>${r.firstName||r.name||''}</td>
-          <td>${renderHoldChips(r)}</td>
-          <td>${classChip(r.classYear)}</td>
-          <td>${ptFtChip(r.ptFt)}</td>
-          <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
-        </tr>`;
+          <td class="mobile-secondary">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary">${renderHoldChips(r)}</td>
+          <td class="mobile-secondary">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
+          <td class="mobile-secondary">${r.major}</td>
+          <td class="mobile-secondary">${r.advisor}</td>
+          <td class="mobile-secondary">${sc(r)}</td>
+          ${expandBtnCell()}
+        </tr>${buildDetailRow(10, [
+          { label: 'First Name', value: r.firstName||r.name||'' },
+          { label: 'Hold', value: renderHoldChips(r) },
+          { label: 'Class', value: classChip(r.classYear) },
+          { label: 'Enrollment', value: ptFtChip(r.ptFt) },
+          { label: 'Major', value: r.major },
+          { label: 'Advisor', value: r.advisor },
+          { label: 'Sport', value: sc(r) },
+        ])}`;
       }).join('')
-    : emptyRow(9,'No students match.');
+    : emptyRow(10,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3414,13 +3532,23 @@ function crApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td>${r.firstName||r.name||''}</td>
-          <td>${classChip(r.classYear)}</td>
-          <td>${ptFtChip(r.ptFt)}</td>
-          <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
-        </tr>`;
+          <td class="mobile-secondary">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
+          <td class="mobile-secondary">${r.major}</td>
+          <td class="mobile-secondary">${r.advisor}</td>
+          <td class="mobile-secondary">${sc(r)}</td>
+          ${expandBtnCell()}
+        </tr>${buildDetailRow(9, [
+          { label: 'First Name', value: r.firstName||r.name||'' },
+          { label: 'Class', value: classChip(r.classYear) },
+          { label: 'Enrollment', value: ptFtChip(r.ptFt) },
+          { label: 'Major', value: r.major },
+          { label: 'Advisor', value: r.advisor },
+          { label: 'Sport', value: sc(r) },
+        ])}`;
       }).join('')
-    : emptyRow(8,'No students match.');
+    : emptyRow(9,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3480,12 +3608,17 @@ function regApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${displayName}${nrBadge}${ftftBadge(r.id)}</td>
-          <td>${classChip(r.classYear)}</td>
-          <td>${ptFtChip(r.ptFt)}</td>
-          <td style="font-weight:600;text-align:right;">${creditCell}</td>
-        </tr>`;
+          <td class="mobile-secondary">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
+          <td class="mobile-secondary" style="font-weight:600;text-align:right;">${creditCell}</td>
+          ${expandBtnCell()}
+        </tr>${buildDetailRow(6, [
+          { label: 'Class', value: classChip(r.classYear) },
+          { label: 'Enrollment', value: ptFtChip(r.ptFt) },
+          { label: 'Credits', value: creditCell },
+        ])}`;
       }).join('')
-    : emptyRow(5,'No students match.');
+    : emptyRow(6,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3520,16 +3653,27 @@ function nsApply() {
         const isNR = nrIds.has(r.id);
         const rowStyle = isNR ? ' style="background:#fff5f5;"' : '';
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
+        const statusChip = `<span class="chip ${r.status==='Registered'?'chip-green':r.status==='Withdrawn'?'chip-red':'chip-amber'}">${r.status}</span>`;
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td>${r.firstName||r.name||''}</td>
-          <td><span class="chip ${r.status==='Registered'?'chip-green':r.status==='Withdrawn'?'chip-red':'chip-amber'}">${r.status}</span></td>
-          <td>${classChip(r.classYear)}</td>
-          <td>${r.major}</td><td>${r.advisor}</td><td>${sc(r)}</td>
-        </tr>`;
+          <td class="mobile-secondary">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary">${statusChip}</td>
+          <td class="mobile-secondary">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary">${r.major}</td>
+          <td class="mobile-secondary">${r.advisor}</td>
+          <td class="mobile-secondary">${sc(r)}</td>
+          ${expandBtnCell()}
+        </tr>${buildDetailRow(9, [
+          { label: 'First Name', value: r.firstName||r.name||'' },
+          { label: 'Status', value: statusChip },
+          { label: 'Class', value: classChip(r.classYear) },
+          { label: 'Major', value: r.major },
+          { label: 'Advisor', value: r.advisor },
+          { label: 'Sport', value: sc(r) },
+        ])}`;
       }).join('')
-    : emptyRow(8,'No students match.');
+    : emptyRow(9,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3871,7 +4015,7 @@ function nrRender() {
   }
   const tbody=document.getElementById('nr-tbody');
   if (!indexed.length) {
-    tbody.innerHTML = emptyRow(11,
+    tbody.innerHTML = emptyRow(12,
       filtered
         ? 'No rows match the current filters. Try clearing one of the dropdowns above.'
         : 'No students on the Not Returning list yet. Use the form above to add the first entry.');
@@ -3935,22 +4079,33 @@ function nrRenderStaticRow(r) {
               : effectiveStatus === 'Registered' ? 'chip-blue'
               : 'chip-amber';
   const classCell = r.classYear ? classChip(r.classYear) : '<span style="color:#bbb;font-size:11px;">—</span>';
+  const wChipHtml = `<span class="chip ${wChip}">${effectiveStatus}</span>`;
+  const actionsHtml = `<button onclick="nrEdit(${r._idx})" class="nr-row-btn" title="Edit row">Edit</button>
+      <button onclick="nrRemove(${r._idx})" class="nr-row-btn nr-row-btn-danger" title="Remove">Remove</button>`;
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${lastCell}${ftftBadge(r.id)}</td>
-    <td>${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    <td>${classCell}</td>
-    <td style="font-size:11px;">${sportCell}</td>
-    <td style="font-size:11px;">${r.major||'—'}</td>
-    <td>${renderReasonCell(r._idx, r.reason)}</td>
-    <td><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
-    <td><span class="chip ${wChip}">${effectiveStatus}</span></td>
-    <td style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
-    <td style="white-space:nowrap;">
-      <button onclick="nrEdit(${r._idx})" class="nr-row-btn" title="Edit row">Edit</button>
-      <button onclick="nrRemove(${r._idx})" class="nr-row-btn nr-row-btn-danger" title="Remove">Remove</button>
-    </td>
-  </tr>`;
+    <td class="mobile-secondary">${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td class="mobile-secondary">${classCell}</td>
+    <td class="mobile-secondary" style="font-size:11px;">${sportCell}</td>
+    <td class="mobile-secondary" style="font-size:11px;">${r.major||'—'}</td>
+    <td class="mobile-secondary">${renderReasonCell(r._idx, r.reason)}</td>
+    <td class="mobile-secondary"><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
+    <td class="mobile-secondary">${wChipHtml}</td>
+    <td class="mobile-secondary" style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
+    <td class="mobile-secondary" style="white-space:nowrap;">${actionsHtml}</td>
+    ${expandBtnCell()}
+  </tr>${buildDetailRow(12, [
+    { label: 'First Name', value: firstCell || '' },
+    { label: 'Class', value: classCell },
+    { label: 'Sport(s)', value: sportCell },
+    { label: 'Major', value: r.major || '' },
+    { label: 'Reason', value: r.reason || '' },
+    { label: 'Notes', value: r.notes || '' },
+    { label: 'Withdrawal', value: wChipHtml },
+    { label: 'Date Added', value: r.dateAdded || '' },
+    { label: 'Actions', value: `<span style="white-space:nowrap;">${actionsHtml}</span>` },
+  ])}`;
 }
 
 // Transient flag: true when a row's reason cell should render as a text input
@@ -4060,6 +4215,7 @@ function nrRenderEditRow(r) {
       <button onclick="nrSave(${r._idx})"     class="nr-row-btn nr-row-btn-primary" title="Save and close edit row" style="font-weight:600;">Save changes</button>
       <button onclick="nrCancelEdit()"        class="nr-row-btn" title="Cancel">Cancel</button>
     </td>
+    <td></td>
   </tr>`;
 }
 
@@ -4449,6 +4605,69 @@ function showPage(name, tab) {
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   if (tab) tab.classList.add('active');
+  // Mobile: close the hamburger drawer when a tab is tapped, and update
+  // the visible "active label" pill next to the burger so the user always
+  // knows which page they're on.
+  const wrapper = document.getElementById('nav-tabs-wrapper');
+  if (wrapper) wrapper.classList.remove('open');
+  const burger = document.querySelector('.nav-hamburger');
+  if (burger) burger.setAttribute('aria-expanded', 'false');
+  const lbl = document.getElementById('nav-active-label');
+  if (lbl && tab) lbl.textContent = (tab.textContent || '').trim();
+}
+
+// Mobile hamburger toggle. Open/close is driven by the .open class on the
+// nav-tabs-wrapper element — CSS handles visibility per breakpoint.
+function toggleMobileNav() {
+  const wrapper = document.getElementById('nav-tabs-wrapper');
+  if (!wrapper) return;
+  const open = wrapper.classList.toggle('open');
+  const burger = document.querySelector('.nav-hamburger');
+  if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Mobile table-row expand-collapse — Tony 2026-05-13.
+// ══════════════════════════════════════════════════════════════════════
+// Each renderable table on the dashboard shows the primary columns
+// (typically Student ID + Name) on phones, hides the rest via the
+// .mobile-secondary class, and renders a sibling .mobile-detail-row
+// after each main row containing the hidden fields stacked.
+//
+// The CSS keeps the detail row hidden by default; clicking the chevron
+// flips a class on both the button (so it rotates) and the detail row
+// (so it becomes display:table-row). On desktop the chevron column is
+// still visible but tapping it just toggles the same row — harmless,
+// and useful for showing a quick preview without scrolling sideways.
+function toggleDetailRow(btn) {
+  const tr = btn.closest('tr');
+  if (!tr) return;
+  const detail = tr.nextElementSibling;
+  if (!detail || !detail.classList.contains('mobile-detail-row')) return;
+  const wasOpen = detail.classList.toggle('open');
+  btn.classList.toggle('open', wasOpen);
+  btn.setAttribute('aria-expanded', wasOpen ? 'true' : 'false');
+}
+
+// Renders the chevron <td> that lives at the end of every main row.
+// Calling pattern: each renderer appends `${expandBtnCell()}` to the
+// row HTML right before closing </tr>.
+function expandBtnCell() {
+  return '<td class="exp-td"><button class="exp-btn" onclick="toggleDetailRow(this)" aria-label="Show details" aria-expanded="false">▸</button></td>';
+}
+
+// Renders the sibling detail row that holds the secondary fields.
+// `colspan` should match the FULL column count of the parent table
+// (including the chevron column). `fields` is an array of { label, value }
+// objects; null/empty values render as em-dash so the layout doesn't shift.
+function buildDetailRow(colspan, fields) {
+  const safe = (fields || []).filter(f => f && f.label != null);
+  if (!safe.length) return '';
+  const stack = safe.map(f => {
+    const v = (f.value == null || f.value === '') ? '<span style="color:#bbb;">—</span>' : f.value;
+    return `<div class="mobile-detail-pair"><span class="mdp-label">${f.label}:</span><span class="mdp-value">${v}</span></div>`;
+  }).join('');
+  return `<tr class="mobile-detail-row"><td colspan="${colspan}"><div class="mobile-detail-stack">${stack}</div></td></tr>`;
 }
 
 // Switch to the Not Returning tab — looked up by its onclick attribute so we
