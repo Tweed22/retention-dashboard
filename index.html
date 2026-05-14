@@ -2891,9 +2891,24 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
           const cx = x(p.t);
           const cy = y(100 - p.pct);
           const tip = `${fmtMDY(p.d.snapshot_date)}: ${p.pct}% not returning`;
-          return `<g class="tp"><title>${tip}</title>
-            <circle class="tp-halo" cx="${cx}" cy="${cy}" r="8" fill="rgba(0,0,0,0)" />
+          const labelText = `${p.pct}% NR · ${fmtMDY(p.d.snapshot_date)}`;
+          // NR dots sit at y(100 - nr_rate), which puts them HIGH on the
+          // chart — invert the green dots' "above by default" rule so the
+          // tooltip flips BELOW for points near the top edge, mirroring
+          // the green-line behavior near the bottom edge.
+          const labelY = cy < MT + 30 ? cy + 14 : cy - 9;
+          const bgY = labelY - 9;
+          const labelW = labelText.length * 4.8 + 10;
+          let bgX = cx - labelW / 2;
+          if (bgX < ML + 2) bgX = ML + 2;
+          if (bgX + labelW > W - MR - 2) bgX = W - MR - 2 - labelW;
+          const labelX = bgX + labelW / 2;
+          return `<g class="tp">
+            <title>${tip}</title>
+            <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(0,0,0,0)" />
             <circle cx="${cx}" cy="${cy}" r="1" fill="#dc2626" />
+            <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="13" rx="2.5" fill="#7f1d1d" />
+            <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="8" font-weight="600" fill="white">${labelText}</text>
           </g>`;
         }).join('')}
       ` : ''}
