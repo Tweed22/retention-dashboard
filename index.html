@@ -2935,22 +2935,20 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       }).join('')}
       <text x="${ML-32}" y="${MT-6}" font-size="8" fill="#888">Reg %</text>
       ${(() => {
-        // Current chart: horizontal "Today" line at the live persistence rate.
+        // Tony 2026-05-13: dropped the two dashed red marker lines on the
+        // CURRENT chart — the horizontal "Today:" line and the vertical
+        // "Week N" line. They competed visually with the new red NR
+        // volume. The Week N marker is still drawn on HISTORICAL charts
+        // where it serves a useful purpose (showing the equivalent point
+        // in time as the current term has reached). The "Today:" line was
+        // current-only and is gone entirely; the latest data-point dot
+        // and the subtitle already convey today's rate.
         let currentMarkup = '';
-        if (isCurrent && currentRate != null) {
-          currentMarkup = `
-            <line x1="${ML}" y1="${y(currentRate)}" x2="${W-MR}" y2="${y(currentRate)}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,4" />
-            <text x="${W-MR-6}" y="${y(currentRate)-3}" text-anchor="end" font-size="9" fill="#dc2626" font-weight="600">Today: ${currentRate.toFixed(1)}%</text>
-          `;
-        }
-        // Vertical "Wk N of cycle" marker: drawn on BOTH current and
-        // historical charts. On the historical chart it shows the
-        // equivalent point in time (where THIS year's cycle is now).
-        // On the current chart it's effectively the cursor on today,
-        // which provides at-a-glance "we're in week N of the cycle"
-        // context — Tony 2026-05-07.
+        // Vertical "Wk N of cycle" marker: HISTORICAL charts only. Shows
+        // the equivalent point in time across years (where THIS year's
+        // cycle is now, projected onto last year's curve).
         let weekMarkup = '';
-        if (elapsedDays != null && data.length > 0) {
+        if (!isCurrent && elapsedDays != null && data.length > 0) {
           const firstSnap = new Date(data[0].snapshot_date + 'T12:00:00Z').getTime();
           const equivMs = firstSnap + elapsedDays * 86400000;
           if (equivMs >= minD && equivMs <= maxD) {
