@@ -4225,13 +4225,25 @@ function nrRender() {
 // Color palette for the breakdown bars. The first 5 colors back the
 // stable-color top-5 ranking from the full list; categories 6+ cycle
 // through the FULL 8-color palette so every slice on the bar is a
-// distinct hue (no gray-bucket for the long tail). The cycle is
-// adjacency-aware — see the segment-color assignment loop below — so
-// neighboring segments never share a color, even when a stable color
-// from the top-5 happens to fall next to a cycled color from the tail.
+// distinct hue (no gray-bucket for the long tail).
+//
+// Palette is intentionally ORDERED to alternate cool/warm/cool/warm so
+// the natural cycle produces strict temperature alternation. Tony
+// 2026-05-13 — "cool shouldn't touch cool, warm shouldn't touch warm",
+// since same-temperature adjacencies (e.g., teal next to blue) blur
+// visually at small slice sizes. The cycling fill pass below ALSO
+// explicitly checks temperature so a stable-color collision doesn't
+// sneak through.
+//
+// Order: cool, warm, cool, warm, cool, warm, cool, warm
+//   purple  amber   teal    pink    blue    coral   green   red
+//
 // NR_BD_OTHER (gray) is reserved for the Other LEGEND DOT only; it
-// never appears on the bar. Tony 2026-05-13.
-const NR_BD_COLORS = ['#7F77DD', '#1D9E75', '#378ADD', '#BA7517', '#D4537E', '#D85A30', '#639922', '#E24B4A'];
+// never appears on the bar.
+const NR_BD_COLORS = ['#7F77DD', '#BA7517', '#1D9E75', '#D4537E', '#378ADD', '#D85A30', '#639922', '#E24B4A'];
+// Cool colors — anything teal/blue/green/purple-leaning. Used to enforce
+// the alternation rule in the cycling fill below.
+const NR_BD_COOL = new Set(['#7F77DD', '#1D9E75', '#378ADD', '#639922']);
 const NR_BD_OTHER  = '#B4B2A9';
 const NR_BD_OTHER_KEY = '__nr_bd_other__';
 
@@ -4303,11 +4315,16 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
   //
   //   • Pass 1 — stable colors: items in the full-list colorMap (top-5
   //     of the full unfiltered ranking) get their pre-assigned color.
-  //     This keeps "Senior" purple regardless of filter state.
-  //   • Pass 2 — cycle the 8-color palette through unmapped items,
-  //     enforcing "no two adjacent segments share a color." On each fill
-  //     we pick the next palette index that differs from the previous
-  //     segment's color; if the candidate equals it we advance one more.
+  //     This keeps "Senior" purple regardless of filter state. In an
+  //     unfiltered view these alternate cool/warm by palette construction
+  //     (palette[0..4] = cool, warm, cool, warm, cool). A heavily-reshuffled
+  //     filtered view CAN occasionally place two same-temperature stable
+  //     colors next to each other — accepted trade-off so click-to-filter
+  //     doesn't repaint the chart.
+  //   • Pass 2 — cycle the palette through unmapped items, enforcing TWO
+  //     rules: (a) color != previous segment's color, and (b) temperature
+  //     (cool vs warm) != previous segment's temperature. If both can't be
+  //     satisfied within the palette, fall back to rule (a) only.
   const allBarItems = [...top5, ...restItems];
   allBarItems.forEach(it => {
     if (colorMap[it.key]) it.color = colorMap[it.key];
@@ -4316,13 +4333,24 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
   allBarItems.forEach((it, i) => {
     if (it.color) return;
     const prevColor = i > 0 ? allBarItems[i - 1].color : null;
-    // Find a palette color that's not the previous segment's color.
-    // Try at most palette-length candidates; with 8 distinct hues this
-    // always succeeds in at most 2 attempts.
+    const prevCool  = prevColor ? NR_BD_COOL.has(prevColor) : null;
+    // Strict: != prev color AND opposite temperature.
     for (let attempts = 0; attempts < NR_BD_COLORS.length; attempts++) {
       const candidate = NR_BD_COLORS[paletteIdx % NR_BD_COLORS.length];
       paletteIdx++;
-      if (candidate !== prevColor) { it.color = candidate; break; }
+      if (candidate !== prevColor && (prevCool === null || NR_BD_COOL.has(candidate) !== prevCool)) {
+        it.color = candidate;
+        break;
+      }
+    }
+    // Fallback: just != prev color (relaxes the temperature rule when
+    // every remaining palette entry is same-temperature as prev).
+    if (!it.color) {
+      for (let attempts = 0; attempts < NR_BD_COLORS.length; attempts++) {
+        const candidate = NR_BD_COLORS[paletteIdx % NR_BD_COLORS.length];
+        paletteIdx++;
+        if (candidate !== prevColor) { it.color = candidate; break; }
+      }
     }
     if (!it.color) it.color = NR_BD_COLORS[0];
   });
