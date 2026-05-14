@@ -109,13 +109,6 @@ body.dark .nr-bd-pill { background: #4b5563; }
 .nr-bd-row-name { color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nr-bd-row-val { color: #888; margin-left: auto; flex: none; }
 .nr-bd-empty { grid-column: 1 / -1; color: #888; text-align: center; padding: 20px; font-size: 13px; }
-/* Other-expansion: a secondary bar+legend that appears when the user
-   clicks the gray Other slice. Visually separated from the main bar
-   with a light divider so it reads as a drill-down view. */
-.nr-bd-expansion { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #d3d1c7; }
-.nr-bd-expansion-label { font-size: 11px; color: #888; margin-bottom: 8px; }
-.nr-bd-caret { font-size: 10px; color: #888; margin-left: 2px; }
-body.dark .nr-bd-expansion { border-top-color: #353535; }
 @media (max-width: 900px) {
   .nr-breakdown-grid { grid-template-columns: 1fr; }
 }
@@ -4232,15 +4225,6 @@ const NR_BD_COLORS = ['#7F77DD', '#1D9E75', '#378ADD', '#BA7517', '#D4537E'];
 const NR_BD_OTHER  = '#B4B2A9';
 const NR_BD_OTHER_KEY = '__nr_bd_other__';
 
-// Per-dimension expanded-state for the Other-rollup expansion. When true,
-// the card renders a second segmented bar beneath the main one showing
-// the categories that got rolled up into Other. Tony 2026-05-13.
-const nrBdExpandedOther = {};
-function nrBdToggleOther(dimensionKey) {
-  nrBdExpandedOther[dimensionKey] = !nrBdExpandedOther[dimensionKey];
-  nrRender();
-}
-
 // Click handler for both bar segments and legend rows. The dropdown ID is
 // the one this breakdown filters into; the value is what the slice
 // represents. Clicking the currently-selected value clears the filter
@@ -4290,33 +4274,35 @@ function nrBdFullColorMap(allRows, keyFn) {
 function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColorMap, dimensionKey, getDisplayLabel) {
   const labelOf = getDisplayLabel || (k => k);
   const colorMap = fullColorMap || {};
+  // Sort all buckets descending. The BAR shows every category at its
+  // proportional width (so the smallest 1-student slice is still visible
+  // and clickable / hoverable). The LEGEND is capped at the top 5 plus
+  // a synthetic Other row that reports how many small categories rolled
+  // up — that keeps the card visually calm when there are 15+ majors
+  // while preserving full detail on the bar itself.
   const entries = Object.entries(buckets)
     .map(([key, count]) => ({ key, count }))
     .sort((a, b) => b.count - a.count);
   const total = entries.reduce((s, e) => s + e.count, 0);
-  // Top 5 + Other rollup. If exactly 5 or fewer, no Other.
-  let displayed;
-  let restItems = [];
-  let otherCount = 0;
-  if (entries.length > 5) {
-    const top5 = entries.slice(0, 5);
-    restItems = entries.slice(5);
-    otherCount = restItems.reduce((s, e) => s + e.count, 0);
-    displayed = [...top5, { key: NR_BD_OTHER_KEY, count: otherCount, _bucketCount: restItems.length }];
-  } else {
-    displayed = entries;
-  }
-  const isExpanded = !!(dimensionKey && nrBdExpandedOther[dimensionKey]) && restItems.length > 0;
-  // Color assignment: prefer the stable map; fall back to unused colors
-  // for buckets that aren't in the FULL top-5 (e.g., a rare category that
-  // dominates a heavily-filtered view); Other always gets gray.
+  const top5 = entries.slice(0, 5);
+  const restItems = entries.slice(5);
+  const otherCount = restItems.reduce((s, e) => s + e.count, 0);
+  // Color assignment for the bar:
+  //   • Top-5 items use stable colors from the full-list color map (so
+  //     "Senior" stays purple whether it's part of a full distribution
+  //     or shown alone after a filter click).
+  //   • Items beyond top-5 are colored gray (NR_BD_OTHER) on the bar.
+  //     Visually they belong to the "Other" group, but each remains a
+  //     distinct segment so it stays clickable and hover-pillable.
+  //   • If a top-5 item isn't in the full color map (e.g., it became
+  //     top-5 only after a filter narrowed the data), it gets an unused
+  //     color from the palette.
   const usedColors = new Set();
-  displayed.forEach(it => {
-    if (it.key === NR_BD_OTHER_KEY) { it.color = NR_BD_OTHER; return; }
+  top5.forEach(it => {
     if (colorMap[it.key]) { it.color = colorMap[it.key]; usedColors.add(it.color); }
   });
   let nextIdx = 0;
-  displayed.forEach(it => {
+  top5.forEach(it => {
     if (it.color) return;
     while (nextIdx < NR_BD_COLORS.length && usedColors.has(NR_BD_COLORS[nextIdx])) nextIdx++;
     if (nextIdx < NR_BD_COLORS.length) {
@@ -4327,90 +4313,62 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
       it.color = NR_BD_OTHER;
     }
   });
+  restItems.forEach(it => { it.color = NR_BD_OTHER; });
+  const allBarItems = [...top5, ...restItems];
   const escAttr = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const escHtml = v => String(v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  // Helper that builds segment HTML + legend HTML for any items array.
-  // Reused by both the main top-5+Other bar and the Other-expansion bar
-  // beneath it. Pass `treatOtherAsToggle: true` to make the Other key
-  // toggle the expansion (only the MAIN bar; the expansion bar's items
-  // are real categories that filter via the dropdown).
-  const renderSegmentsAndLegend = (items, opts) => {
-    const treatOtherAsToggle = !!(opts && opts.treatOtherAsToggle);
-    const showExpandCaret = !!(opts && opts.showExpandCaret);
-    const segs = items.map((it, i) => {
-      const pct = (opts.total) ? (it.count / opts.total) * 100 : 0;
-      const isOther = it.key === NR_BD_OTHER_KEY;
-      const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
-      const pillText = `${displayKey} · ${Math.round(pct)}%`;
-      let click = '';
-      if (isOther && treatOtherAsToggle) {
-        click = ` onclick="nrBdToggleOther('${escAttr(dimensionKey || '')}')"`;
-      } else if (!isOther && filterId) {
-        click = ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"`;
-      }
-      const cls = click ? 'nr-bd-seg clickable' : 'nr-bd-seg';
-      let radius = '';
-      if (i === 0 && i === items.length - 1) radius = '6px';
-      else if (i === 0) radius = '6px 0 0 6px';
-      else if (i === items.length - 1) radius = '0 6px 6px 0';
-      const radiusStyle = radius ? `border-radius:${radius};` : '';
-      return `<div class="${cls}" style="width:${pct.toFixed(2)}%;background:${it.color};${radiusStyle}"${click}>
-        <div class="nr-bd-pill">${escHtml(pillText)}</div>
-      </div>`;
-    }).join('');
-    const leg = items.map(it => {
-      const pct = (opts.total) ? Math.round((it.count / opts.total) * 100) : 0;
-      const isOther = it.key === NR_BD_OTHER_KEY;
-      const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
-      const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
-      let click = '';
-      if (isOther && treatOtherAsToggle) {
-        click = ` onclick="nrBdToggleOther('${escAttr(dimensionKey || '')}')"`;
-      } else if (!isOther && filterId) {
-        click = ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"`;
-      }
-      const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
-      const caret = (showExpandCaret && isOther)
-        ? ` <span class="nr-bd-caret">${isExpanded ? '▾' : '▸'}</span>` : '';
-      return `<div class="${cls}"${click}>
-        <span class="nr-bd-dot" style="background:${it.color};"></span>
-        <span class="nr-bd-row-name" title="${escAttr(displayKey)}">${escHtml(displayKey)}${caret}</span>
-        <span class="nr-bd-row-val">${it.count} · ${pct}%</span>
-      </div>`;
-    }).join('');
-    return { segs, leg };
-  };
-
-  // Main bar — top 5 + Other rollup.
-  const main = renderSegmentsAndLegend(displayed, { total, treatOtherAsToggle: true, showExpandCaret: true });
-
-  // Other-expansion (a second bar beneath the main one when Other is
-  // toggled open). Tony 2026-05-13: shows every category that rolled up
-  // into Other, each clickable to filter to that specific value.
-  let expansion = '';
-  if (isExpanded) {
-    // Color assignment for the expansion. Recycle the palette starting
-    // from index 0 — these categories were OUT of the full top-5 by
-    // definition, so they don't have stable colors yet. Cycling the
-    // 5-color palette is fine because the expansion is its own visual
-    // context and users won't confuse them with the main bar's segments.
-    restItems.forEach((it, i) => { it.color = NR_BD_COLORS[i % NR_BD_COLORS.length]; });
-    const expr = renderSegmentsAndLegend(restItems, { total: otherCount, treatOtherAsToggle: false });
-    expansion = `<div class="nr-bd-expansion">
-      <div class="nr-bd-expansion-label">Other expanded — ${otherCount} student${otherCount === 1 ? '' : 's'} across ${restItems.length} categor${restItems.length === 1 ? 'y' : 'ies'}</div>
-      <div class="nr-bd-bar">${expr.segs}</div>
-      <div class="nr-bd-legend">${expr.leg}</div>
+  // Render bar segments — every category gets one, even tiny ones, so
+  // they remain clickable and have their own hover pill. Tony 2026-05-13:
+  // the bar shows full granularity; the legend below caps at top 5 + an
+  // Other summary row so the card doesn't drown in low-count categories.
+  const segments = allBarItems.map((it, i) => {
+    const pct = total ? (it.count / total) * 100 : 0;
+    const displayKey = labelOf(it.key);
+    const pillText = `${displayKey} · ${Math.round(pct)}%`;
+    const click = filterId ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
+    const cls = click ? 'nr-bd-seg clickable' : 'nr-bd-seg';
+    let radius = '';
+    if (i === 0 && i === allBarItems.length - 1) radius = '6px';
+    else if (i === 0) radius = '6px 0 0 6px';
+    else if (i === allBarItems.length - 1) radius = '0 6px 6px 0';
+    const radiusStyle = radius ? `border-radius:${radius};` : '';
+    return `<div class="${cls}" style="width:${pct.toFixed(2)}%;background:${it.color};${radiusStyle}"${click}>
+      <div class="nr-bd-pill">${escHtml(pillText)}</div>
     </div>`;
-  }
+  }).join('');
+
+  // Render the legend — top 5 named rows + an Other summary row when
+  // there's a long tail. Other is informational only (no filter to apply
+  // since it represents many distinct values); the user can still click
+  // individual small categories directly on the bar above to filter.
+  const legendItems = restItems.length > 0
+    ? [...top5, { key: NR_BD_OTHER_KEY, count: otherCount, _bucketCount: restItems.length, color: NR_BD_OTHER }]
+    : top5;
+  const legend = legendItems.map(it => {
+    const pct = total ? Math.round((it.count / total) * 100) : 0;
+    const isOther = it.key === NR_BD_OTHER_KEY;
+    const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
+    const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
+    const click = (!isOther && filterId)
+      ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
+    const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
+    const tipAttr = isOther
+      ? ` title="${restItems.length} smaller categor${restItems.length === 1 ? 'y' : 'ies'} — hover or click them directly on the bar above"`
+      : '';
+    return `<div class="${cls}"${click}${tipAttr}>
+      <span class="nr-bd-dot" style="background:${it.color};"></span>
+      <span class="nr-bd-row-name">${escHtml(displayKey)}</span>
+      <span class="nr-bd-row-val">${it.count} · ${pct}%</span>
+    </div>`;
+  }).join('');
 
   return `<div class="nr-breakdown-card">
     <div class="nr-bd-title-row">
       <div class="nr-bd-title">${escHtml(title)}</div>
       <div class="nr-bd-total">${total} student${total === 1 ? '' : 's'}</div>
     </div>
-    <div class="nr-bd-bar">${main.segs}</div>
-    <div class="nr-bd-legend">${main.leg}</div>
-    ${expansion}
+    <div class="nr-bd-bar">${segments}</div>
+    <div class="nr-bd-legend">${legend}</div>
   </div>`;
 }
 
