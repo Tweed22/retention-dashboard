@@ -903,6 +903,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
       <select class="filter-select" id="reg-ptft" onchange="regApply()" title="Filter by Part-Time vs Full-Time enrollment status"><option value="">All Enrollment</option><option value="F">Full-Time</option><option value="P">Part-Time</option></select>
+      <select class="filter-select" id="reg-ftft" onchange="regApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
       <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
     </div>
     <div class="table-wrap">
@@ -943,6 +944,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="h-advisor" onchange="holdsApply()"><option value="">All Advisors</option></select>
       <select class="filter-select" id="h-sport" onchange="holdsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="h-team" onchange="holdsApply()"><option value="">All Teams</option></select>
+      <select class="filter-select" id="h-ftft" onchange="holdsApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
       <input class="table-search" type="text" id="h-search" placeholder="Search name, email, ID…" oninput="holdsApply()" />
     </div>
     <div class="table-wrap">
@@ -959,7 +961,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary" onclick="holdsSort('firstName')">First Name</th>
         <th class="mobile-secondary">Hold</th>
         <th class="sortable mobile-secondary" onclick="holdsSort('classYear')">Class</th>
-        <th class="sortable mobile-secondary" onclick="holdsSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
         <th class="sortable mobile-secondary" onclick="holdsSort('major')">Major</th>
         <th class="sortable mobile-secondary" onclick="holdsSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary" onclick="holdsSort('sports')">Sport</th>
@@ -986,6 +987,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="cr-advisor" onchange="crApply()"><option value="">All Advisors</option></select>
       <select class="filter-select" id="cr-sport" onchange="crApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="cr-team" onchange="crApply()"><option value="">All Teams</option></select>
+      <select class="filter-select" id="cr-ftft" onchange="crApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
       <input class="table-search" type="text" id="cr-search" placeholder="Search name, email, ID…" oninput="crApply()" />
     </div>
     <div class="table-wrap">
@@ -1035,6 +1037,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="ns-advisor" onchange="nsApply()"><option value="">All Advisors</option></select>
       <select class="filter-select" id="ns-sport" onchange="nsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="ns-team" onchange="nsApply()"><option value="">All Teams</option></select>
+      <select class="filter-select" id="ns-ftft" onchange="nsApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
       <input class="table-search" type="text" id="ns-search" placeholder="Search name, email, ID…" oninput="nsApply()" />
     </div>
     <div class="table-wrap">
@@ -1156,6 +1159,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <select class="filter-select" id="nr-filter-major" onchange="nrRender()">
       <option value="">All Majors</option>
     </select>
+    <select class="filter-select" id="nr-filter-ftft" onchange="nrRender()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
     <input class="table-search" type="text" id="nr-search" placeholder="Search name or ID…" oninput="nrRender()" style="width:180px;" />
   </div>
   <div class="table-wrap">
@@ -1486,7 +1490,6 @@ const EXPORT_COLUMNS = {
     { header: 'Email',      getter: r => r.email },
     { header: 'Hold Type',  getter: r => r.__holdType },
     { header: 'Class Year', getter: r => r.classYear },
-    { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
@@ -3498,6 +3501,17 @@ function ptFtChip(val) {
   if (v === 'P') return '<span class="chip chip-amber" title="Part-Time">PT</span>';
   return '<span style="color:#bbb;font-size:11px;">—</span>';
 }
+
+// FTFT-cohort filter helper. Each student-listing tab has its own
+// dropdown with values "" / "ftft" / "non-ftft" — Tony 2026-05-13. Reads
+// the selected value from the given select id and filters rows
+// accordingly. Defensive: rows without an id always count as Non-FTFT.
+function applyFTFTFilter(rows, selectId) {
+  const v = document.getElementById(selectId)?.value || '';
+  if (v === 'ftft')     return rows.filter(r => r.id && ftftIds.has(r.id));
+  if (v === 'non-ftft') return rows.filter(r => !r.id || !ftftIds.has(r.id));
+  return rows;
+}
 function applySort(rows, state) {
   if (!state.col) return rows;
   return [...rows].sort((a,b) => {
@@ -3631,6 +3645,12 @@ function holdsApply() {
     working = working.filter(r => (r.sports||[]).some(s => s === team));
     segments.push(`${n(working.length)} on ${team}`);
   }
+  const beforeFTFT = working.length;
+  working = applyFTFTFilter(working, 'h-ftft');
+  if (working.length !== beforeFTFT) {
+    const ftftMode = document.getElementById('h-ftft')?.value;
+    segments.push(`${n(working.length)} ${ftftMode === 'ftft' ? 'FTFT' : 'Non-FTFT'}`);
+  }
   if (q) {
     working = working.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
     segments.push(`${n(working.length)} matching "${q}"`);
@@ -3668,22 +3688,20 @@ function holdsApply() {
           <td class="mobile-secondary">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary">${renderHoldChips(r)}</td>
           <td class="mobile-secondary">${classChip(r.classYear)}</td>
-          <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
           <td class="mobile-secondary">${r.major}</td>
           <td class="mobile-secondary">${r.advisor}</td>
           <td class="mobile-secondary">${sc(r)}</td>
           ${expandBtnCell()}
-        </tr>${buildDetailRow(10, [
+        </tr>${buildDetailRow(9, [
           { label: 'First Name', value: r.firstName||r.name||'' },
           { label: 'Hold', value: renderHoldChips(r) },
           { label: 'Class', value: classChip(r.classYear) },
-          { label: 'Enrollment', value: ptFtChip(r.ptFt) },
           { label: 'Major', value: r.major },
           { label: 'Advisor', value: r.advisor },
           { label: 'Sport', value: sc(r) },
         ])}`;
       }).join('')
-    : emptyRow(10,'No students match.');
+    : emptyRow(9,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3709,6 +3727,7 @@ function crApply() {
   if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
   if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  rows = applyFTFTFilter(rows, 'cr-ftft');
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,crSort_);
   const retCount = activeCanReg.filter(r=>!nrIds.has(r.id)).length;
@@ -3774,6 +3793,7 @@ function regApply() {
   let rows = returningRegisteredList();
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
   if (ptft)    rows=rows.filter(r=>(r.ptFt||'').toUpperCase() === ptft);
+  rows = applyFTFTFilter(rows, 'reg-ftft');
   if (q) rows=rows.filter(r=>(r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,regSort_);
   document.getElementById('reg-title').textContent = `${n(rows.length)} of ${n(returningRegisteredList().length)} Returning Students Registered`;
@@ -3836,6 +3856,7 @@ function nsApply() {
   if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
   if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  rows = applyFTFTFilter(rows, 'ns-ftft');
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,nsSort_);
   document.getElementById('ns-title').textContent = `${n(Object.keys(newStudents).length)} New Students`;
@@ -4209,6 +4230,7 @@ function nrRender() {
       normalizeSportList(r.sport).split(',').map(s => s.trim()).includes(sf));
   }
   if (mf) indexed=indexed.filter(r => (r.major || '') === mf);
+  indexed = applyFTFTFilter(indexed, 'nr-filter-ftft');
   if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.firstName||'')+(r.lastName||'')+(r.id||'')).toLowerCase().includes(q));
   indexed=applySort(indexed,nrSort_);
   // Visible-vs-total count next to the table title (Tony 2026-05-07 — makes
