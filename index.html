@@ -4508,9 +4508,9 @@ function renderNRBreakdowns(indexed) {
 
   container.innerHTML =
     buildNRBreakdownCard('By Class',  bucketsBy(classKey),  'nr-filter-class',  cls,    classCM,  'class') +
-    buildNRBreakdownCard('By Sport',  bucketsBy(sportKey),  'nr-filter-sport',  sport,  sportCM,  'sport') +
+    buildNRBreakdownCard('By Reason', bucketsBy(reasonKey), 'nr-filter-reason', reason, reasonCM, 'reason') +
     buildNRBreakdownCard('By Major',  bucketsBy(majorKey),  'nr-filter-major',  major,  majorCM,  'major') +
-    buildNRBreakdownCard('By Reason', bucketsBy(reasonKey), 'nr-filter-reason', reason, reasonCM, 'reason');
+    buildNRBreakdownCard('By Sport',  bucketsBy(sportKey),  'nr-filter-sport',  sport,  sportCM,  'sport');
 }
 
 // Refresh the Class / Sport / Major filter dropdowns from the values
