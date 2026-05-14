@@ -4275,11 +4275,19 @@ function nrBdClick(filterId, value) {
 }
 
 // Build a STABLE color map for a dimension by ranking the FULL
-// (unfiltered, non-graduating) NR list. Top 5 keys get NR_BD_COLORS[0..4];
-// everything else is unmapped (renders as Other gray). This way filtering
-// to one segment doesn't recolor the bar — "Senior" stays purple whether
-// it's part of a full distribution or shown alone after a filter click.
+// (unfiltered, non-graduating) NR list. Every category gets its color
+// determined ONCE here so click-to-filter doesn't recolor the segment.
 // Tony 2026-05-13.
+//
+// Pass 1 — top 5 use palette[0..4] in rank order (stable purple/orange/
+//   teal/pink/blue).
+// Pass 2 — ranks 6+ get colors via the same cool/warm-aware cycling rule
+//   the bar's local pass uses, but executed ONCE here against the full
+//   ranking order. The previous-color tracking starts from the 5th-rank
+//   color and walks forward, so each long-tail category gets a color
+//   that satisfies the alternation rule with its full-order neighbor.
+// Filtered views look up colors from this map → a long-tail category
+// shown alone after a filter click keeps the color it had in the full bar.
 function nrBdFullColorMap(allRows, keyFn) {
   const buckets = {};
   allRows.forEach(r => {
@@ -4288,7 +4296,37 @@ function nrBdFullColorMap(allRows, keyFn) {
   });
   const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
   const map = {};
-  sorted.forEach(([key], i) => { if (i < 5) map[key] = NR_BD_COLORS[i]; });
+  // Pass 1: top 5 stable colors.
+  sorted.slice(0, 5).forEach(([key], i) => { map[key] = NR_BD_COLORS[i]; });
+  if (sorted.length <= 5) return map;
+  // Pass 2: cycling for ranks 6+, walking from the last-stable color.
+  let prevColor = NR_BD_COLORS[Math.min(4, sorted.length - 1)];
+  let paletteIdx = 0;
+  for (let i = 5; i < sorted.length; i++) {
+    const key = sorted[i][0];
+    const prevCool = NR_BD_COOL.has(prevColor);
+    let assigned = null;
+    // Strict: != prev color AND opposite temperature.
+    for (let attempts = 0; attempts < NR_BD_COLORS.length; attempts++) {
+      const candidate = NR_BD_COLORS[paletteIdx % NR_BD_COLORS.length];
+      paletteIdx++;
+      if (candidate !== prevColor && NR_BD_COOL.has(candidate) !== prevCool) {
+        assigned = candidate;
+        break;
+      }
+    }
+    // Fallback: != prev color only.
+    if (!assigned) {
+      for (let attempts = 0; attempts < NR_BD_COLORS.length; attempts++) {
+        const candidate = NR_BD_COLORS[paletteIdx % NR_BD_COLORS.length];
+        paletteIdx++;
+        if (candidate !== prevColor) { assigned = candidate; break; }
+      }
+    }
+    if (!assigned) assigned = NR_BD_COLORS[0];
+    map[key] = assigned;
+    prevColor = assigned;
+  }
   return map;
 }
 
