@@ -4166,7 +4166,23 @@ function nrRender() {
   // Refresh filter dropdown options every render so newly added values
   // (e.g., from a fresh CSV upload) become available immediately.
   nrPopulateAttributeFilters(indexed);
-  if (wf) indexed=indexed.filter(r=>r.withdrawal===wf);
+  // Tony 2026-05-13: filter on EFFECTIVE status, not the raw r.withdrawal
+  // field. The row renderer auto-promotes a Pending row to "Registered"
+  // when isNRRegistered(r) is true (i.e., the student is on the NR list
+  // AND still enrolled). Without this match, clicking the "Registered for
+  // Courses" KPI set the dropdown to "Registered" but `r.withdrawal` for
+  // those rows was still "Pending" — so the filter returned 0. The
+  // computed status here mirrors `effectiveStatus` in nrRenderStaticRow.
+  if (wf) {
+    indexed = indexed.filter(r => {
+      const eff = r.withdrawal === 'Withdrawn'
+        ? 'Withdrawn'
+        : (r.withdrawal === 'Registered' || isNRRegistered(r))
+          ? 'Registered'
+          : (r.withdrawal || 'Pending');
+      return eff === wf;
+    });
+  }
   if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
   if (cf) indexed=indexed.filter(r => (r.classYear || '') === cf);
   // Sport filter: special "(Non-Athlete)" sentinel matches rows with an
