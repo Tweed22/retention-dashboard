@@ -1608,6 +1608,15 @@ function purgeGraduatedFromNR() {
   for (let i = nrList.length - 1; i >= 0; i--) {
     const r = nrList[i];
     if (!r.id) continue;            // can't tell — skip
+    // Tony 2026-05-13: only purge rows that originated from a withdrawal
+    // CSV. Manual entries added via the "+ Add Row" button must persist
+    // until a committee member explicitly removes them with the delete
+    // button — they're often typed in for students the registrar hasn't
+    // moved yet, so by definition they won't appear in any CSV.
+    // _sourceWithdrawalId is set during withdrawal-CSV auto-import and is
+    // null/undefined for manual entries (both freshly-added and after a
+    // round-trip through Supabase).
+    if (!r._sourceWithdrawalId) continue;
     const stillPresent =
       registeredStudents[r.id] ||
       returningStudents[r.id]  ||
