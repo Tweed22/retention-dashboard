@@ -67,6 +67,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .kpi-row-5 { grid-template-columns: repeat(5, 1fr); }
 .kpi-row-7 { grid-template-columns: repeat(7, 1fr); }
 .kpi-row-8 { grid-template-columns: repeat(8, 1fr); }
+
+/* ── NR Cohort Breakdown cards — Tony 2026-05-13 ─────────────────
+   2x2 grid of stacked-segmented-bar cards on the Not Returning page.
+   Each card buckets the currently-filtered NR list by one attribute
+   (class / sport / major / reason), keeps the top 5, rolls the rest
+   into "Other", and renders both a segmented bar and a legend.
+   Segments and legend rows are clickable to filter via the existing
+   nr-filter-* dropdowns. */
+.nr-breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.nr-breakdown-card { background: white; border: 1px solid #e0e4ec; border-radius: 10px; padding: 14px 16px; }
+.nr-bd-title-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.nr-bd-title { font-size: 13px; font-weight: 600; color: #1a1d23; }
+.nr-bd-total { font-size: 11px; color: #888; }
+.nr-bd-bar { display: flex; width: 100%; height: 18px; border-radius: 6px; overflow: hidden; margin-bottom: 10px; background: #f1f5f9; }
+.nr-bd-seg { transition: opacity 0.15s; min-width: 1px; }
+.nr-bd-seg.clickable { cursor: pointer; }
+.nr-bd-seg.clickable:hover { opacity: 0.75; }
+.nr-bd-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 12px; }
+.nr-bd-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; border-radius: 3px; }
+.nr-bd-row.clickable { cursor: pointer; }
+.nr-bd-row.clickable:hover { background: #f4f6f9; }
+.nr-bd-row.active { background: #eff6ff; color: #1e3a8a; font-weight: 600; }
+.nr-bd-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.nr-bd-row-name { color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nr-bd-row-val { color: #888; margin-left: auto; flex: none; }
+.nr-bd-empty { grid-column: 1 / -1; color: #888; text-align: center; padding: 20px; font-size: 13px; }
+@media (max-width: 900px) {
+  .nr-breakdown-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .nr-bd-legend { grid-template-columns: 1fr; }
+}
+body.dark .nr-breakdown-card { background: #262626; border-color: #353535; }
+body.dark .nr-bd-title { color: #e0e0e0; }
+body.dark .nr-bd-bar { background: #1f1f1f; }
+body.dark .nr-bd-row-name { color: #e0e0e0; }
+body.dark .nr-bd-row.clickable:hover { background: #2e2e2e; }
+body.dark .nr-bd-row.active { background: #1f2a47; color: #93c5fd; }
 .kpi-card { background: white; border-radius: 10px; padding: 16px 18px; border: 1px solid #e0e4ec; position: relative; overflow: hidden; }
 .kpi-clickable { cursor: pointer; transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s; }
 .kpi-clickable:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.07); border-color: #cbd5e1; }
@@ -1045,6 +1083,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="kpi-card green kpi-clickable" onclick="nrFilterByWithdrawal('Withdrawn')" title="Click to filter to Withdrawn rows"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="nr-withdrawn">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
     <div class="kpi-card sky kpi-clickable" onclick="nrFilterByWithdrawal('Registered')" title="Click to filter to NR rows whose students are still registered for courses"><div class="kpi-label">Registered for Courses</div><div class="kpi-value" id="nr-registered">0</div><div class="kpi-sub">On NR list AND enrolled — needs reconciliation</div></div>
   </div>
+
+  <!-- ── Breakdown cards (Class · Sport · Major · Reason) ── -->
+  <div class="section-label">Cohort Breakdown</div>
+  <div class="nr-breakdown-grid" id="nr-breakdowns"></div>
 
   <!-- ── Inline add row ── -->
   <div id="nr-dup-warn" class="alert-box alert-warn" style="display:none;"></div>
@@ -4136,12 +4178,169 @@ function nrRender() {
       filtered
         ? 'No rows match the current filters. Try clearing one of the dropdowns above.'
         : 'No students on the Not Returning list yet. Use the form above to add the first entry.');
+    // Render breakdowns even in the empty case so the cards show the
+    // "No matches" copy instead of stale data from a prior render.
+    renderNRBreakdowns(indexed);
     return;
   }
   tbody.innerHTML=indexed.map(r=>{
     if (r._idx === nrEditIdx) return nrRenderEditRow(r);
     return nrRenderStaticRow(r);
   }).join('');
+  // Tony 2026-05-13: refresh the breakdown cards in lock-step with the
+  // table so the donuts/bars always show the filtered cohort.
+  renderNRBreakdowns(indexed);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// NR Cohort Breakdown — Tony 2026-05-13.
+// ══════════════════════════════════════════════════════════════════════
+// Renders the 2×2 grid of stacked-bar cards beneath the headline KPIs.
+// Each card buckets the CURRENTLY-FILTERED NR list by one attribute and
+// shows the top 5 buckets + an "Other" rollup. Bar segments AND legend
+// rows are clickable: tapping a value sets the matching nr-filter-*
+// dropdown (or toggles it off when already active) and re-renders.
+// ──────────────────────────────────────────────────────────────────────
+
+// Color palette for the 5 ranked segments. Other always gets the gray.
+// Picked from the wider Tony-era chip palette so it reads cohesively
+// with the rest of the dashboard's accent colors.
+const NR_BD_COLORS = ['#7F77DD', '#1D9E75', '#378ADD', '#BA7517', '#D4537E'];
+const NR_BD_OTHER  = '#B4B2A9';
+const NR_BD_OTHER_KEY = '__nr_bd_other__';
+
+// Click handler for both bar segments and legend rows. The dropdown ID is
+// the one this breakdown filters into; the value is what the slice
+// represents. Clicking the currently-selected value clears the filter
+// (toggle behavior).
+function nrBdClick(filterId, value) {
+  const sel = document.getElementById(filterId);
+  if (!sel) return;
+  // Coerce to string to compare with dropdown values which are always strings.
+  const newVal = sel.value === String(value) ? '' : String(value);
+  // Ensure the value exists as an option — nrPopulateAttributeFilters
+  // adds non-empty distinct values, but a freshly-rendered card might
+  // race with the dropdown rebuild. Defensive add:
+  if (newVal && !Array.from(sel.options).some(o => o.value === newVal)) {
+    const opt = document.createElement('option');
+    opt.value = newVal; opt.textContent = newVal;
+    sel.appendChild(opt);
+  }
+  sel.value = newVal;
+  nrRender();
+}
+
+// Build the HTML for one breakdown card. `buckets` is { [key]: count }.
+// `filterId` is the dropdown to toggle on click. `currentFilter` is the
+// currently-active filter value (so we can highlight the active legend
+// row). `getDisplayLabel` lets us tweak how a bucket key displays
+// (e.g., '(no reason)' for empty reasons).
+function buildNRBreakdownCard(title, buckets, filterId, currentFilter, getDisplayLabel) {
+  const labelOf = getDisplayLabel || (k => k);
+  const entries = Object.entries(buckets)
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count);
+  const total = entries.reduce((s, e) => s + e.count, 0);
+  // Top 5 + Other rollup. If exactly 5 or fewer, no Other.
+  let displayed;
+  if (entries.length > 5) {
+    const top5 = entries.slice(0, 5);
+    const rest = entries.slice(5);
+    const otherCount = rest.reduce((s, e) => s + e.count, 0);
+    displayed = [...top5, { key: NR_BD_OTHER_KEY, count: otherCount, _bucketCount: rest.length }];
+  } else {
+    displayed = entries;
+  }
+  // Color assignment: ranked items get NR_BD_COLORS[i], Other gets gray.
+  displayed.forEach((it, i) => {
+    it.color = (it.key === NR_BD_OTHER_KEY) ? NR_BD_OTHER : NR_BD_COLORS[i % NR_BD_COLORS.length];
+  });
+  const escAttr = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escHtml = v => String(v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  // Render bar segments.
+  const segments = displayed.map(it => {
+    const pct = total ? (it.count / total) * 100 : 0;
+    const isOther = it.key === NR_BD_OTHER_KEY;
+    const labelText = isOther ? `Other (${it._bucketCount}) — ${it.count} (${Math.round(pct)}%)` : `${labelOf(it.key)} — ${it.count} (${Math.round(pct)}%)`;
+    const click = (filterId && !isOther)
+      ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
+    const cls = click ? 'nr-bd-seg clickable' : 'nr-bd-seg';
+    return `<div class="${cls}" style="width:${pct.toFixed(2)}%;background:${it.color};" title="${escAttr(labelText)}"${click}></div>`;
+  }).join('');
+  // Render legend rows.
+  const legend = displayed.map(it => {
+    const pct = total ? Math.round((it.count / total) * 100) : 0;
+    const isOther = it.key === NR_BD_OTHER_KEY;
+    const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
+    const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
+    const click = (filterId && !isOther)
+      ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
+    const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
+    return `<div class="${cls}"${click}>
+      <span class="nr-bd-dot" style="background:${it.color};"></span>
+      <span class="nr-bd-row-name" title="${escAttr(displayKey)}">${escHtml(displayKey)}</span>
+      <span class="nr-bd-row-val">${it.count} · ${pct}%</span>
+    </div>`;
+  }).join('');
+  return `<div class="nr-breakdown-card">
+    <div class="nr-bd-title-row">
+      <div class="nr-bd-title">${escHtml(title)}</div>
+      <div class="nr-bd-total">${total} student${total === 1 ? '' : 's'}</div>
+    </div>
+    <div class="nr-bd-bar">${segments}</div>
+    <div class="nr-bd-legend">${legend}</div>
+  </div>`;
+}
+
+// Render all four cards from the post-filter `indexed` array. Called at the
+// end of nrRender so the breakdowns and the table always agree.
+function renderNRBreakdowns(indexed) {
+  const container = document.getElementById('nr-breakdowns');
+  if (!container) return;
+  if (!indexed || !indexed.length) {
+    container.innerHTML = '<div class="nr-bd-empty">No Not Returning students match the current filters.</div>';
+    return;
+  }
+  const cls = document.getElementById('nr-filter-class')?.value || '';
+  const sport = document.getElementById('nr-filter-sport')?.value || '';
+  const major = document.getElementById('nr-filter-major')?.value || '';
+  const reason = document.getElementById('nr-filter-reason')?.value || '';
+  // Class buckets — empty values bucket to "Unknown" so they're visible
+  // (otherwise an unset classYear silently disappears from the chart).
+  const classB = {};
+  indexed.forEach(r => {
+    const k = (r.classYear || '').trim() || 'Unknown';
+    classB[k] = (classB[k] || 0) + 1;
+  });
+  // Sport buckets — multi-sport students count ONCE under their first
+  // listed sport (per Tony 2026-05-13). Use the same normalizeSportList
+  // helper the row renderer + filter use so labels match what's in the
+  // dropdown.
+  const sportB = {};
+  indexed.forEach(r => {
+    const normalized = normalizeSportList(r.sport);
+    const list = normalized ? normalized.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const k = list.length ? list[0] : '(Non-Athlete)';
+    sportB[k] = (sportB[k] || 0) + 1;
+  });
+  // Major buckets — same Unknown fallback as Class.
+  const majorB = {};
+  indexed.forEach(r => {
+    const k = (r.major || '').trim() || 'Unknown';
+    majorB[k] = (majorB[k] || 0) + 1;
+  });
+  // Reason buckets — '(no reason)' for empties so the chart still tracks
+  // them but the bucket is clearly an unfilled value (not a real reason).
+  const reasonB = {};
+  indexed.forEach(r => {
+    const k = (r.reason || '').trim() || '(no reason)';
+    reasonB[k] = (reasonB[k] || 0) + 1;
+  });
+  container.innerHTML =
+    buildNRBreakdownCard('By Class', classB, 'nr-filter-class', cls) +
+    buildNRBreakdownCard('By Sport', sportB, 'nr-filter-sport', sport) +
+    buildNRBreakdownCard('By Major', majorB, 'nr-filter-major', major) +
+    buildNRBreakdownCard('By Reason', reasonB, 'nr-filter-reason', reason);
 }
 
 // Refresh the Class / Sport / Major filter dropdowns from the values
