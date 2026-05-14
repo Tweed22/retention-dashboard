@@ -2670,7 +2670,7 @@ async function renderTrendChart() {
   }
   const { data, error } = await sb
     .from('term_history')
-    .select('snapshot_date, term_label, registered_count, holds_count, registration_rate')
+    .select('snapshot_date, term_label, registered_count, holds_count, registration_rate, nr_rate')
     .order('snapshot_date', { ascending: true });
   if (error) {
     currentEl.innerHTML = '';
@@ -2692,6 +2692,24 @@ async function renderTrendChart() {
   const currentLabel = getNextTermLabel();
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
+  // Live NR rate for the inverted red volume. Mirrors renderSummary's
+  // eligibleReturn computation so the two metrics share a denominator on
+  // the chart: chart Y of 100 is the top, chart Y of 0 is the bottom,
+  // persistence area grows up from 0, NR area grows down from 100. Tony
+  // 2026-05-13.
+  const gradIdsTrend = getGraduatingIdSet();
+  const isActiveTrend = id => !gradIdsTrend.has(id);
+  const dedupedNRTrend = getDedupedNRList();
+  const notReturningTrend = dedupedNRTrend.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+  const nrIdSetTrend = new Set(dedupedNRTrend.map(s => s.id).filter(Boolean));
+  const returningIdSetTrend = new Set([
+    ...Object.keys(returningStudents).filter(isActiveTrend),
+    ...[...registeredIds].filter(id => isActiveTrend(id) && !newStudents[id]),
+  ]);
+  const totalReturningTrend = [...returningIdSetTrend].filter(id => !nrIdSetTrend.has(id)).length;
+  const eligibleTrend = totalReturningTrend + notReturningTrend;
+  const currentNrRate = eligibleTrend ? Math.round(notReturningTrend / eligibleTrend * 1000) / 10 : null;
+
   // Build current-term data so the curve and subtitle always reflect the
   // LIVE Semester Persistence Rate, even if today's row in term_history was
   // written earlier (e.g. by an earlier upload, before NR list edits).
@@ -2706,7 +2724,7 @@ async function renderTrendChart() {
     const retReg = allReg - newRegCount;
     if (todayIdx >= 0) {
       currentPts = currentPts.map((d, i) => i === todayIdx
-        ? { ...d, registration_rate: currentRate, registered_count: retReg, holds_count: totalHolds }
+        ? { ...d, registration_rate: currentRate, registered_count: retReg, holds_count: totalHolds, nr_rate: currentNrRate }
         : d);
     } else {
       currentPts = [...currentPts, {
@@ -2715,6 +2733,7 @@ async function renderTrendChart() {
         registered_count: retReg,
         holds_count: totalHolds,
         registration_rate: currentRate,
+        nr_rate: currentNrRate,
       }];
     }
   }
@@ -2791,6 +2810,32 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
   const baseY  = y(0);
   const areaPath = `M ${firstX},${baseY} L ${linePoints.join(' L ')} L ${lastX},${baseY} Z`;
 
+  // Tony 2026-05-13: Inverted "Not Returning" volume — a red ribbon that
+  // grows DOWN from 100% by nr_rate% on each snapshot. Only points where
+  // nr_rate is non-null contribute; gaps are allowed (historical rows
+  // written before migration 0013 won't have a value, so the red area
+  // simply doesn't exist for those points).
+  //
+  // The polyline runs through y(100 - nr_rate) for each qualifying point.
+  // The fill path closes up to y(100) on both ends, so the red volume
+  // hugs the top of the chart, mirroring how the green volume hugs the
+  // bottom.
+  const nrPts = data
+    .map(d => (d.nr_rate == null) ? null : ({
+      t: new Date(d.snapshot_date + 'T12:00:00Z').getTime(),
+      pct: Number(d.nr_rate),
+      d,
+    }))
+    .filter(Boolean);
+  let nrAreaPath = '';
+  let nrPolyPoints = '';
+  if (nrPts.length) {
+    const topY = y(100);
+    const linePts = nrPts.map(p => `${x(p.t)},${y(100 - p.pct)}`);
+    nrPolyPoints = linePts.join(' ');
+    nrAreaPath = `M ${x(nrPts[0].t)},${topY} L ${linePts.join(' L ')} L ${x(nrPts[nrPts.length-1].t)},${topY} Z`;
+  }
+
   // X-axis: monthly markers at the start of each month within the data
   // range. Full month name (January, February, etc.) per Tony 2026-05-07.
   // Each tick has its own gridline so the area-chart has visual structure
@@ -2824,6 +2869,10 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
           <stop offset="0%" stop-color="${TREND_COLOR}" stop-opacity="0.28" />
           <stop offset="100%" stop-color="${TREND_COLOR}" stop-opacity="0.04" />
         </linearGradient>
+        <linearGradient id="trend-nr-area-${label.replace(/[^a-z0-9]/gi,'')}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#dc2626" stop-opacity="0.22" />
+          <stop offset="100%" stop-color="#dc2626" stop-opacity="0.04" />
+        </linearGradient>
       </defs>
       ${yTicks.map(v => `
         <line x1="${ML}" y1="${y(v)}" x2="${W-MR}" y2="${y(v)}" stroke="#e5e7eb" stroke-width="1" />
@@ -2835,6 +2884,19 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       <line x1="${ML}" y1="${y(0)}" x2="${W-MR}" y2="${y(0)}" stroke="#cbd5e1" stroke-width="1" />
       <path d="${areaPath}" fill="url(#trend-area-${label.replace(/[^a-z0-9]/gi,'')})" stroke="none" />
       <polyline fill="none" stroke="${TREND_COLOR}" stroke-width="1.2" points="${polyPoints}" />
+      ${nrAreaPath ? `
+        <path d="${nrAreaPath}" fill="url(#trend-nr-area-${label.replace(/[^a-z0-9]/gi,'')})" stroke="none" />
+        <polyline fill="none" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="3,2" points="${nrPolyPoints}" />
+        ${nrPts.map(p => {
+          const cx = x(p.t);
+          const cy = y(100 - p.pct);
+          const tip = `${fmtMDY(p.d.snapshot_date)}: ${p.pct}% not returning`;
+          return `<g class="tp"><title>${tip}</title>
+            <circle class="tp-halo" cx="${cx}" cy="${cy}" r="8" fill="rgba(0,0,0,0)" />
+            <circle cx="${cx}" cy="${cy}" r="1.5" fill="#dc2626" />
+          </g>`;
+        }).join('')}
+      ` : ''}
       ${data.map(d => {
         const cx = x(new Date(d.snapshot_date + 'T12:00:00Z').getTime());
         const cy = y(d.registration_rate || 0);
@@ -2930,15 +2992,34 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
   const first = fmtMDY(data[0].snapshot_date);
   const last = fmtMDY(data[data.length-1].snapshot_date);
   const finalRate = data[data.length-1].registration_rate;
+  // If any of the data points have nr_rate, surface the latest value in the
+  // subtitle so the red volume is labeled. Otherwise drop the suffix.
+  const latestNr = (() => {
+    for (let i = data.length - 1; i >= 0; i--) {
+      if (data[i].nr_rate != null) return Number(data[i].nr_rate);
+    }
+    return null;
+  })();
+  const nrSuffix = latestNr != null ? ` · ${isCurrent ? 'latest' : 'final'} NR ${latestNr}%` : '';
   const titlePrefix = isCurrent ? 'Current Term — ' : '';
   const labelHtml = isCurrent
     ? `${titlePrefix}<span style="color:#2563eb;">${label}</span>`
     : label;
+  // Inline legend so the green/red split is self-explanatory. Hidden when
+  // no NR data exists on this chart (e.g., historical charts predating
+  // migration 0013) so we don't promise something we can't show.
+  const legend = latestNr != null
+    ? `<div style="display:flex;gap:14px;font-size:11px;color:#666;margin:6px 0 2px 0;">
+         <span><span style="display:inline-block;width:10px;height:10px;background:${TREND_COLOR};border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Persistence %</span>
+         <span><span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Not Returning % (inverted from 100)</span>
+       </div>`
+    : '';
   return `
     <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
         <div class="card-title">${labelHtml} — Registration Trend</div>
-        <div class="card-subtitle">${first} → ${last} · ${data.length} data points · ${isCurrent ? 'latest' : 'final'} rate ${finalRate}%</div>
+        <div class="card-subtitle">${first} → ${last} · ${data.length} data points · ${isCurrent ? 'latest' : 'final'} rate ${finalRate}%${nrSuffix}</div>
+        ${legend}
         ${svg}
       </div>
     </div>
@@ -5646,6 +5727,12 @@ async function pushDataToSupabase() {
       const totalReturningSnap = [...returningIdSetSnap].filter(id => !nrIdSetSnap.has(id)).length;
       const eligibleSnap = totalReturningSnap + notReturningCount;
       const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
+      // Tony 2026-05-13: NR rate snapshot for the inverted red volume on
+      // the trend chart. Same denominator (eligibleSnap) as the persistence
+      // rate so the two stack cleanly on a 0–100 axis. Stored as percent
+      // with one decimal — chart math reads y(100 - nr_rate) for the
+      // bottom of the red area.
+      const nrRateSnap = eligibleSnap ? Math.round(notReturningCount / eligibleSnap * 1000) / 10 : 0;
       const today = todayLocalISO();
       const histRes = await sb.from('term_history').upsert({
         snapshot_date: today,
@@ -5653,6 +5740,7 @@ async function pushDataToSupabase() {
         registered_count: returningRegistered,
         holds_count: totalHolds,
         registration_rate: rateSnap,
+        nr_rate: nrRateSnap,
       }, { onConflict: 'snapshot_date,term_label' });
       // Don't hard-fail the main upload — but surface the result visibly.
       if (histRes.error) {
@@ -5662,9 +5750,9 @@ async function pushDataToSupabase() {
           'Most likely cause: term_history table missing or RLS blocks insert. ' +
           'The dashboard will still render fine; just no new point on the trend chart for today.');
       } else {
-        console.log(`term_history snapshot saved: ${today} ${termLabel} reg=${returningRegistered} holds=${totalHolds} rate=${rateSnap}%`);
+        console.log(`term_history snapshot saved: ${today} ${termLabel} reg=${returningRegistered} holds=${totalHolds} rate=${rateSnap}% nr=${nrRateSnap}%`);
         // Successful snapshot — surface in the status so Tony sees it landed
-        status(`Step 5b/6: snapshot saved (${today} · ${termLabel} · rate ${rateSnap}%)`);
+        status(`Step 5b/6: snapshot saved (${today} · ${termLabel} · rate ${rateSnap}% · NR ${nrRateSnap}%)`);
       }
     }
     // Note: getNextTermLabel() always returns a value now (date-based fallback),
