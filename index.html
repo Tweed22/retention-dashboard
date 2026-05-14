@@ -4218,10 +4218,16 @@ function nrRender() {
 // dropdown (or toggles it off when already active) and re-renders.
 // ──────────────────────────────────────────────────────────────────────
 
-// Color palette for the 5 ranked segments. Other always gets the gray.
-// Picked from the wider Tony-era chip palette so it reads cohesively
-// with the rest of the dashboard's accent colors.
-const NR_BD_COLORS = ['#7F77DD', '#1D9E75', '#378ADD', '#BA7517', '#D4537E'];
+// Color palette for the breakdown bars. The first 5 colors back the
+// stable-color top-5 ranking from the full list; categories 6+ cycle
+// through the FULL 8-color palette so every slice on the bar is a
+// distinct hue (no gray-bucket for the long tail). The cycle is
+// adjacency-aware — see the segment-color assignment loop below — so
+// neighboring segments never share a color, even when a stable color
+// from the top-5 happens to fall next to a cycled color from the tail.
+// NR_BD_OTHER (gray) is reserved for the Other LEGEND DOT only; it
+// never appears on the bar. Tony 2026-05-13.
+const NR_BD_COLORS = ['#7F77DD', '#1D9E75', '#378ADD', '#BA7517', '#D4537E', '#D85A30', '#639922', '#E24B4A'];
 const NR_BD_OTHER  = '#B4B2A9';
 const NR_BD_OTHER_KEY = '__nr_bd_other__';
 
@@ -4287,34 +4293,35 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
   const top5 = entries.slice(0, 5);
   const restItems = entries.slice(5);
   const otherCount = restItems.reduce((s, e) => s + e.count, 0);
-  // Color assignment for the bar:
-  //   • Top-5 items use stable colors from the full-list color map (so
-  //     "Senior" stays purple whether it's part of a full distribution
-  //     or shown alone after a filter click).
-  //   • Items beyond top-5 are colored gray (NR_BD_OTHER) on the bar.
-  //     Visually they belong to the "Other" group, but each remains a
-  //     distinct segment so it stays clickable and hover-pillable.
-  //   • If a top-5 item isn't in the full color map (e.g., it became
-  //     top-5 only after a filter narrowed the data), it gets an unused
-  //     color from the palette.
-  const usedColors = new Set();
-  top5.forEach(it => {
-    if (colorMap[it.key]) { it.color = colorMap[it.key]; usedColors.add(it.color); }
-  });
-  let nextIdx = 0;
-  top5.forEach(it => {
-    if (it.color) return;
-    while (nextIdx < NR_BD_COLORS.length && usedColors.has(NR_BD_COLORS[nextIdx])) nextIdx++;
-    if (nextIdx < NR_BD_COLORS.length) {
-      it.color = NR_BD_COLORS[nextIdx];
-      usedColors.add(it.color);
-      nextIdx++;
-    } else {
-      it.color = NR_BD_OTHER;
-    }
-  });
-  restItems.forEach(it => { it.color = NR_BD_OTHER; });
+  // Color assignment for the bar — every segment gets a distinct hue.
+  // Tony 2026-05-13: no more gray for the long tail; each slice has its
+  // own color so the bar reads as a true categorical breakdown.
+  //
+  //   • Pass 1 — stable colors: items in the full-list colorMap (top-5
+  //     of the full unfiltered ranking) get their pre-assigned color.
+  //     This keeps "Senior" purple regardless of filter state.
+  //   • Pass 2 — cycle the 8-color palette through unmapped items,
+  //     enforcing "no two adjacent segments share a color." On each fill
+  //     we pick the next palette index that differs from the previous
+  //     segment's color; if the candidate equals it we advance one more.
   const allBarItems = [...top5, ...restItems];
+  allBarItems.forEach(it => {
+    if (colorMap[it.key]) it.color = colorMap[it.key];
+  });
+  let paletteIdx = 0;
+  allBarItems.forEach((it, i) => {
+    if (it.color) return;
+    const prevColor = i > 0 ? allBarItems[i - 1].color : null;
+    // Find a palette color that's not the previous segment's color.
+    // Try at most palette-length candidates; with 8 distinct hues this
+    // always succeeds in at most 2 attempts.
+    for (let attempts = 0; attempts < NR_BD_COLORS.length; attempts++) {
+      const candidate = NR_BD_COLORS[paletteIdx % NR_BD_COLORS.length];
+      paletteIdx++;
+      if (candidate !== prevColor) { it.color = candidate; break; }
+    }
+    if (!it.color) it.color = NR_BD_COLORS[0];
+  });
   const escAttr = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const escHtml = v => String(v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   // Render bar segments — every category gets one, even tiny ones, so
