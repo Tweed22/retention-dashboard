@@ -75,11 +75,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
    into "Other", and renders both a segmented bar and a legend.
    Segments and legend rows are clickable to filter via the existing
    nr-filter-* dropdowns. */
-.nr-breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
-.nr-breakdown-card { background: white; border: 1px solid #e0e4ec; border-radius: 10px; padding: 14px 16px; }
-.nr-bd-title-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-.nr-bd-title { font-size: 13px; font-weight: 600; color: #1a1d23; }
-.nr-bd-total { font-size: 11px; color: #888; }
+.nr-breakdown-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-bottom: 18px; }
+.nr-breakdown-card { background: white; border: 1px solid #e0e4ec; border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.nr-bd-title-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; gap: 8px; min-width: 0; }
+.nr-bd-title { font-size: 13px; font-weight: 600; color: #1a1d23; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nr-bd-total { font-size: 11px; color: #888; flex: none; white-space: nowrap; }
 .nr-bd-bar { display: flex; width: 100%; height: 18px; border-radius: 6px; margin-bottom: 10px; background: #f1f5f9; position: relative; }
 .nr-bd-seg { transition: opacity 0.15s; min-width: 1px; position: relative; }
 .nr-bd-seg.clickable { cursor: pointer; }
@@ -104,27 +104,40 @@ body.dark .nr-bd-pill { background: #4b5563; }
    With 6 items (top 5 + Other), column 1 gets items 1–3 and column 2
    gets items 4–6. Achieved with grid-auto-flow: column + 3 explicit
    rows so the grid fills downward first. */
-.nr-bd-legend { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, auto); grid-auto-flow: column; gap: 4px 12px; font-size: 12px; }
-.nr-bd-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; border-radius: 3px; }
+.nr-bd-legend { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: repeat(3, auto); grid-auto-flow: column; gap: 4px 12px; font-size: 12px; }
+.nr-bd-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; border-radius: 3px; min-width: 0; }
 .nr-bd-row.clickable { cursor: pointer; }
 .nr-bd-row.clickable:hover { background: #f4f6f9; }
-.nr-bd-row.active { background: #eff6ff; color: #1e3a8a; font-weight: 600; }
 .nr-bd-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.nr-bd-row-name { color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nr-bd-row-val { color: #888; margin-left: auto; flex: none; }
+.nr-bd-row-name { color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 0; }
+.nr-bd-row-val { color: #888; margin-left: auto; flex: none; white-space: nowrap; }
 .nr-bd-empty { grid-column: 1 / -1; color: #888; text-align: center; padding: 20px; font-size: 13px; }
 @media (max-width: 900px) {
-  .nr-breakdown-grid { grid-template-columns: 1fr; }
+  .nr-breakdown-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
-  .nr-bd-legend { grid-template-columns: 1fr; }
+  /* Tighter padding + smaller text so the legend's two columns of long
+     category names (e.g. "Women's Track & Field — 7 · 9%") fit inside
+     the card without forcing horizontal scroll. Tony 2026-05-13. */
+  .nr-breakdown-grid { gap: 10px; margin-bottom: 14px; }
+  .nr-breakdown-card { padding: 10px 12px; }
+  .nr-bd-title { font-size: 12px; }
+  .nr-bd-total { font-size: 10px; }
+  .nr-bd-legend { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-auto-flow: row; font-size: 11px; gap: 3px; }
+  .nr-bd-row { gap: 5px; }
+  .nr-bd-row-val { font-size: 10px; }
+  .nr-bd-bar { height: 14px; }
+  /* Disable hover pills on touch — they'd block legend rows below and
+     don't show on tap anyway. The native title attribute (already on
+     each segment via the pill's text) still works as a long-press
+     tooltip on iOS/Android. */
+  .nr-bd-pill { display: none; }
 }
 body.dark .nr-breakdown-card { background: #262626; border-color: #353535; }
 body.dark .nr-bd-title { color: #e0e0e0; }
 body.dark .nr-bd-bar { background: #1f1f1f; }
 body.dark .nr-bd-row-name { color: #e0e0e0; }
 body.dark .nr-bd-row.clickable:hover { background: #2e2e2e; }
-body.dark .nr-bd-row.active { background: #1f2a47; color: #93c5fd; }
 .kpi-card { background: white; border-radius: 10px; padding: 16px 18px; border: 1px solid #e0e4ec; position: relative; overflow: hidden; }
 .kpi-clickable { cursor: pointer; transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s; }
 .kpi-clickable:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.07); border-color: #cbd5e1; }
@@ -4440,6 +4453,9 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
   // there's a long tail. Other is informational only (no filter to apply
   // since it represents many distinct values); the user can still click
   // individual small categories directly on the bar above to filter.
+  // Tony 2026-05-13: dropped the active-row highlight (blue tint on the
+  // currently-filtered row) — the dropdown above already shows which
+  // value is active, the extra emphasis was redundant.
   const legendItems = restItems.length > 0
     ? [...top5, { key: NR_BD_OTHER_KEY, count: otherCount, _bucketCount: restItems.length, color: NR_BD_OTHER }]
     : top5;
@@ -4447,10 +4463,9 @@ function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColor
     const pct = total ? Math.round((it.count / total) * 100) : 0;
     const isOther = it.key === NR_BD_OTHER_KEY;
     const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
-    const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
     const click = (!isOther && filterId)
       ? ` onclick="nrBdClick('${filterId}', ${escAttr(JSON.stringify(it.key))})"` : '';
-    const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
+    const cls = click ? 'nr-bd-row clickable' : 'nr-bd-row';
     const tipAttr = isOther
       ? ` title="${restItems.length} smaller categor${restItems.length === 1 ? 'y' : 'ies'} — hover or click them directly on the bar above"`
       : '';
