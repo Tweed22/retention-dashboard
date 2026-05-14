@@ -4236,11 +4236,16 @@ function nrRender() {
 // sneak through.
 //
 // Order: cool, warm, cool, warm, cool, warm, cool, warm
-//   purple  amber   teal    pink    blue    coral   green   red
+//   purple  orange  teal    pink    blue    coral   green   red
+//
+// Tony 2026-05-13: replaced #BA7517 (Tabler amber-400) with #F59E0B
+// (a brighter golden orange) — the original read as muddy brown next to
+// the more saturated cool colors. The replacement keeps warm/cool
+// alternation intact and stays distinct from coral/red/pink.
 //
 // NR_BD_OTHER (gray) is reserved for the Other LEGEND DOT only; it
 // never appears on the bar.
-const NR_BD_COLORS = ['#7F77DD', '#BA7517', '#1D9E75', '#D4537E', '#378ADD', '#D85A30', '#639922', '#E24B4A'];
+const NR_BD_COLORS = ['#7F77DD', '#F59E0B', '#1D9E75', '#D4537E', '#378ADD', '#D85A30', '#639922', '#E24B4A'];
 // Cool colors — anything teal/blue/green/purple-leaning. Used to enforce
 // the alternation rule in the cycling fill below.
 const NR_BD_COOL = new Set(['#7F77DD', '#1D9E75', '#378ADD', '#639922']);
