@@ -80,10 +80,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nr-bd-title-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .nr-bd-title { font-size: 13px; font-weight: 600; color: #1a1d23; }
 .nr-bd-total { font-size: 11px; color: #888; }
-.nr-bd-bar { display: flex; width: 100%; height: 18px; border-radius: 6px; overflow: hidden; margin-bottom: 10px; background: #f1f5f9; }
-.nr-bd-seg { transition: opacity 0.15s; min-width: 1px; }
+.nr-bd-bar { display: flex; width: 100%; height: 18px; border-radius: 6px; margin-bottom: 10px; background: #f1f5f9; position: relative; }
+.nr-bd-seg { transition: opacity 0.15s; min-width: 1px; position: relative; }
 .nr-bd-seg.clickable { cursor: pointer; }
-.nr-bd-seg.clickable:hover { opacity: 0.75; }
+.nr-bd-seg.clickable:hover { opacity: 0.85; }
+/* Hover pill on bar segments. Sits above the bar, centered on the
+   segment. Removed the overflow:hidden from .nr-bd-bar (had to so the
+   pill can render past the bar's edge) — first/last segments get
+   matching border-radius applied inline by the renderer so the bar
+   still reads as a rounded pill overall. Tony 2026-05-13. */
+.nr-bd-pill {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  background: #1a1d23; color: white;
+  padding: 4px 9px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+  z-index: 10;
+}
+.nr-bd-seg:hover .nr-bd-pill { opacity: 1; }
+body.dark .nr-bd-pill { background: #4b5563; }
 .nr-bd-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 12px; }
 .nr-bd-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; border-radius: 3px; }
 .nr-bd-row.clickable { cursor: pointer; }
@@ -93,6 +109,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nr-bd-row-name { color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nr-bd-row-val { color: #888; margin-left: auto; flex: none; }
 .nr-bd-empty { grid-column: 1 / -1; color: #888; text-align: center; padding: 20px; font-size: 13px; }
+/* Other-expansion: a secondary bar+legend that appears when the user
+   clicks the gray Other slice. Visually separated from the main bar
+   with a light divider so it reads as a drill-down view. */
+.nr-bd-expansion { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #d3d1c7; }
+.nr-bd-expansion-label { font-size: 11px; color: #888; margin-bottom: 8px; }
+.nr-bd-caret { font-size: 10px; color: #888; margin-left: 2px; }
+body.dark .nr-bd-expansion { border-top-color: #353535; }
 @media (max-width: 900px) {
   .nr-breakdown-grid { grid-template-columns: 1fr; }
 }
@@ -1085,7 +1108,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
 
   <!-- ── Breakdown cards (Class · Sport · Major · Reason) ── -->
-  <div class="section-label">Cohort Breakdown</div>
+  <div class="section-label">Breakdown <span style="color:#888;text-transform:none;letter-spacing:0;font-weight:400;font-size:10px;">— excludes students with reason: Graduating</span></div>
   <div class="nr-breakdown-grid" id="nr-breakdowns"></div>
 
   <!-- ── Inline add row ── -->
@@ -4209,6 +4232,15 @@ const NR_BD_COLORS = ['#7F77DD', '#1D9E75', '#378ADD', '#BA7517', '#D4537E'];
 const NR_BD_OTHER  = '#B4B2A9';
 const NR_BD_OTHER_KEY = '__nr_bd_other__';
 
+// Per-dimension expanded-state for the Other-rollup expansion. When true,
+// the card renders a second segmented bar beneath the main one showing
+// the categories that got rolled up into Other. Tony 2026-05-13.
+const nrBdExpandedOther = {};
+function nrBdToggleOther(dimensionKey) {
+  nrBdExpandedOther[dimensionKey] = !nrBdExpandedOther[dimensionKey];
+  nrRender();
+}
+
 // Click handler for both bar segments and legend rows. The dropdown ID is
 // the one this breakdown filters into; the value is what the slice
 // represents. Clicking the currently-selected value clears the filter
@@ -4230,117 +4262,214 @@ function nrBdClick(filterId, value) {
   nrRender();
 }
 
+// Build a STABLE color map for a dimension by ranking the FULL
+// (unfiltered, non-graduating) NR list. Top 5 keys get NR_BD_COLORS[0..4];
+// everything else is unmapped (renders as Other gray). This way filtering
+// to one segment doesn't recolor the bar — "Senior" stays purple whether
+// it's part of a full distribution or shown alone after a filter click.
+// Tony 2026-05-13.
+function nrBdFullColorMap(allRows, keyFn) {
+  const buckets = {};
+  allRows.forEach(r => {
+    const k = keyFn(r);
+    buckets[k] = (buckets[k] || 0) + 1;
+  });
+  const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
+  const map = {};
+  sorted.forEach(([key], i) => { if (i < 5) map[key] = NR_BD_COLORS[i]; });
+  return map;
+}
+
 // Build the HTML for one breakdown card. `buckets` is { [key]: count }.
 // `filterId` is the dropdown to toggle on click. `currentFilter` is the
 // currently-active filter value (so we can highlight the active legend
-// row). `getDisplayLabel` lets us tweak how a bucket key displays
+// row). `fullColorMap` is the stable {key: color} mapping from the
+// unfiltered list (Tony 2026-05-13 — colors persist across filter clicks).
+// `getDisplayLabel` lets us tweak how a bucket key displays
 // (e.g., '(no reason)' for empty reasons).
-function buildNRBreakdownCard(title, buckets, filterId, currentFilter, getDisplayLabel) {
+function buildNRBreakdownCard(title, buckets, filterId, currentFilter, fullColorMap, dimensionKey, getDisplayLabel) {
   const labelOf = getDisplayLabel || (k => k);
+  const colorMap = fullColorMap || {};
   const entries = Object.entries(buckets)
     .map(([key, count]) => ({ key, count }))
     .sort((a, b) => b.count - a.count);
   const total = entries.reduce((s, e) => s + e.count, 0);
   // Top 5 + Other rollup. If exactly 5 or fewer, no Other.
   let displayed;
+  let restItems = [];
+  let otherCount = 0;
   if (entries.length > 5) {
     const top5 = entries.slice(0, 5);
-    const rest = entries.slice(5);
-    const otherCount = rest.reduce((s, e) => s + e.count, 0);
-    displayed = [...top5, { key: NR_BD_OTHER_KEY, count: otherCount, _bucketCount: rest.length }];
+    restItems = entries.slice(5);
+    otherCount = restItems.reduce((s, e) => s + e.count, 0);
+    displayed = [...top5, { key: NR_BD_OTHER_KEY, count: otherCount, _bucketCount: restItems.length }];
   } else {
     displayed = entries;
   }
-  // Color assignment: ranked items get NR_BD_COLORS[i], Other gets gray.
-  displayed.forEach((it, i) => {
-    it.color = (it.key === NR_BD_OTHER_KEY) ? NR_BD_OTHER : NR_BD_COLORS[i % NR_BD_COLORS.length];
+  const isExpanded = !!(dimensionKey && nrBdExpandedOther[dimensionKey]) && restItems.length > 0;
+  // Color assignment: prefer the stable map; fall back to unused colors
+  // for buckets that aren't in the FULL top-5 (e.g., a rare category that
+  // dominates a heavily-filtered view); Other always gets gray.
+  const usedColors = new Set();
+  displayed.forEach(it => {
+    if (it.key === NR_BD_OTHER_KEY) { it.color = NR_BD_OTHER; return; }
+    if (colorMap[it.key]) { it.color = colorMap[it.key]; usedColors.add(it.color); }
+  });
+  let nextIdx = 0;
+  displayed.forEach(it => {
+    if (it.color) return;
+    while (nextIdx < NR_BD_COLORS.length && usedColors.has(NR_BD_COLORS[nextIdx])) nextIdx++;
+    if (nextIdx < NR_BD_COLORS.length) {
+      it.color = NR_BD_COLORS[nextIdx];
+      usedColors.add(it.color);
+      nextIdx++;
+    } else {
+      it.color = NR_BD_OTHER;
+    }
   });
   const escAttr = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const escHtml = v => String(v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  // Render bar segments.
-  const segments = displayed.map(it => {
-    const pct = total ? (it.count / total) * 100 : 0;
-    const isOther = it.key === NR_BD_OTHER_KEY;
-    const labelText = isOther ? `Other (${it._bucketCount}) — ${it.count} (${Math.round(pct)}%)` : `${labelOf(it.key)} — ${it.count} (${Math.round(pct)}%)`;
-    const click = (filterId && !isOther)
-      ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
-    const cls = click ? 'nr-bd-seg clickable' : 'nr-bd-seg';
-    return `<div class="${cls}" style="width:${pct.toFixed(2)}%;background:${it.color};" title="${escAttr(labelText)}"${click}></div>`;
-  }).join('');
-  // Render legend rows.
-  const legend = displayed.map(it => {
-    const pct = total ? Math.round((it.count / total) * 100) : 0;
-    const isOther = it.key === NR_BD_OTHER_KEY;
-    const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
-    const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
-    const click = (filterId && !isOther)
-      ? ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"` : '';
-    const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
-    return `<div class="${cls}"${click}>
-      <span class="nr-bd-dot" style="background:${it.color};"></span>
-      <span class="nr-bd-row-name" title="${escAttr(displayKey)}">${escHtml(displayKey)}</span>
-      <span class="nr-bd-row-val">${it.count} · ${pct}%</span>
+  // Helper that builds segment HTML + legend HTML for any items array.
+  // Reused by both the main top-5+Other bar and the Other-expansion bar
+  // beneath it. Pass `treatOtherAsToggle: true` to make the Other key
+  // toggle the expansion (only the MAIN bar; the expansion bar's items
+  // are real categories that filter via the dropdown).
+  const renderSegmentsAndLegend = (items, opts) => {
+    const treatOtherAsToggle = !!(opts && opts.treatOtherAsToggle);
+    const showExpandCaret = !!(opts && opts.showExpandCaret);
+    const segs = items.map((it, i) => {
+      const pct = (opts.total) ? (it.count / opts.total) * 100 : 0;
+      const isOther = it.key === NR_BD_OTHER_KEY;
+      const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
+      const pillText = `${displayKey} · ${Math.round(pct)}%`;
+      let click = '';
+      if (isOther && treatOtherAsToggle) {
+        click = ` onclick="nrBdToggleOther('${escAttr(dimensionKey || '')}')"`;
+      } else if (!isOther && filterId) {
+        click = ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"`;
+      }
+      const cls = click ? 'nr-bd-seg clickable' : 'nr-bd-seg';
+      let radius = '';
+      if (i === 0 && i === items.length - 1) radius = '6px';
+      else if (i === 0) radius = '6px 0 0 6px';
+      else if (i === items.length - 1) radius = '0 6px 6px 0';
+      const radiusStyle = radius ? `border-radius:${radius};` : '';
+      return `<div class="${cls}" style="width:${pct.toFixed(2)}%;background:${it.color};${radiusStyle}"${click}>
+        <div class="nr-bd-pill">${escHtml(pillText)}</div>
+      </div>`;
+    }).join('');
+    const leg = items.map(it => {
+      const pct = (opts.total) ? Math.round((it.count / opts.total) * 100) : 0;
+      const isOther = it.key === NR_BD_OTHER_KEY;
+      const displayKey = isOther ? `Other (${it._bucketCount})` : labelOf(it.key);
+      const active = (!isOther && currentFilter && String(currentFilter) === String(it.key)) ? ' active' : '';
+      let click = '';
+      if (isOther && treatOtherAsToggle) {
+        click = ` onclick="nrBdToggleOther('${escAttr(dimensionKey || '')}')"`;
+      } else if (!isOther && filterId) {
+        click = ` onclick="nrBdClick('${filterId}', '${escAttr(it.key)}')"`;
+      }
+      const cls = click ? `nr-bd-row clickable${active}` : `nr-bd-row${active}`;
+      const caret = (showExpandCaret && isOther)
+        ? ` <span class="nr-bd-caret">${isExpanded ? '▾' : '▸'}</span>` : '';
+      return `<div class="${cls}"${click}>
+        <span class="nr-bd-dot" style="background:${it.color};"></span>
+        <span class="nr-bd-row-name" title="${escAttr(displayKey)}">${escHtml(displayKey)}${caret}</span>
+        <span class="nr-bd-row-val">${it.count} · ${pct}%</span>
+      </div>`;
+    }).join('');
+    return { segs, leg };
+  };
+
+  // Main bar — top 5 + Other rollup.
+  const main = renderSegmentsAndLegend(displayed, { total, treatOtherAsToggle: true, showExpandCaret: true });
+
+  // Other-expansion (a second bar beneath the main one when Other is
+  // toggled open). Tony 2026-05-13: shows every category that rolled up
+  // into Other, each clickable to filter to that specific value.
+  let expansion = '';
+  if (isExpanded) {
+    // Color assignment for the expansion. Recycle the palette starting
+    // from index 0 — these categories were OUT of the full top-5 by
+    // definition, so they don't have stable colors yet. Cycling the
+    // 5-color palette is fine because the expansion is its own visual
+    // context and users won't confuse them with the main bar's segments.
+    restItems.forEach((it, i) => { it.color = NR_BD_COLORS[i % NR_BD_COLORS.length]; });
+    const expr = renderSegmentsAndLegend(restItems, { total: otherCount, treatOtherAsToggle: false });
+    expansion = `<div class="nr-bd-expansion">
+      <div class="nr-bd-expansion-label">Other expanded — ${otherCount} student${otherCount === 1 ? '' : 's'} across ${restItems.length} categor${restItems.length === 1 ? 'y' : 'ies'}</div>
+      <div class="nr-bd-bar">${expr.segs}</div>
+      <div class="nr-bd-legend">${expr.leg}</div>
     </div>`;
-  }).join('');
+  }
+
   return `<div class="nr-breakdown-card">
     <div class="nr-bd-title-row">
       <div class="nr-bd-title">${escHtml(title)}</div>
       <div class="nr-bd-total">${total} student${total === 1 ? '' : 's'}</div>
     </div>
-    <div class="nr-bd-bar">${segments}</div>
-    <div class="nr-bd-legend">${legend}</div>
+    <div class="nr-bd-bar">${main.segs}</div>
+    <div class="nr-bd-legend">${main.leg}</div>
+    ${expansion}
   </div>`;
 }
 
 // Render all four cards from the post-filter `indexed` array. Called at the
 // end of nrRender so the breakdowns and the table always agree.
+// Tony 2026-05-13: students whose reason is "Graduating" are excluded from
+// every breakdown — they don't count toward any retention metric per the
+// existing nrUpdateKpis convention, so the bars should match. The table
+// itself still shows graduating rows (committee members need to see and
+// manage them), only the breakdowns drop them.
 function renderNRBreakdowns(indexed) {
   const container = document.getElementById('nr-breakdowns');
   if (!container) return;
-  if (!indexed || !indexed.length) {
-    container.innerHTML = '<div class="nr-bd-empty">No Not Returning students match the current filters.</div>';
+  const nonGrad = (indexed || []).filter(r => (r.reason || '').toLowerCase() !== 'graduating');
+  if (!nonGrad.length) {
+    container.innerHTML = '<div class="nr-bd-empty">No Not Returning students (excluding Graduating) match the current filters.</div>';
     return;
   }
   const cls = document.getElementById('nr-filter-class')?.value || '';
   const sport = document.getElementById('nr-filter-sport')?.value || '';
   const major = document.getElementById('nr-filter-major')?.value || '';
   const reason = document.getElementById('nr-filter-reason')?.value || '';
-  // Class buckets — empty values bucket to "Unknown" so they're visible
-  // (otherwise an unset classYear silently disappears from the chart).
-  const classB = {};
-  indexed.forEach(r => {
-    const k = (r.classYear || '').trim() || 'Unknown';
-    classB[k] = (classB[k] || 0) + 1;
-  });
-  // Sport buckets — multi-sport students count ONCE under their first
-  // listed sport (per Tony 2026-05-13). Use the same normalizeSportList
-  // helper the row renderer + filter use so labels match what's in the
-  // dropdown.
-  const sportB = {};
-  indexed.forEach(r => {
+
+  // Key-extractor functions for each dimension. Reused for both the
+  // stable-color full ranking and the per-card filtered buckets so the
+  // keys match exactly between the two computations.
+  const classKey  = r => (r.classYear || '').trim() || 'Unknown';
+  const sportKey  = r => {
     const normalized = normalizeSportList(r.sport);
     const list = normalized ? normalized.split(',').map(s => s.trim()).filter(Boolean) : [];
-    const k = list.length ? list[0] : '(Non-Athlete)';
-    sportB[k] = (sportB[k] || 0) + 1;
-  });
-  // Major buckets — same Unknown fallback as Class.
-  const majorB = {};
-  indexed.forEach(r => {
-    const k = (r.major || '').trim() || 'Unknown';
-    majorB[k] = (majorB[k] || 0) + 1;
-  });
-  // Reason buckets — '(no reason)' for empties so the chart still tracks
-  // them but the bucket is clearly an unfilled value (not a real reason).
-  const reasonB = {};
-  indexed.forEach(r => {
-    const k = (r.reason || '').trim() || '(no reason)';
-    reasonB[k] = (reasonB[k] || 0) + 1;
-  });
+    return list.length ? list[0] : '(Non-Athlete)';
+  };
+  const majorKey  = r => (r.major || '').trim() || 'Unknown';
+  const reasonKey = r => (r.reason || '').trim() || '(no reason)';
+
+  // Full-list color maps (Tony 2026-05-13: colors retain across filters).
+  // Built from the entire non-graduating NR list — top 5 in each dimension
+  // get a stable color so clicking a segment to filter doesn't recolor
+  // the bar back to position-0 purple.
+  const allRows = getDedupedNRList()
+    .filter(r => !r.is_hidden)
+    .filter(r => (r.reason || '').toLowerCase() !== 'graduating');
+  const classCM  = nrBdFullColorMap(allRows, classKey);
+  const sportCM  = nrBdFullColorMap(allRows, sportKey);
+  const majorCM  = nrBdFullColorMap(allRows, majorKey);
+  const reasonCM = nrBdFullColorMap(allRows, reasonKey);
+
+  // Bucket helpers — apply key extractor to the filtered non-graduating list.
+  const bucketsBy = (keyFn) => {
+    const b = {};
+    nonGrad.forEach(r => { const k = keyFn(r); b[k] = (b[k] || 0) + 1; });
+    return b;
+  };
+
   container.innerHTML =
-    buildNRBreakdownCard('By Class', classB, 'nr-filter-class', cls) +
-    buildNRBreakdownCard('By Sport', sportB, 'nr-filter-sport', sport) +
-    buildNRBreakdownCard('By Major', majorB, 'nr-filter-major', major) +
-    buildNRBreakdownCard('By Reason', reasonB, 'nr-filter-reason', reason);
+    buildNRBreakdownCard('By Class',  bucketsBy(classKey),  'nr-filter-class',  cls,    classCM,  'class') +
+    buildNRBreakdownCard('By Sport',  bucketsBy(sportKey),  'nr-filter-sport',  sport,  sportCM,  'sport') +
+    buildNRBreakdownCard('By Major',  bucketsBy(majorKey),  'nr-filter-major',  major,  majorCM,  'major') +
+    buildNRBreakdownCard('By Reason', bucketsBy(reasonKey), 'nr-filter-reason', reason, reasonCM, 'reason');
 }
 
 // Refresh the Class / Sport / Major filter dropdowns from the values
