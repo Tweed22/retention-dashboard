@@ -332,13 +332,57 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
 .nav-tabs-wrapper { display: flex; flex: 1; align-items: center; }
 .nav-active-label { display: none; }
 .mobile-detail-row { display: none; }
+.mobile-detail-row td { padding: 12px 14px; background: #f9fafb; border-top: none; }
 .exp-btn { background: transparent; border: none; cursor: pointer; padding: 4px 6px; color: #1e2d4f; font-size: 13px; line-height: 1; transition: transform 0.15s; }
 .exp-btn:hover { color: #2563eb; }
+.exp-btn.open { transform: rotate(90deg); }
 .exp-th { width: 28px; }
 .exp-td { text-align: center; padding: 4px 0; }
 .mobile-detail-stack { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
 .mobile-detail-pair { font-size: 12px; line-height: 1.5; }
 .mobile-detail-pair .mdp-label { font-weight: 600; color: #6b7280; margin-right: 6px; }
+body.dark .mobile-detail-row td { background: #1f1f1f; border-top-color: #353535; }
+body.dark .mobile-detail-pair .mdp-label { color: #9ca3af; }
+body.dark .exp-btn { color: #e0e0e0; }
+body.dark .exp-btn:hover { color: #93c5fd; }
+
+/* ──────────────────────────────────────────────────────────────────
+   Column-priority tiers — Tony 2026-05-13.
+   ──────────────────────────────────────────────────────────────────
+   As the viewport shrinks, table columns disappear progressively based
+   on priority. The chevron column (.exp-th/.exp-td) is hidden on wide
+   desktop and visible at every tier below, letting the user reveal the
+   hidden fields via the detail row.
+
+   Tiers (per Tony's tier assignments):
+     • col-priority-2 — hides at ≤1100px viewport width.
+     • col-priority-3 — hides at ≤ 900px viewport width.
+     • col-priority-4 — hides at ≤ 700px viewport width OR landscape phone.
+     • mobile-secondary — legacy class, kept as a synonym for the
+       existing ≤640px/landscape mobile cutoff so unrelated UI bits that
+       already used it don't shift their behavior.
+
+   The detail-row .open display rule is widened to cover ≤1100px so
+   clicking the chevron at any intermediate tier reveals the hidden
+   fields below the row, not just at mobile.
+*/
+@media (max-width: 1100px) {
+  table th.col-priority-2, table td.col-priority-2 { display: none; }
+}
+@media (max-width: 900px) {
+  table th.col-priority-3, table td.col-priority-3 { display: none; }
+}
+@media (max-width: 700px), (max-height: 500px) and (orientation: landscape) {
+  table th.col-priority-4, table td.col-priority-4 { display: none; }
+}
+@media (max-width: 1100px), (max-height: 500px) and (orientation: landscape) {
+  .mobile-detail-row.open { display: table-row; }
+}
+/* Desktop-wide: nothing's hidden, so the chevron has nothing to reveal.
+   Hide it entirely so the column doesn't sit there visually empty. */
+@media (min-width: 1101px) and (min-height: 501px) {
+  table th.exp-th, table td.exp-td { display: none; }
+}
 
 /* Trigger full mobile treatment on EITHER a narrow viewport (portrait
    phone, max-width 640) OR a short viewport (landscape phone, max-height
@@ -394,11 +438,10 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
   .filter-row { flex-wrap: wrap; gap: 8px; }
   .filter-row .filter-select, .filter-row .table-search { width: 100%; }
 
-  /* Tables: hide secondary cells, render detail row when expanded. */
+  /* Tables: hide legacy mobile-secondary cells. The .open detail-row
+     display rule + chevron rotation + cell styling live globally now so
+     they apply at every tier below 1100px, not just at mobile. */
   table th.mobile-secondary, table td.mobile-secondary { display: none; }
-  .mobile-detail-row.open { display: table-row; }
-  .mobile-detail-row td { padding: 12px 14px; background: #f9fafb; border-top: none; }
-  .exp-btn.open { transform: rotate(90deg); }
 
   /* Table-header padding is tighter on phones. */
   table th, table td { padding: 8px 10px; font-size: 12px; }
@@ -935,10 +978,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="regSort('id')">Student ID</th>
         <th class="sortable" onclick="regSort('lastName')">Name</th>
-        <th class="sortable mobile-secondary" onclick="regSort('classYear')">Class</th>
-        <th class="sortable mobile-secondary" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
-        <th class="sortable mobile-secondary" onclick="regSort('creditHours')">Credits</th>
-        <th class="sortable mobile-secondary admin-only" onclick="regSort('careerGpa')" title="Career GPA from the registered CSV (admin-only)">GPA</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="regSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="regSort('creditHours')">Credits</th>
+        <th class="sortable mobile-secondary col-priority-4 admin-only" onclick="regSort('careerGpa')" title="Career GPA from the registered CSV (admin-only)">GPA</th>
         <th class="exp-th"></th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
@@ -977,12 +1020,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="holdsSort('id')">Student ID</th>
         <th class="sortable" onclick="holdsSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary mobile-show-landscape" onclick="holdsSort('firstName')">First Name</th>
-        <th class="mobile-secondary">Hold</th>
-        <th class="sortable mobile-secondary" onclick="holdsSort('classYear')">Class</th>
-        <th class="sortable mobile-secondary" onclick="holdsSort('major')">Major</th>
-        <th class="sortable mobile-secondary" onclick="holdsSort('advisor')">Advisor</th>
-        <th class="sortable mobile-secondary" onclick="holdsSort('sports')">Sport</th>
+        <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="holdsSort('firstName')">First Name</th>
+        <th class="mobile-secondary col-priority-2">Hold</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="holdsSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="holdsSort('major')">Major</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('sports')">Sport</th>
         <th class="exp-th"></th>
       </tr></thead>
       <tbody id="holds-tbody"></tbody></table>
@@ -1020,12 +1063,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="crSort('id')">Student ID</th>
         <th class="sortable" onclick="crSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary mobile-show-landscape" onclick="crSort('firstName')">First Name</th>
-        <th class="sortable mobile-secondary" onclick="crSort('classYear')">Class</th>
-        <th class="sortable mobile-secondary" onclick="crSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
-        <th class="sortable mobile-secondary" onclick="crSort('major')">Major</th>
-        <th class="sortable mobile-secondary" onclick="crSort('advisor')">Advisor</th>
-        <th class="sortable mobile-secondary" onclick="crSort('sports')">Sport</th>
+        <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="crSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="crSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="crSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="crSort('major')">Major</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="crSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="crSort('sports')">Sport</th>
         <th class="exp-th"></th>
       </tr></thead>
       <tbody id="cr-tbody"></tbody></table>
@@ -1070,12 +1113,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="nsSort('id')">Student ID</th>
         <th class="sortable" onclick="nsSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary mobile-show-landscape" onclick="nsSort('firstName')">First Name</th>
-        <th class="sortable mobile-secondary" onclick="nsSort('status')">Status</th>
-        <th class="sortable mobile-secondary" onclick="nsSort('classYear')">Class</th>
-        <th class="sortable mobile-secondary" onclick="nsSort('major')">Major</th>
-        <th class="sortable mobile-secondary" onclick="nsSort('advisor')">Advisor</th>
-        <th class="sortable mobile-secondary" onclick="nsSort('sports')">Sport</th>
+        <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="nsSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="nsSort('status')">Status</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="nsSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('major')">Major</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('sports')">Sport</th>
         <th class="exp-th"></th>
       </tr></thead>
       <tbody id="ns-tbody"></tbody></table>
@@ -1119,10 +1162,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="ftftSort('id')">Student ID</th>
         <th class="sortable" onclick="ftftSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary mobile-show-landscape" onclick="ftftSort('firstName')">First Name</th>
-        <th class="sortable mobile-secondary" onclick="ftftSort('__status')">Status</th>
-        <th class="sortable mobile-secondary" onclick="ftftSort('major')">Major</th>
-        <th class="sortable mobile-secondary" onclick="ftftSort('advisor')">Advisor</th>
+        <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="ftftSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="ftftSort('__status')">Status</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="ftftSort('major')">Major</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="ftftSort('advisor')">Advisor</th>
         <th class="exp-th"></th>
       </tr></thead>
       <tbody id="ftft-tbody"></tbody></table>
@@ -1192,15 +1235,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <table><thead><tr>
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
       <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
-      <th class="sortable mobile-secondary mobile-show-landscape" onclick="nrSort('firstName')">First Name</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('classYear')">Class</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('sport')">Sport(s)</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('major')">Major</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('reason')">Reason</th>
-      <th class="mobile-secondary">Notes</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('withdrawal')">Withdrawal</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('dateAdded')">Date Added</th>
-      <th class="mobile-secondary"></th>
+      <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="nrSort('firstName')">First Name</th>
+      <th class="sortable mobile-secondary col-priority-3" onclick="nrSort('classYear')">Class</th>
+      <th class="sortable mobile-secondary col-priority-3" onclick="nrSort('sport')">Sport(s)</th>
+      <th class="sortable mobile-secondary col-priority-4" onclick="nrSort('major')">Major</th>
+      <th class="sortable mobile-secondary col-priority-2" onclick="nrSort('reason')">Reason</th>
+      <th class="mobile-secondary col-priority-4">Notes</th>
+      <th class="sortable mobile-secondary col-priority-2" onclick="nrSort('withdrawal')">Withdrawal</th>
+      <th class="sortable mobile-secondary col-priority-4" onclick="nrSort('dateAdded')">Date Added</th>
+      <th class="mobile-secondary col-priority-4"></th>
       <th class="exp-th"></th>
     </tr></thead>
     <tbody id="nr-tbody"></tbody></table>
@@ -3472,10 +3515,10 @@ function ftftApply() {
     return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
-    <td class="mobile-secondary mobile-show-landscape">${firstVal}</td>
-    <td class="mobile-secondary">${statusHtml}</td>
-    <td class="mobile-secondary">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    <td class="mobile-secondary">${advisorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td class="mobile-secondary mobile-show-landscape col-priority-3">${firstVal}</td>
+    <td class="mobile-secondary col-priority-2">${statusHtml}</td>
+    <td class="mobile-secondary col-priority-3">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td class="mobile-secondary col-priority-4">${advisorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     ${expandBtnCell()}
   </tr>${buildDetailRow(7, [
     { label: 'First Name', value: firstVal },
@@ -3726,12 +3769,12 @@ function holdsApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary mobile-show-landscape">${r.firstName||r.name||''}</td>
-          <td class="mobile-secondary">${renderHoldChips(r)}</td>
-          <td class="mobile-secondary">${classChip(r.classYear)}</td>
-          <td class="mobile-secondary">${r.major}</td>
-          <td class="mobile-secondary">${r.advisor}</td>
-          <td class="mobile-secondary">${sc(r)}</td>
+          <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary col-priority-2">${renderHoldChips(r)}</td>
+          <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary col-priority-3">${r.major}</td>
+          <td class="mobile-secondary col-priority-4">${r.advisor}</td>
+          <td class="mobile-secondary col-priority-4">${sc(r)}</td>
           ${expandBtnCell()}
         </tr>${buildDetailRow(9, [
           { label: 'First Name', value: r.firstName||r.name||'' },
@@ -3784,12 +3827,12 @@ function crApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary mobile-show-landscape">${r.firstName||r.name||''}</td>
-          <td class="mobile-secondary">${classChip(r.classYear)}</td>
-          <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
-          <td class="mobile-secondary">${r.major}</td>
-          <td class="mobile-secondary">${r.advisor}</td>
-          <td class="mobile-secondary">${sc(r)}</td>
+          <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary col-priority-2">${ptFtChip(r.ptFt)}</td>
+          <td class="mobile-secondary col-priority-3">${r.major}</td>
+          <td class="mobile-secondary col-priority-4">${r.advisor}</td>
+          <td class="mobile-secondary col-priority-4">${sc(r)}</td>
           ${expandBtnCell()}
         </tr>${buildDetailRow(9, [
           { label: 'First Name', value: r.firstName||r.name||'' },
@@ -3871,10 +3914,10 @@ function regApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${displayName}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary">${classChip(r.classYear)}</td>
-          <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
-          <td class="mobile-secondary" style="font-weight:600;text-align:right;">${creditCell}</td>
-          <td class="mobile-secondary admin-only" style="font-weight:600;text-align:right;">${gpaCell}</td>
+          <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
+          <td class="mobile-secondary col-priority-2" style="font-weight:600;text-align:right;">${creditCell}</td>
+          <td class="mobile-secondary col-priority-4 admin-only" style="font-weight:600;text-align:right;">${gpaCell}</td>
           ${expandBtnCell()}
         </tr>${buildDetailRow(7, [
           { label: 'Class', value: classChip(r.classYear) },
@@ -3923,12 +3966,12 @@ function nsApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary mobile-show-landscape">${r.firstName||r.name||''}</td>
-          <td class="mobile-secondary">${statusChip}</td>
-          <td class="mobile-secondary">${classChip(r.classYear)}</td>
-          <td class="mobile-secondary">${r.major}</td>
-          <td class="mobile-secondary">${r.advisor}</td>
-          <td class="mobile-secondary">${sc(r)}</td>
+          <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary col-priority-2">${statusChip}</td>
+          <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
+          <td class="mobile-secondary col-priority-4">${r.major}</td>
+          <td class="mobile-secondary col-priority-4">${r.advisor}</td>
+          <td class="mobile-secondary col-priority-4">${sc(r)}</td>
           ${expandBtnCell()}
         </tr>${buildDetailRow(9, [
           { label: 'First Name', value: r.firstName||r.name||'' },
@@ -4677,15 +4720,15 @@ function nrRenderStaticRow(r) {
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${lastCell}${ftftBadge(r.id)}</td>
-    <td class="mobile-secondary mobile-show-landscape">${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    <td class="mobile-secondary">${classCell}</td>
-    <td class="mobile-secondary" style="font-size:11px;">${sportCell}</td>
-    <td class="mobile-secondary" style="font-size:11px;">${r.major||'—'}</td>
-    <td class="mobile-secondary">${renderReasonCell(r._idx, r.reason)}</td>
-    <td class="mobile-secondary"><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
-    <td class="mobile-secondary">${wChipHtml}</td>
-    <td class="mobile-secondary" style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
-    <td class="mobile-secondary" style="white-space:nowrap;">${actionsHtml}</td>
+    <td class="mobile-secondary mobile-show-landscape col-priority-3">${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td class="mobile-secondary col-priority-3">${classCell}</td>
+    <td class="mobile-secondary col-priority-3" style="font-size:11px;">${sportCell}</td>
+    <td class="mobile-secondary col-priority-4" style="font-size:11px;">${r.major||'—'}</td>
+    <td class="mobile-secondary col-priority-2">${renderReasonCell(r._idx, r.reason)}</td>
+    <td class="mobile-secondary col-priority-4"><input type="text" class="nr-cell-input" value="${esc(r.notes)}" onblur="nrCellNotes(${r._idx}, this)" onkeydown="if(event.key==='Enter')this.blur();" placeholder="Add notes…" style="width:160px;" /></td>
+    <td class="mobile-secondary col-priority-2">${wChipHtml}</td>
+    <td class="mobile-secondary col-priority-4" style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
+    <td class="mobile-secondary col-priority-4" style="white-space:nowrap;">${actionsHtml}</td>
     ${expandBtnCell()}
   </tr>${buildDetailRow(12, [
     { label: 'First Name', value: firstCell || '' },
