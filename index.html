@@ -115,7 +115,7 @@ body.dark .nr-bd-pill { background: #4b5563; }
 @media (max-width: 900px) {
   .nr-breakdown-grid { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 640px) {
+@media (max-width: 640px), (max-height: 500px) {
   /* Tighter padding + smaller text so the legend's two columns of long
      category names (e.g. "Women's Track & Field — 7 · 9%") fit inside
      the card without forcing horizontal scroll. Tony 2026-05-13. */
@@ -340,7 +340,13 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
 .mobile-detail-pair { font-size: 12px; line-height: 1.5; }
 .mobile-detail-pair .mdp-label { font-weight: 600; color: #6b7280; margin-right: 6px; }
 
-@media (max-width: 640px) {
+/* Trigger full mobile treatment on EITHER a narrow viewport (portrait
+   phone, max-width 640) OR a short viewport (landscape phone, max-height
+   500). Tony 2026-05-13: landscape phones (~844×390) were skipping the
+   mobile media query because their width exceeded 640, so they showed
+   the desktop nav (7 tabs in a scrolling strip) and full-width tables
+   that overflowed. The combined query catches both orientations. */
+@media (max-width: 640px), (max-height: 500px) {
   /* Header reflows so the title and auth pill stack cleanly. */
   .header { padding: 10px 14px; gap: 6px; }
   .header-left h1 { font-size: 15px; }
@@ -405,6 +411,18 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
   /* Term-settings + upload panel get vertical stacks. */
   .term-settings { flex-direction: column; align-items: stretch; }
   .term-settings .ts-field { width: 100%; }
+}
+
+/* Landscape phone (taller than ~500 disqualifies tablets) — there's
+   horizontal room for one extra column. Re-show first-name cells that
+   would otherwise be hidden by .mobile-secondary in portrait. The
+   !important is needed because the portrait rule above has equal
+   specificity and the cascade-order would otherwise lose. Tony
+   2026-05-13. */
+@media (max-height: 500px) and (orientation: landscape) {
+  table th.mobile-show-landscape, table td.mobile-show-landscape {
+    display: table-cell !important;
+  }
 }
 
 /* ── Auth UI ── */
@@ -958,7 +976,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="holdsSort('id')">Student ID</th>
         <th class="sortable" onclick="holdsSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary" onclick="holdsSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary mobile-show-landscape" onclick="holdsSort('firstName')">First Name</th>
         <th class="mobile-secondary">Hold</th>
         <th class="sortable mobile-secondary" onclick="holdsSort('classYear')">Class</th>
         <th class="sortable mobile-secondary" onclick="holdsSort('major')">Major</th>
@@ -1001,7 +1019,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="crSort('id')">Student ID</th>
         <th class="sortable" onclick="crSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary" onclick="crSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary mobile-show-landscape" onclick="crSort('firstName')">First Name</th>
         <th class="sortable mobile-secondary" onclick="crSort('classYear')">Class</th>
         <th class="sortable mobile-secondary" onclick="crSort('ptFt')" title="Prior-term Part-Time / Full-Time status, if available">Enrollment</th>
         <th class="sortable mobile-secondary" onclick="crSort('major')">Major</th>
@@ -1051,7 +1069,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="nsSort('id')">Student ID</th>
         <th class="sortable" onclick="nsSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary" onclick="nsSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary mobile-show-landscape" onclick="nsSort('firstName')">First Name</th>
         <th class="sortable mobile-secondary" onclick="nsSort('status')">Status</th>
         <th class="sortable mobile-secondary" onclick="nsSort('classYear')">Class</th>
         <th class="sortable mobile-secondary" onclick="nsSort('major')">Major</th>
@@ -1100,7 +1118,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <table><thead><tr>
         <th class="sortable" onclick="ftftSort('id')">Student ID</th>
         <th class="sortable" onclick="ftftSort('lastName')">Last Name</th>
-        <th class="sortable mobile-secondary" onclick="ftftSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary mobile-show-landscape" onclick="ftftSort('firstName')">First Name</th>
         <th class="sortable mobile-secondary" onclick="ftftSort('__status')">Status</th>
         <th class="sortable mobile-secondary" onclick="ftftSort('major')">Major</th>
         <th class="sortable mobile-secondary" onclick="ftftSort('advisor')">Advisor</th>
@@ -1173,7 +1191,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <table><thead><tr>
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
       <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
-      <th class="sortable mobile-secondary" onclick="nrSort('firstName')">First Name</th>
+      <th class="sortable mobile-secondary mobile-show-landscape" onclick="nrSort('firstName')">First Name</th>
       <th class="sortable mobile-secondary" onclick="nrSort('classYear')">Class</th>
       <th class="sortable mobile-secondary" onclick="nrSort('sport')">Sport(s)</th>
       <th class="sortable mobile-secondary" onclick="nrSort('major')">Major</th>
@@ -3432,7 +3450,7 @@ function ftftApply() {
     return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
-    <td class="mobile-secondary">${firstVal}</td>
+    <td class="mobile-secondary mobile-show-landscape">${firstVal}</td>
     <td class="mobile-secondary">${statusHtml}</td>
     <td class="mobile-secondary">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td class="mobile-secondary">${advisorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
@@ -3605,6 +3623,7 @@ function holdsApply() {
   if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
   if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
+  rows = applyFTFTFilter(rows, 'h-ftft');
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows = applySort(rows, hSort);
   const holdIdx = HOLD_DISPLAY.indexOf(currentHold);
@@ -3685,7 +3704,7 @@ function holdsApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary mobile-show-landscape">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary">${renderHoldChips(r)}</td>
           <td class="mobile-secondary">${classChip(r.classYear)}</td>
           <td class="mobile-secondary">${r.major}</td>
@@ -3743,7 +3762,7 @@ function crApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary mobile-show-landscape">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary">${classChip(r.classYear)}</td>
           <td class="mobile-secondary">${ptFtChip(r.ptFt)}</td>
           <td class="mobile-secondary">${r.major}</td>
@@ -3870,7 +3889,7 @@ function nsApply() {
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
           <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
-          <td class="mobile-secondary">${r.firstName||r.name||''}</td>
+          <td class="mobile-secondary mobile-show-landscape">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary">${statusChip}</td>
           <td class="mobile-secondary">${classChip(r.classYear)}</td>
           <td class="mobile-secondary">${r.major}</td>
@@ -4624,7 +4643,7 @@ function nrRenderStaticRow(r) {
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${lastCell}${ftftBadge(r.id)}</td>
-    <td class="mobile-secondary">${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+    <td class="mobile-secondary mobile-show-landscape">${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td class="mobile-secondary">${classCell}</td>
     <td class="mobile-secondary" style="font-size:11px;">${sportCell}</td>
     <td class="mobile-secondary" style="font-size:11px;">${r.major||'—'}</td>
