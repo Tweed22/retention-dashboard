@@ -2883,17 +2883,17 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
       `).join('')}
       <line x1="${ML}" y1="${y(0)}" x2="${W-MR}" y2="${y(0)}" stroke="#cbd5e1" stroke-width="1" />
       <path d="${areaPath}" fill="url(#trend-area-${label.replace(/[^a-z0-9]/gi,'')})" stroke="none" />
-      <polyline fill="none" stroke="${TREND_COLOR}" stroke-width="1.2" points="${polyPoints}" />
+      <polyline fill="none" stroke="${TREND_COLOR}" stroke-width="0.9" points="${polyPoints}" />
       ${nrAreaPath ? `
         <path d="${nrAreaPath}" fill="url(#trend-nr-area-${label.replace(/[^a-z0-9]/gi,'')})" stroke="none" />
-        <polyline fill="none" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="3,2" points="${nrPolyPoints}" />
+        <polyline fill="none" stroke="#dc2626" stroke-width="0.9" points="${nrPolyPoints}" />
         ${nrPts.map(p => {
           const cx = x(p.t);
           const cy = y(100 - p.pct);
           const tip = `${fmtMDY(p.d.snapshot_date)}: ${p.pct}% not returning`;
           return `<g class="tp"><title>${tip}</title>
             <circle class="tp-halo" cx="${cx}" cy="${cy}" r="8" fill="rgba(0,0,0,0)" />
-            <circle cx="${cx}" cy="${cy}" r="1.5" fill="#dc2626" />
+            <circle cx="${cx}" cy="${cy}" r="1" fill="#dc2626" />
           </g>`;
         }).join('')}
       ` : ''}
@@ -2921,7 +2921,7 @@ function renderTrendCard(label, data, currentRate, isCurrent, elapsedDays) {
         return `<g class="tp">
           <title>${tip}</title>
           <circle class="tp-halo" cx="${cx}" cy="${cy}" r="10" fill="rgba(0,0,0,0)" />
-          <circle cx="${cx}" cy="${cy}" r="1.5" fill="${TREND_COLOR}" />
+          <circle cx="${cx}" cy="${cy}" r="1" fill="${TREND_COLOR}" />
           <rect class="tp-bg" x="${bgX}" y="${bgY}" width="${labelW}" height="13" rx="2.5" fill="#1a1d23" />
           <text class="tp-label" x="${labelX}" y="${labelY}" text-anchor="middle" font-size="8" font-weight="600" fill="white">${labelText}</text>
         </g>`;
