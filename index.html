@@ -1287,7 +1287,20 @@ function isAdmin()     { return userRole === 'admin'; }
 // ══════════════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════════════
-const BLOCKING_HOLDS = ['advising hold','account hold','registrar office hold','missing documents hold','immunization records hold'];
+// Each entry is either a lowercase substring to match against the
+// student's hold strings, OR an array of substrings — any of which can
+// trigger the bucket. Tony 2026-05-13: AR-prefixed holds from the
+// registrar's unregistered CSV ("AR-Non Current Trad A/R Holds",
+// "AR-Adult Studies Hold") roll up into the Account Hold (financial)
+// bucket since they're functionally the same category from a retention
+// standpoint.
+const BLOCKING_HOLDS = [
+  'advising hold',
+  ['account hold', 'ar-non current', 'ar-adult studies'],
+  'registrar office hold',
+  'missing documents hold',
+  'immunization records hold',
+];
 const HOLD_DISPLAY   = ['Advising Hold','Account Hold','Registrar Office Hold','Missing Documents Hold','Immunization Records Hold'];
 // Account Hold uses dark blue (not red) so it doesn't clash with the red
 // "not returning" slice in the per-hold donuts on the Summary page.
@@ -2247,8 +2260,13 @@ function buildData() {
   Object.values(returningStudents).forEach(s => {
     let hasBlockingHold = false;
     BLOCKING_HOLDS.forEach((bh, i) => {
-      // Check all hold_1…hold_6 values for this hold type
-      const matched = s.holds.some(h => h.toLowerCase().includes(bh));
+      // bh is either a single lowercase substring or an array of them;
+      // match the student's hold strings against any pattern in the list.
+      const patterns = Array.isArray(bh) ? bh : [bh];
+      const matched = s.holds.some(h => {
+        const lc = (h || '').toLowerCase();
+        return patterns.some(p => lc.includes(p));
+      });
       if (matched) {
         holdGroups[HOLD_DISPLAY[i]].push(s);
         hasBlockingHold = true;
@@ -5897,7 +5915,12 @@ async function loadHostedDashboardData() {
   Object.values(returningStudents).forEach(s => {
     let hasBlocking = false;
     BLOCKING_HOLDS.forEach((bh, i) => {
-      if (s.holds.some(h => (h || '').toLowerCase().includes(bh))) {
+      const patterns = Array.isArray(bh) ? bh : [bh];
+      const matched = s.holds.some(h => {
+        const lc = (h || '').toLowerCase();
+        return patterns.some(p => lc.includes(p));
+      });
+      if (matched) {
         holdGroups[HOLD_DISPLAY[i]].push(s);
         hasBlocking = true;
       }
