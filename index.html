@@ -325,6 +325,18 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
        AND on tablet (>640px), the detail rows stay hidden so the
        full table layout is intact.
 */
+/* Manual override buttons (Holds + Can Register) — admin-only via the
+   .admin-only class. Tony 2026-05-14. */
+.override-cluster { display: inline-flex; gap: 3px; vertical-align: middle; }
+.override-btn { font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer; line-height: 1.3; font-weight: 600; background: transparent; transition: background 0.12s, color 0.12s; }
+.override-btn-reg { color: #16a34a; border: 1px solid #16a34a; }
+.override-btn-reg:hover { background: #f0fdf4; }
+.override-btn-reg.active { color: white; background: #16a34a; }
+.override-btn-nr { color: #dc2626; border: 1px solid #dc2626; }
+.override-btn-nr:hover { background: #fef2f2; }
+.override-btn-nr.active { color: white; background: #dc2626; }
+body.dark .override-btn-reg:hover { background: #14271a; }
+body.dark .override-btn-nr:hover { background: #2a1818; }
 .nav-hamburger { display: none; }
 /* On desktop the wrapper is a flex strip so the tabs stay horizontal —
    without this rule, the tabs become block children of a plain div and
@@ -1403,6 +1415,14 @@ let pendingFiles = {};
 // Persisted to localStorage so a refresh restores the badge without needing
 // a re-upload. Tony 2026-05-11.
 let ftftIds = new Set();
+
+// Tony 2026-05-14: admin-set manual overrides for student registration
+// status. Populated from students.manual_status on every Supabase load.
+// Applied in both buildData (post-CSV-parse) and loadHostedDashboardData
+// (post-DB-read) so the override survives CSV uploads.
+//   key   = student_id (string)
+//   value = 'registered' | 'not_returning'
+let manualStatusOverrides = new Map();
 function loadFTFTIds() {
   try {
     const raw = localStorage.getItem('ftft_ids');
@@ -2195,6 +2215,33 @@ function buildData() {
   }
   // Always derive registeredIds from current registeredStudents (even on partial uploads)
   registeredIds = new Set(Object.keys(registeredStudents));
+
+  // Tony 2026-05-14: apply manual admin overrides. The cache is
+  // populated from the last Supabase load (see loadHostedDashboardData)
+  // so it persists through CSV re-uploads.
+  //   'registered'     → force into registeredStudents/registeredIds.
+  //                      If the student has no record yet, stub one
+  //                      from whichever map already holds them.
+  //   'not_returning'  → force OUT of registeredStudents/registeredIds.
+  //                      The NR row is created/un-hidden by the click
+  //                      handler; here we just ensure the student
+  //                      doesn't double-count as registered.
+  manualStatusOverrides.forEach((status, id) => {
+    if (status === 'registered') {
+      if (!registeredStudents[id]) {
+        const stu = returningStudents[id] || newStudents[id];
+        registeredStudents[id] = stu
+          ? { ...stu }
+          : { id, name: '', firstName: '', lastName: '', email: '', major: '',
+              advisor: '', sports: [], holds: [], classYear: '',
+              creditHours: 0, ptFt: '', careerGpa: null };
+      }
+      registeredIds.add(id);
+    } else if (status === 'not_returning') {
+      if (registeredStudents[id]) delete registeredStudents[id];
+      registeredIds.delete(id);
+    }
+  });
 
   // ── New students ──
   // A new student is "Registered" only if their ID also appears in the
@@ -3812,7 +3859,7 @@ function holdsApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)} ${overrideButtonsCell(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${renderHoldChips(r)}</td>
           <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
@@ -3870,7 +3917,7 @@ function crApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)} ${overrideButtonsCell(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
           <td class="mobile-secondary col-priority-2">${ptFtChip(r.ptFt)}</td>
@@ -4448,6 +4495,114 @@ const NR_BD_OTHER_KEY = '__nr_bd_other__';
 // the one this breakdown filters into; the value is what the slice
 // represents. Clicking the currently-selected value clears the filter
 // (toggle behavior).
+// ══════════════════════════════════════════════════════════════════════
+// Manual student status overrides — Tony 2026-05-14.
+// ══════════════════════════════════════════════════════════════════════
+// Admin-only buttons on the Holds + Can Register tabs let an admin
+// force a student to count as Registered or Not Returning, overriding
+// what the CSVs say. The state lives in students.manual_status (see
+// migration 0015) and survives all subsequent CSV uploads because
+// pushDataToSupabase deliberately excludes manual_status from its
+// students-upsert column list.
+
+async function markStudentRegistered(id) {
+  if (!HOSTED) { alert('Manual overrides only work in hosted mode.'); return; }
+  if (!isAdmin()) { alert('Admin role required.'); return; }
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return;
+  // Flip the override flag and hide any NR row so the student doesn't
+  // double-count. The hide is a soft-delete (is_hidden=true) so the
+  // audit trail survives for later inspection.
+  const u1 = await sb.from('students').update({ manual_status: 'registered' }).eq('id', cleanId);
+  if (u1.error) { alert('Could not save override: ' + u1.error.message); return; }
+  const u2 = await sb.from('not_returning_reports').update({ is_hidden: true }).eq('student_id', cleanId);
+  if (u2.error) console.warn('Could not hide NR rows for ' + cleanId + ':', u2.error);
+  manualStatusOverrides.set(cleanId, 'registered');
+  await loadHostedDashboardData();
+}
+
+async function markStudentNotReturning(id) {
+  if (!HOSTED) { alert('Manual overrides only work in hosted mode.'); return; }
+  if (!isAdmin()) { alert('Admin role required.'); return; }
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return;
+  const u1 = await sb.from('students').update({ manual_status: 'not_returning' }).eq('id', cleanId);
+  if (u1.error) { alert('Could not save override: ' + u1.error.message); return; }
+  // Auto-create an NR row if none exists; un-hide an existing hidden one.
+  const ex = await sb.from('not_returning_reports')
+    .select('id, is_hidden')
+    .eq('student_id', cleanId)
+    .limit(1);
+  if (ex.error) console.warn('NR lookup failed:', ex.error);
+  const existing = ex.data && ex.data[0];
+  if (existing) {
+    if (existing.is_hidden) {
+      const upRes = await sb.from('not_returning_reports')
+        .update({ is_hidden: false })
+        .eq('id', existing.id);
+      if (upRes.error) console.warn('NR un-hide failed:', upRes.error);
+    }
+  } else {
+    // Pull whatever student data we already have for the new NR row's
+    // sport/major/class. Empty reason — admin fills in via inline edit
+    // on the Not Returning tab. Notes record where the row came from.
+    const stu = returningStudents[cleanId] || newStudents[cleanId] || registeredStudents[cleanId];
+    const insRes = await sb.from('not_returning_reports').insert({
+      student_id: cleanId,
+      student_name: stu?.name || '',
+      reason: '',
+      withdrawal_status: 'Pending',
+      notes: 'Manual override from Holds / Can Register tab.',
+      sport: stu?.sports?.join(', ') || null,
+      major: stu?.major || null,
+      class_year: stu?.classYear || null,
+      submitter_name: userDisplay,
+      submitter_email: currentUser?.email,
+      submitter_uid: currentUser?.id,
+    });
+    if (insRes.error) console.warn('NR insert failed:', insRes.error);
+  }
+  manualStatusOverrides.set(cleanId, 'not_returning');
+  await loadHostedDashboardData();
+}
+
+async function clearStudentOverride(id) {
+  if (!HOSTED) return;
+  if (!isAdmin()) { alert('Admin role required.'); return; }
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return;
+  const u = await sb.from('students').update({ manual_status: null }).eq('id', cleanId);
+  if (u.error) { alert('Could not clear override: ' + u.error.message); return; }
+  manualStatusOverrides.delete(cleanId);
+  await loadHostedDashboardData();
+}
+
+// Render the override-button cluster for a student row. Visible to
+// admins only via the .admin-only class. When an override is active,
+// the matching button is highlighted; clicking it again clears the
+// override. The OTHER button switches the override. The HTML uses
+// inline data-attributes only for hover titles — click handlers receive
+// the id directly so they don't have to query the DOM.
+function overrideButtonsCell(id) {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return '';
+  const status = manualStatusOverrides.get(cleanId);
+  const regActive = status === 'registered';
+  const nrActive  = status === 'not_returning';
+  const regOnClick = regActive
+    ? `onclick="event.stopPropagation(); clearStudentOverride('${cleanId}')"`
+    : `onclick="event.stopPropagation(); markStudentRegistered('${cleanId}')"`;
+  const nrOnClick = nrActive
+    ? `onclick="event.stopPropagation(); clearStudentOverride('${cleanId}')"`
+    : `onclick="event.stopPropagation(); markStudentNotReturning('${cleanId}')"`;
+  const regTitle = regActive ? 'Click to clear the manual Registered override' : 'Force this student to count as Registered';
+  const nrTitle  = nrActive  ? 'Click to clear the manual Not-Returning override' : 'Force this student to count as Not Returning';
+  return `<span class="admin-only override-cluster">
+    <button class="override-btn override-btn-reg${regActive ? ' active' : ''}" ${regOnClick} title="${regTitle}">Reg</button>
+    <button class="override-btn override-btn-nr${nrActive ? ' active' : ''}" ${nrOnClick} title="${nrTitle}">NR</button>
+  </span>`;
+}
+
 function nrBdClick(filterId, value) {
   const sel = document.getElementById(filterId);
   if (!sel) return;
@@ -5901,6 +6056,9 @@ async function loadHostedDashboardData() {
       // Career GPA — null when missing/unset. Admin-only on the client
       // via the .admin-only column class on the Registered tab.
       careerGpa: s.career_gpa != null ? Number(s.career_gpa) : null,
+      // Manual override set by an admin from Holds/Can Register tabs
+      // ('registered' / 'not_returning' / undefined when unset).
+      manualStatus: s.manual_status || null,
     };
   }
   // Returning + new + registered maps
@@ -5908,6 +6066,14 @@ async function loadHostedDashboardData() {
   newStudents = {};
   registeredIds = new Set();
   registeredStudents = {};
+  // Tony 2026-05-14: rebuild the manual-overrides cache from this load.
+  // The map drives buildData's post-pass during the next CSV upload AND
+  // is the source of truth for "is this student's override active right
+  // now" when rendering the override buttons on Holds/Can Register.
+  manualStatusOverrides = new Map();
+  data.students.forEach(s => {
+    if (s.manual_status) manualStatusOverrides.set(s.id, s.manual_status);
+  });
   data.students.forEach(s => {
     const c = toClient(s);
     // Tony 2026-05-13: "registered" means credit_hours > 0. The DB's
@@ -5918,7 +6084,11 @@ async function loadHostedDashboardData() {
     // showing 0 hours becomes "returning unregistered" until the next
     // upload pushes the corrected flag back.
     const hasHours = Number(s.credit_hours || 0) > 0;
-    const isRegisteredNow = !!s.is_registered && hasHours;
+    let isRegisteredNow = !!s.is_registered && hasHours;
+    // Apply manual override (Tony 2026-05-14): 'registered' forces in,
+    // 'not_returning' forces out. Overrides win over CSV-driven flag.
+    if (s.manual_status === 'registered')     isRegisteredNow = true;
+    else if (s.manual_status === 'not_returning') isRegisteredNow = false;
     if (isRegisteredNow) {
       registeredIds.add(s.id);
       registeredStudents[s.id] = c;
