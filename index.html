@@ -2130,52 +2130,68 @@ function buildData() {
   // Per Tony 2026-05-05: only rebuild from rawReg if it has data — otherwise
   // preserve the registeredStudents already loaded (e.g. from Supabase).
   if (rawReg.length > 0) {
+    // Tony 2026-05-14: accept BOTH the legacy registered CSV (one row per
+    // enrollment with per-course credit hours) and the newer
+    // one-row-per-student CSV (with hrs_enrolled as the pre-totaled value).
+    // Detect format by checking whether the first parsed row carries an
+    // `hrs_enrolled` column header. If yes → new format → take MAX on
+    // duplicates (each "duplicate" carries the same total). If no →
+    // legacy format → SUM credit hours across rows to recover the
+    // per-student total. The 0-credit filter applies to the FINAL total
+    // either way (new format: filter per row before merge; legacy
+    // format: sum first, then drop students whose total is 0).
+    const firstKeys = Object.keys(rawReg[0] || {}).map(k => k.toLowerCase());
+    const isNewFormat = firstKeys.some(k => k.includes('hrs_enrolled') || k.includes('hrs enrolled'));
+
     registeredStudents = {};
     rawReg.forEach(r => {
       const s = normalizeStudent(r);
       if (!s.id) return;
-      // Tony 2026-05-13: a student is only "registered" if they have
-      // hrs_enrolled > 0. Rows with 0 hours represent students who appear
-      // on the registrar's report but haven't committed to courses for
-      // the upcoming term — they should NOT inflate registered counts.
-      // The new one-row-per-student CSV makes this a per-student filter;
-      // for the legacy one-row-per-enrollment CSV, summing previously
-      // protected against this case (any row with credits made the
-      // student count). Both formats now go through the same gate.
-      if ((s.creditHours || 0) <= 0) return;
+      // New format: the row IS the student. A row with 0 hours means the
+      // student isn't enrolled; skip it entirely. Legacy format: a single
+      // course with 0 credits doesn't disqualify the student — they may
+      // have other rows with real credits — so don't filter per-row.
+      if (isNewFormat && (s.creditHours || 0) <= 0) return;
       if (!registeredStudents[s.id]) {
-        // First row for this student — keep as-is. With the new CSV this
-        // already holds the authoritative total hours.
         registeredStudents[s.id] = s;
       } else {
-        // Duplicate row for the same student. New CSV shouldn't have
-        // these; legacy CSV would. Strategy: merge sports (de-duped) and
-        // take the MAX credit-hour value. Max-on-duplicate is safe for
-        // both formats: the new CSV's "duplicate" would have the same
-        // total on both rows (max returns the value), and the legacy
-        // CSV's per-row credit can never exceed the per-student total
-        // (so max gives the largest per-enrollment value, which is the
-        // best single-row approximation). If you need exact per-enrollment
-        // summing for the legacy CSV again, revert to += here.
+        // Duplicate row for the same student. Merge sports (de-duped),
+        // then merge credit hours per format.
         s.sports.forEach(sp => {
           if (sp && !registeredStudents[s.id].sports.includes(sp)) {
             registeredStudents[s.id].sports.push(sp);
           }
         });
-        if ((s.creditHours || 0) > (registeredStudents[s.id].creditHours || 0)) {
-          registeredStudents[s.id].creditHours = s.creditHours;
+        if (isNewFormat) {
+          // New format: a duplicate (rare) carries the same total —
+          // taking the max is safe and idempotent.
+          if ((s.creditHours || 0) > (registeredStudents[s.id].creditHours || 0)) {
+            registeredStudents[s.id].creditHours = s.creditHours;
+          }
+        } else {
+          // Legacy format: each row is one enrollment; the per-student
+          // total is the SUM of every enrollment's credits.
+          registeredStudents[s.id].creditHours =
+            (registeredStudents[s.id].creditHours || 0) + (s.creditHours || 0);
         }
-        // Preserve PT/FT from whichever row supplied it first; only fill
-        // in if the first row was blank.
+        // Preserve PT/FT and career GPA from whichever row supplied them
+        // first; only fill if still blank.
         if (!registeredStudents[s.id].ptFt && s.ptFt) {
           registeredStudents[s.id].ptFt = s.ptFt;
         }
-        // Same fill-don't-clobber rule for career GPA.
         if (registeredStudents[s.id].careerGpa == null && s.careerGpa != null) {
           registeredStudents[s.id].careerGpa = s.careerGpa;
         }
       }
     });
+
+    // Legacy format intentionally keeps every unique student who appears
+    // in the registered CSV. Tony's 2026-05-14 framing: "look for unique
+    // students and count their credit hours" — presence in the file is
+    // the registration signal, credit hours are a secondary attribute
+    // (and may be absent entirely from older exports). The new format's
+    // 0-hour filter above is what guards against unregistered students
+    // sneaking into counts.
   }
   // Always derive registeredIds from current registeredStudents (even on partial uploads)
   registeredIds = new Set(Object.keys(registeredStudents));
