@@ -2268,6 +2268,16 @@ function buildData() {
   // Always re-exclude any IDs that are in newStudents (in case they shifted)
   newIds.forEach(id => { if (returningStudents[id]) delete returningStudents[id]; });
 
+  // Tony 2026-05-14: also exclude students who are NOW in registeredIds.
+  // If the unregistered CSV is stale (generated before a student
+  // registered) and the registered CSV is current, the student appears
+  // in BOTH files. The registered CSV wins — they're actually enrolled
+  // and shouldn't show up under any blocking-hold card or on the Can
+  // Register list. Removing them from returningStudents here also keeps
+  // the Holds tab and Can Register tab in sync with the Summary's
+  // Registered Status donut.
+  registeredIds.forEach(id => { if (returningStudents[id]) delete returningStudents[id]; });
+
   // Always rebuild hold groups + can-register from current returningStudents
   holdGroups = {};
   HOLD_DISPLAY.forEach(h => holdGroups[h] = []);
