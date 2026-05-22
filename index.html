@@ -1039,6 +1039,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('sports')">Sport</th>
         <th class="exp-th"></th>
+        <th class="admin-only override-col">Override</th>
       </tr></thead>
       <tbody id="holds-tbody"></tbody></table>
     </div>
@@ -1082,6 +1083,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-4" onclick="crSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="crSort('sports')">Sport</th>
         <th class="exp-th"></th>
+        <th class="admin-only override-col">Override</th>
       </tr></thead>
       <tbody id="cr-tbody"></tbody></table>
     </div>
@@ -3859,7 +3861,7 @@ function holdsApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)} ${overrideButtonsCell(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${renderHoldChips(r)}</td>
           <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
@@ -3867,7 +3869,8 @@ function holdsApply() {
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
           ${expandBtnCell()}
-        </tr>${buildDetailRow(9, [
+          <td class="admin-only override-col" style="white-space:nowrap;">${overrideButtonsCell(r.id)}</td>
+        </tr>${buildDetailRow(10, [
           { label: 'First Name', value: r.firstName||r.name||'' },
           { label: 'Hold', value: renderHoldChips(r) },
           { label: 'Class', value: classChip(r.classYear) },
@@ -3876,7 +3879,7 @@ function holdsApply() {
           { label: 'Sport', value: sc(r) },
         ])}`;
       }).join('')
-    : emptyRow(9,'No students match.');
+    : emptyRow(10,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3917,7 +3920,7 @@ function crApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)} ${overrideButtonsCell(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
           <td class="mobile-secondary col-priority-2">${ptFtChip(r.ptFt)}</td>
@@ -3925,7 +3928,8 @@ function crApply() {
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
           ${expandBtnCell()}
-        </tr>${buildDetailRow(9, [
+          <td class="admin-only override-col" style="white-space:nowrap;">${overrideButtonsCell(r.id)}</td>
+        </tr>${buildDetailRow(10, [
           { label: 'First Name', value: r.firstName||r.name||'' },
           { label: 'Class', value: classChip(r.classYear) },
           { label: 'Enrollment', value: ptFtChip(r.ptFt) },
@@ -3934,7 +3938,7 @@ function crApply() {
           { label: 'Sport', value: sc(r) },
         ])}`;
       }).join('')
-    : emptyRow(9,'No students match.');
+    : emptyRow(10,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
