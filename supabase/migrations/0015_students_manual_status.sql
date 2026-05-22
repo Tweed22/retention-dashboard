@@ -21,8 +21,26 @@
 -- no new policy needed.  Tony 2026-05-14.
 -- ─────────────────────────────────────────────────────────────────────────
 
-alter table students
-  add column if not exists manual_status text
-  check (manual_status in ('registered', 'not_returning'));
+-- Schema-qualify the table reference. Tony's 2026-05-14 SQL-editor run
+-- got `relation "students" does not exist` because the SQL editor's
+-- session search_path didn't default to public. Using `public.students`
+-- avoids that ambiguity.
+alter table public.students
+  add column if not exists manual_status text;
+
+-- Add the CHECK in a separate statement so an existing constraint
+-- doesn't block the re-run. The DO block makes it idempotent.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'students_manual_status_check'
+      and conrelid = 'public.students'::regclass
+  ) then
+    alter table public.students
+      add constraint students_manual_status_check
+      check (manual_status is null or manual_status in ('registered', 'not_returning'));
+  end if;
+end $$;
 
 -- Inherits grants set in migration 0012.
