@@ -2618,16 +2618,20 @@ function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
   // Registered=1, Holds=2, CanReg=3, NewStudents=4, NotReturning=5.
   // Subtitles spell out the percentage formula. Denominator for all three
   // slices is totalReturning, which equals (Eligible to Return − NR).
+  // Returning Student Status donuts cover the FULL returning cohort —
+  // FTFT and non-FTFT alike. Clicking clears the FTFT filter on the
+  // destination tab so the user sees everyone, not just whichever
+  // cohort was last filtered. Tony 2026-05-14.
   const segments = [
     { label:'Registered',        count: registered,  color:'#16a34a',
       subtitle:'Returning + Registered ÷ (Eligible − NR)',
-      onclick: "showPage('registered', document.querySelectorAll('.nav-tab')[1])" },
+      onclick: "goToFilteredTab('registered', '')" },
     { label:'Has Blocking Hold', count: hasHold,     color:'#dc2626',
       subtitle:'Returning + Hold ÷ (Eligible − NR)',
-      onclick: "showPage('holds', document.querySelectorAll('.nav-tab')[2])" },
+      onclick: "goToFilteredTab('holds', '', true)" },
     { label:'Can Register',      count: canRegister, color:'#0d9488',
       subtitle:'Returning + Can Reg ÷ (Eligible − NR)',
-      onclick: "showPage('canreg', document.querySelectorAll('.nav-tab')[3])" },
+      onclick: "goToFilteredTab('canreg', '')" },
   ];
   container.innerHTML = segments.map(seg => svgSegmentDonut({
     label: seg.label,
@@ -2707,19 +2711,24 @@ function renderFTFTDonuts(nrIdsActive) {
   // NotReturning=5, FTFT=6. Donut clicks navigate to the most useful tab
   // for that segment. Subtitles spell out the percentage formula;
   // denominator for all four is Total FTFT (the full cohort minus graduating).
+  // FTFT donut clicks set the destination tab's FTFT filter to "ftft only"
+  // so the user lands on a list of just the FTFT cohort for that bucket.
+  // The Has-Hold donut also flips currentHold to 'All Holds' so the
+  // user sees every FTFT student with any hold, not just whichever
+  // hold card was last selected. Tony 2026-05-14.
   const segments = [
     { label:'Registered',    count: registered,   color:'#16a34a',
       subtitle:'FTFT Registered ÷ Total FTFT',
-      onclick: "showPage('registered', document.querySelectorAll('.nav-tab')[1])" },
+      onclick: "goToFilteredTab('registered', 'ftft')" },
     { label:'Has Hold',      count: hasHold,      color:'#dc2626',
       subtitle:'FTFT with Hold ÷ Total FTFT',
-      onclick: "showPage('holds', document.querySelectorAll('.nav-tab')[2])" },
+      onclick: "goToFilteredTab('holds', 'ftft', true)" },
     { label:'Can Register',  count: canReg,       color:'#0d9488',
       subtitle:'FTFT Can Reg ÷ Total FTFT',
-      onclick: "showPage('canreg', document.querySelectorAll('.nav-tab')[3])" },
+      onclick: "goToFilteredTab('canreg', 'ftft')" },
     { label:'Not Returning', count: notReturning, color:'#d97706',
       subtitle:'FTFT NR ÷ Total FTFT',
-      onclick: "goToNRPage()" },
+      onclick: "goToFilteredTab('notreturning', 'ftft')" },
   ];
   container.innerHTML = segments.map(seg => svgSegmentDonut({
     label: seg.label,
@@ -4190,6 +4199,13 @@ function dedupeNRForDisplay(rows) {
     if (ta !== tb) return ta > tb;
     return score(a) > score(b);
   };
+  // Stable name key — strips whitespace, commas, and case so
+  // "Smith, John", "smith john", "John Smith" all collapse to one
+  // identifier. Used to merge no-id rows against by-id rows below.
+  const nameKey = r => {
+    const parts = [r.firstName || '', r.lastName || '', r.name || ''];
+    return parts.join(' ').toLowerCase().replace(/[\s,]+/g, '');
+  };
   const byId = new Map();
   const noId = [];
   for (const r of rows) {
@@ -4197,7 +4213,23 @@ function dedupeNRForDisplay(rows) {
     const prev = byId.get(r.id);
     if (!prev || isBetter(r, prev)) byId.set(r.id, r);
   }
-  return [...byId.values(), ...noId];
+  // Tony 2026-05-14: also collapse no-id rows that name-match a by-id
+  // row. The common pattern: committee enters a manual NR row by name
+  // (no id), then the student later withdraws and the auto-sync
+  // creates a SECOND NR row with the registrar's id. Without this
+  // merge, both rows survive dedup and the student gets double-counted
+  // in notReturning → Eligible to Return.
+  const knownNames = new Set();
+  for (const r of byId.values()) {
+    const k = nameKey(r);
+    if (k) knownNames.add(k);
+  }
+  const remainingNoId = noId.filter(r => {
+    const k = nameKey(r);
+    if (!k) return true; // can't match — keep
+    return !knownNames.has(k);
+  });
+  return [...byId.values(), ...remainingNoId];
 }
 
 function loadNRList() {
@@ -5564,6 +5596,38 @@ function goToRegisteredPage() {
   const navTab = [...document.querySelectorAll('.nav-tab')]
     .find(t => (t.getAttribute('onclick') || '').includes("'registered'"));
   showPage('registered', navTab);
+}
+
+// Tony 2026-05-14: helper for the Summary-page donuts. Navigates to the
+// matching tab AND sets the FTFT cohort filter to the requested value
+// ('ftft' = FTFT-only, '' = all cohorts, 'non-ftft' = non-FTFT-only).
+// Also (for the Holds tab) optionally flips currentHold to 'All Holds'
+// so the donut's bucket isn't filtered down to a single hold type the
+// user happened to last click. After the filter is set, the tab's
+// apply/render function is called so the table reflects it immediately.
+function goToFilteredTab(tab, ftftValue, useAllHolds) {
+  if (tab === 'holds' && useAllHolds) currentHold = 'All Holds';
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes(`'${tab}'`));
+  showPage(tab, navTab);
+  const filterIdMap = {
+    'registered':   'reg-ftft',
+    'holds':        'h-ftft',
+    'canreg':       'cr-ftft',
+    'new':          'ns-ftft',
+    'notreturning': 'nr-filter-ftft',
+  };
+  const sel = document.getElementById(filterIdMap[tab]);
+  if (sel) sel.value = ftftValue || '';
+  const applyMap = {
+    'registered':   'regApply',
+    'holds':        'holdsApply',
+    'canreg':       'crApply',
+    'new':          'nsApply',
+    'notreturning': 'nrRender',
+  };
+  const fn = window[applyMap[tab]];
+  if (typeof fn === 'function') fn();
 }
 
 // Card-click filter helpers. Each one sets the status filter on its page
