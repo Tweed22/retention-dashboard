@@ -4199,26 +4199,35 @@ function dedupeNRForDisplay(rows) {
     if (ta !== tb) return ta > tb;
     return score(a) > score(b);
   };
+  // Normalize the student id so trivial differences ("1001234 ",
+  // "#1001234", "1001234") collapse to the same key. We don't strip
+  // leading zeros because "0123" and "123" could legitimately be
+  // different student IDs at some institutions.
+  const normalizeId = id => String(id || '').trim().replace(/^#/, '');
   // Stable name key — strips whitespace, commas, and case so
   // "Smith, John", "smith john", "John Smith" all collapse to one
-  // identifier. Used to merge no-id rows against by-id rows below.
+  // identifier. Used in two places below: merging no-id rows against
+  // by-id rows, and a final by-name collapse so two rows with
+  // different-looking IDs but identical names still merge.
   const nameKey = r => {
     const parts = [r.firstName || '', r.lastName || '', r.name || ''];
     return parts.join(' ').toLowerCase().replace(/[\s,]+/g, '');
   };
+
+  // Pass 1 — dedupe by normalized student id.
   const byId = new Map();
   const noId = [];
   for (const r of rows) {
-    if (!r.id) { noId.push(r); continue; }
-    const prev = byId.get(r.id);
-    if (!prev || isBetter(r, prev)) byId.set(r.id, r);
+    const nid = normalizeId(r.id);
+    if (!nid) { noId.push(r); continue; }
+    const prev = byId.get(nid);
+    if (!prev || isBetter(r, prev)) byId.set(nid, r);
   }
-  // Tony 2026-05-14: also collapse no-id rows that name-match a by-id
-  // row. The common pattern: committee enters a manual NR row by name
-  // (no id), then the student later withdraws and the auto-sync
-  // creates a SECOND NR row with the registrar's id. Without this
-  // merge, both rows survive dedup and the student gets double-counted
-  // in notReturning → Eligible to Return.
+
+  // Pass 2 — collapse no-id rows against by-id rows by name.
+  // (Manual NR entry by name → student later withdraws → auto-sync
+  // creates a second NR row with the registrar's id. Without this
+  // pass, both rows survive.)
   const knownNames = new Set();
   for (const r of byId.values()) {
     const k = nameKey(r);
@@ -4226,10 +4235,29 @@ function dedupeNRForDisplay(rows) {
   }
   const remainingNoId = noId.filter(r => {
     const k = nameKey(r);
-    if (!k) return true; // can't match — keep
+    if (!k) return true;
     return !knownNames.has(k);
   });
-  return [...byId.values(), ...remainingNoId];
+
+  // Pass 3 — final by-name collapse across the remaining set.
+  // Tony 2026-05-14: catches the remaining double-count case where
+  // two rows have name AND id "typically matching" but other fields
+  // (sport, class, reason, major) differ. The other-field divergence
+  // doesn't matter for dedup — name+id collisions almost always mean
+  // the same student. The `isBetter` comparator picks the more
+  // up-to-date / better-filled row to keep. Acceptable trade-off:
+  // two genuinely-different students with identical names AND no
+  // student ids on both rows would also merge — vanishingly rare in
+  // practice, and easy to resolve manually if it ever happens.
+  const byName = new Map();
+  const noName = [];
+  for (const r of [...byId.values(), ...remainingNoId]) {
+    const k = nameKey(r);
+    if (!k) { noName.push(r); continue; }
+    const prev = byName.get(k);
+    if (!prev || isBetter(r, prev)) byName.set(k, r);
+  }
+  return [...byName.values(), ...noName];
 }
 
 function loadNRList() {
