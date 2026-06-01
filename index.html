@@ -935,7 +935,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
       <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior semester withdraws)"><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
       <div class="kpi-card purple kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
-      <div class="kpi-card teal"><div class="kpi-label">Retention Rate</div><div class="kpi-value" id="s-ftft-rate">—</div><div class="kpi-sub">Registered FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-potential" title="If every FTFT not on the NR list registered">Potential: —</div></div>
+      <div class="kpi-card teal" style="display:flex;flex-direction:column;justify-content:center;">
+        <div class="kpi-label">Semester Retention</div>
+        <div class="kpi-value" id="s-ftft-rate-sem" style="font-size:22px;">—</div>
+        <div class="kpi-sub">Reg FTFT ÷ (Total − NR from Fall)</div>
+        <div style="border-top:1px solid rgba(180,180,180,0.35);margin:7px 0;"></div>
+        <div class="kpi-label">Fall-to-Fall Retention</div>
+        <div class="kpi-value" id="s-ftft-rate-f2f" style="font-size:22px;">—</div>
+        <div class="kpi-sub">Reg FTFT ÷ Total FTFT</div>
+      </div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
@@ -945,8 +953,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       </div>
       <div class="card" id="ftft-status-card" style="display:none;">
         <div class="card-title">First-Time Full-Time Status</div>
-        <div class="card-subtitle">Registered · Has Hold · Can Register · Not Returning — Each segment of the FTFT cohort</div>
-        <div id="ftft-donuts-grid" class="returning-donuts-grid" style="grid-template-columns: repeat(4, 1fr);"></div>
+        <div class="card-subtitle">Registered · Has Hold · Can Register · Not Returning · Not Returning from Fall — Each segment of the FTFT cohort</div>
+        <div id="ftft-donuts-grid" class="returning-donuts-grid" style="grid-template-columns: repeat(5, 1fr);"></div>
       </div>
     </div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
@@ -2657,17 +2665,17 @@ function renderFTFTDonuts(nrIdsActive) {
   const row  = document.getElementById('status-cards-row');
   const container = document.getElementById('ftft-donuts-grid');
   if (!card || !container) return;
-  // Headline KPIs (Total FTFT + Retention Rate) live in the kpi-row above.
+  // Headline KPIs (Total FTFT + split Retention Rate) live in the kpi-row above.
   // We always update them so they reflect either real counts or "—".
-  const totalEl = document.getElementById('s-ftft-total');
-  const rateEl  = document.getElementById('s-ftft-rate');
-  const potEl   = document.getElementById('s-ftft-potential');
+  const totalEl  = document.getElementById('s-ftft-total');
+  const rateSemEl = document.getElementById('s-ftft-rate-sem');
+  const rateF2fEl = document.getElementById('s-ftft-rate-f2f');
   if (!ftftIds.size) {
     card.style.display = 'none';
     if (row) row.style.gridTemplateColumns = '1fr';
-    if (totalEl) totalEl.textContent = '—';
-    if (rateEl)  rateEl.textContent  = '—';
-    if (potEl)   potEl.textContent   = 'Potential: —';
+    if (totalEl)   totalEl.textContent   = '—';
+    if (rateSemEl) rateSemEl.textContent = '—';
+    if (rateF2fEl) rateF2fEl.textContent = '—';
     return;
   }
   card.style.display = '';
@@ -2677,11 +2685,11 @@ function renderFTFTDonuts(nrIdsActive) {
   const gradIds = getGraduatingIdSet();
   const ftft    = [...ftftIds].filter(id => !gradIds.has(id));
 
-  // Bucketize. Mutually exclusive: a student is either on the NR list
-  // (counts toward Not Returning) or one of the return states.
-  // Students whose IDs can't be found in any loaded roster have withdrawn
-  // and are excluded from the denominator for the Retention Rate.
-  let registered = 0, hasHold = 0, canReg = 0, notReturning = 0;
+  // Bucketize. Mutually exclusive per student.
+  // "Not Returning from Fall" = ID not found in any loaded roster (never
+  //   showed up this semester at all — distinct from being on the NR list).
+  // "Not Returning" = explicitly on the NR list this semester.
+  let registered = 0, hasHold = 0, canReg = 0, notReturning = 0, notReturningFromFall = 0;
   const holdIdSet = new Set();
   Object.values(holdGroups).forEach(g => g.forEach(s => holdIdSet.add(s.id)));
   const canRegIdSet = new Set(canRegisterStudents.map(s => s.id));
@@ -2693,45 +2701,40 @@ function renderFTFTDonuts(nrIdsActive) {
     else if (registeredIds.has(id))      registered++;
     else if (holdIdSet.has(id))          hasHold++;
     else if (canRegIdSet.has(id))        canReg++;
-    else if (!found)                     notReturning++;
+    else if (!found)                     notReturningFromFall++;
   });
 
   const total = ftft.length;
 
-  // Headline KPIs: Total FTFT cohort (full roster) + Retention Rate.
-  // Retention Rate = Registered FTFT ÷ Active FTFT (excl. withdrawn).
-  if (totalEl) totalEl.textContent = n(total);
-  const ftftRate = total ? Math.round(registered / total * 1000) / 10 : 0;
-  if (rateEl)  rateEl.textContent  = ftftRate + '%';
-  // "Potential" Retention Rate — Registered + Has Hold + Can Register
-  // (= every active FTFT student NOT on the NR list) ÷ Active FTFT.
-  const ftftPotential = total
-    ? Math.round((registered + hasHold + canReg) / total * 1000) / 10
-    : 0;
-  if (potEl) potEl.textContent = 'Potential: ' + ftftPotential + '%';
+  // Two retention rates:
+  //   Semester Retention   = Reg ÷ (Total − NR from Fall)
+  //     "Of FTFT students still active this semester, how many registered?"
+  //   Fall-to-Fall Retention = Reg ÷ Total
+  //     "Of all original FTFT students, how many registered this semester?"
+  const activeDenom = total - notReturningFromFall;
+  const semRate = activeDenom > 0 ? Math.round(registered / activeDenom * 1000) / 10 : 0;
+  const f2fRate = total       > 0 ? Math.round(registered / total       * 1000) / 10 : 0;
+  if (totalEl)   totalEl.textContent   = n(total);
+  if (rateSemEl) rateSemEl.textContent = semRate + '%';
+  if (rateF2fEl) rateF2fEl.textContent = f2fRate + '%';
 
-  // Tab order: Summary=0, Registered=1, Holds=2, CanReg=3, NewStudents=4,
-  // NotReturning=5, FTFT=6. Donut clicks navigate to the most useful tab
-  // for that segment. Subtitles spell out the percentage formula;
-  // denominator for all four is Total FTFT (the full cohort minus graduating).
-  // FTFT donut clicks set the destination tab's FTFT filter to "ftft only"
-  // so the user lands on a list of just the FTFT cohort for that bucket.
-  // The Has-Hold donut also flips currentHold to 'All Holds' so the
-  // user sees every FTFT student with any hold, not just whichever
-  // hold card was last selected. Tony 2026-05-14.
+  // Donut segments — 5 buckets, denominator is Total FTFT throughout.
   const segments = [
-    { label:'Registered',    count: registered,   color:'#16a34a',
+    { label:'Registered',             count: registered,          color:'#16a34a',
       subtitle:'FTFT Registered ÷ Total FTFT',
       onclick: "goToFilteredTab('registered', 'ftft')" },
-    { label:'Has Hold',      count: hasHold,      color:'#dc2626',
+    { label:'Has Hold',               count: hasHold,             color:'#dc2626',
       subtitle:'FTFT with Hold ÷ Total FTFT',
       onclick: "goToFilteredTab('holds', 'ftft', true)" },
-    { label:'Can Register',  count: canReg,       color:'#0d9488',
+    { label:'Can Register',           count: canReg,              color:'#0d9488',
       subtitle:'FTFT Can Reg ÷ Total FTFT',
       onclick: "goToFilteredTab('canreg', 'ftft')" },
-    { label:'Not Returning', count: notReturning, color:'#d97706',
-      subtitle:'FTFT NR ÷ Total FTFT',
+    { label:'Not Returning',          count: notReturning,        color:'#d97706',
+      subtitle:'On NR list ÷ Total FTFT',
       onclick: "goToFilteredTab('notreturning', 'ftft')" },
+    { label:'Not Returning from Fall',count: notReturningFromFall,color:'#b91c1c',
+      subtitle:'Not found in any roster ÷ Total FTFT',
+      onclick: "goToFilteredTab('ftft', 'ftft')" },
   ];
   container.innerHTML = segments.map(seg => svgSegmentDonut({
     label: seg.label,
