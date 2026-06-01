@@ -1146,13 +1146,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="page" id="page-ftft">
   <div id="ftft-empty" class="empty-state"><p>No FTFT roster loaded yet.<br><a onclick="toggleUploadPanel()">Upload your FTFT CSV</a> to see the cohort here.</p></div>
   <div id="ftft-content" style="display:none;">
-    <div class="kpi-row kpi-row-6">
+    <div class="kpi-row kpi-row-5">
       <div class="kpi-card indigo kpi-clickable" onclick="ftftFilterByStatus('')" title="Click to clear the status filter and show all FTFT students"><div class="kpi-label">FTFT Total</div><div class="kpi-value" id="ftft-total">0</div><div class="kpi-sub">Students on the FTFT roster</div></div>
       <div class="kpi-card green kpi-clickable" onclick="ftftFilterByStatus('Registered')" title="Click to filter to Registered FTFT students"><div class="kpi-label">Registered</div><div class="kpi-value" id="ftft-reg">0</div><div class="kpi-sub">In Registered CSV, not on NR</div></div>
       <div class="kpi-card red kpi-clickable" onclick="ftftFilterByStatus('Has Hold')" title="Click to filter to FTFT students with a blocking hold"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="ftft-hold">0</div><div class="kpi-sub">In a blocking-hold group, not on NR</div></div>
       <div class="kpi-card teal kpi-clickable" onclick="ftftFilterByStatus('Can Register')" title="Click to filter to FTFT students who can register"><div class="kpi-label">Can Register</div><div class="kpi-value" id="ftft-canreg">0</div><div class="kpi-sub">Unregistered, no blocking hold</div></div>
-      <div class="kpi-card amber kpi-clickable" onclick="ftftFilterByStatus('Not Returning')" title="Click to filter to FTFT students on the Not Returning list"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">FTFT student on the NR list</div></div>
-      <div class="kpi-card gray kpi-clickable" onclick="ftftFilterByStatus('Withdrawn')" title="Click to filter to Withdrawn FTFT students — ID not found in any loaded roster"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="ftft-withdrawn">0</div><div class="kpi-sub">ID not found in any roster</div></div>
+      <div class="kpi-card amber kpi-clickable" onclick="ftftFilterByStatus('Not Returning')" title="Click to filter to FTFT students on the Not Returning list"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">On NR list or ID not found in any roster</div></div>
     </div>
     <div class="section-label">First-Time Full-Time Roster</div>
     <div class="filter-row">
@@ -1163,7 +1162,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Has Hold</option>
         <option>Can Register</option>
         <option>Not Returning</option>
-        <option>Withdrawn</option>
       </select>
       <input class="table-search" type="text" id="ftft-search" placeholder="Search name or ID…" oninput="ftftApply()" />
     </div>
@@ -2683,7 +2681,7 @@ function renderFTFTDonuts(nrIdsActive) {
   // (counts toward Not Returning) or one of the return states.
   // Students whose IDs can't be found in any loaded roster have withdrawn
   // and are excluded from the denominator for the Retention Rate.
-  let registered = 0, hasHold = 0, canReg = 0, notReturning = 0, withdrawn = 0;
+  let registered = 0, hasHold = 0, canReg = 0, notReturning = 0;
   const holdIdSet = new Set();
   Object.values(holdGroups).forEach(g => g.forEach(s => holdIdSet.add(s.id)));
   const canRegIdSet = new Set(canRegisterStudents.map(s => s.id));
@@ -2695,7 +2693,7 @@ function renderFTFTDonuts(nrIdsActive) {
     else if (registeredIds.has(id))      registered++;
     else if (holdIdSet.has(id))          hasHold++;
     else if (canRegIdSet.has(id))        canReg++;
-    else if (!found)                     withdrawn++;
+    else if (!found)                     notReturning++;
   });
 
   const total = ftft.length;
@@ -3545,7 +3543,7 @@ function buildFTFTRows() {
     else if (registeredIds.has(id)) status = 'Registered';
     else if (holdIdSet.has(id))     status = 'Has Hold';
     else if (canRegIdSet.has(id))   status = 'Can Register';
-    else if (!found)                status = 'Withdrawn';
+    else if (!found)                status = 'Not Returning';
     else                            status = 'Unknown';
     return {
       id,
@@ -3581,14 +3579,11 @@ function renderFTFT() {
   const gradIds = getGraduatingIdSet();
   const active  = all.filter(r => !gradIds.has(r.id));
   const by = (status) => active.filter(r => r.__status === status).length;
-  const withdrawnCount = by('Withdrawn');
   document.getElementById('ftft-total').textContent    = n(active.length);
   document.getElementById('ftft-reg').textContent      = n(by('Registered'));
   document.getElementById('ftft-hold').textContent     = n(by('Has Hold'));
   document.getElementById('ftft-canreg').textContent   = n(by('Can Register'));
   document.getElementById('ftft-nr').textContent       = n(by('Not Returning'));
-  const wdEl = document.getElementById('ftft-withdrawn');
-  if (wdEl) wdEl.textContent = n(withdrawnCount);
 
   ftftApply();
 }
@@ -3622,8 +3617,7 @@ function ftftApply() {
     s === 'Registered'    ? 'chip-green'  :
     s === 'Has Hold'      ? 'chip-red'    :
     s === 'Can Register'  ? 'chip-teal'   :
-    s === 'Not Returning' ? 'chip-amber'  :
-    s === 'Withdrawn'     ? 'chip-gray'   : 'chip-gray';
+    s === 'Not Returning' ? 'chip-amber'  : 'chip-gray';
   tbody.innerHTML = rows.map(r => {
     const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>`;
     const majorVal   = r.major || '';
