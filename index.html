@@ -3623,7 +3623,9 @@ function ftftApply() {
     const majorVal   = r.major || '';
     const advisorVal = r.advisor || '';
     const firstVal   = r.firstName || r.name || '';
-    return `<tr>
+    const noName     = !r.lastName && !firstVal;
+    const rowTitle   = noName ? ' title="Not Returning from Fall"' : '';
+    return `<tr${rowTitle}>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
     <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${firstVal}</td>
