@@ -6960,17 +6960,19 @@ processAllCSVs = async function processAllCSVsWithSupabase() {
       }
     }
     window._lastPurgedGradRows = [];
-    // Snapshot the FTFT roster right before any async Supabase work so we
-    // can restore it afterward. loadHostedDashboardData() fetches from
-    // Supabase and may overwrite ftftIds — but at the time it runs (e.g.
-    // triggered by the realtime snapshot-insert event in step 1 of the push)
-    // the FTFT upsert in step 5c hasn't completed yet, so Supabase still
-    // returns the OLD roster. Saving + restoring guarantees the uploaded
-    // roster survives the full async round-trip regardless of push timing.
+    // Block the realtime listener from triggering a premature reload during
+    // the push. The snapshot INSERT fires at step 1, before students are
+    // upserted — without this guard every CSV upload causes a flicker back
+    // to old Supabase data for all CSVs (not just FTFT).
+    _uploadInProgress = true;
+    // Belt-and-suspenders: snapshot FTFT locally in case the push to
+    // ftft_students fails and the final loadHostedDashboardData() would
+    // otherwise revert to the old roster.
     const _savedFtftIds = ftftUploadedThisSession ? new Set(ftftIds) : null;
     const ok = await pushDataToSupabase();
+    _uploadInProgress = false;
     if (ok) await loadHostedDashboardData();
-    // Restore the uploaded FTFT roster and re-render the affected sections.
+    // Restore uploaded FTFT roster if Supabase returned stale data.
     if (_savedFtftIds && _savedFtftIds.size > 0) {
       ftftIds = _savedFtftIds;
       csvLoaded.ftft = true;
@@ -7229,12 +7231,19 @@ function nrNameInputAutofill() {
 //  REALTIME — auto-refresh on new uploads
 // ══════════════════════════════════════════════════════════════
 let realtimeChannel = null;
+// Set to true during processAllCSVsWithSupabase so the realtime snapshot-INSERT
+// listener doesn't trigger a premature reload mid-upload. The admin's own upload
+// flow calls loadHostedDashboardData() at the end; the realtime event would
+// otherwise fire at step 1 (snapshot insert) before students are upserted,
+// causing a flicker back to the old Supabase data.
+let _uploadInProgress = false;
 function startRealtime() {
   if (!sb || realtimeChannel) return;
   realtimeChannel = sb
     .channel('csv_snapshots_changes')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'csv_snapshots' }, () => {
-      // New upload — refetch + rerender for whichever role the user has
+      if (_uploadInProgress) return; // this admin's own upload — skip; wrapper handles the reload
+      // Another user's upload — refetch + rerender
       if (isCommittee()) loadHostedDashboardData();
       else renderPublicSummary();
     })
