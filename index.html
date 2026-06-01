@@ -237,6 +237,7 @@ tbody td { padding: 8px 12px; color: #2d3142; }
 /* ── Chips ── */
 .chip { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .chip-red    { background:#fee2e2; color:#b91c1c; }
+.chip-crimson { background:#fca5a5; color:#7f1d1d; }
 .chip-amber  { background:#fef3c7; color:#92400e; }
 .chip-blue   { background:#dbeafe; color:#1d4ed8; }
 .chip-purple { background:#ede9fe; color:#6d28d9; }
@@ -1159,7 +1160,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card green kpi-clickable" onclick="ftftFilterByStatus('Registered')" title="Click to filter to Registered FTFT students"><div class="kpi-label">Registered</div><div class="kpi-value" id="ftft-reg">0</div><div class="kpi-sub">In Registered CSV, not on NR</div></div>
       <div class="kpi-card red kpi-clickable" onclick="ftftFilterByStatus('Has Hold')" title="Click to filter to FTFT students with a blocking hold"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="ftft-hold">0</div><div class="kpi-sub">In a blocking-hold group, not on NR</div></div>
       <div class="kpi-card teal kpi-clickable" onclick="ftftFilterByStatus('Can Register')" title="Click to filter to FTFT students who can register"><div class="kpi-label">Can Register</div><div class="kpi-value" id="ftft-canreg">0</div><div class="kpi-sub">Unregistered, no blocking hold</div></div>
-      <div class="kpi-card amber kpi-clickable" onclick="ftftFilterByStatus('Not Returning')" title="Click to filter to FTFT students on the Not Returning list"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">On NR list or ID not found in any roster</div></div>
+      <div class="kpi-card amber kpi-clickable" onclick="ftftFilterByStatus('Not Returning')" title="Click to filter to FTFT students on the Not Returning list"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">Explicitly on the NR list this semester</div></div>
     </div>
     <div class="section-label">First-Time Full-Time Roster</div>
     <div class="filter-row">
@@ -1170,6 +1171,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Has Hold</option>
         <option>Can Register</option>
         <option>Not Returning</option>
+        <option>Not Returning from Fall</option>
       </select>
       <input class="table-search" type="text" id="ftft-search" placeholder="Search name or ID…" oninput="ftftApply()" />
     </div>
@@ -3546,7 +3548,7 @@ function buildFTFTRows() {
     else if (registeredIds.has(id)) status = 'Registered';
     else if (holdIdSet.has(id))     status = 'Has Hold';
     else if (canRegIdSet.has(id))   status = 'Can Register';
-    else if (!found)                status = 'Not Returning';
+    else if (!found)                status = 'Not Returning from Fall';
     else                            status = 'Unknown';
     return {
       id,
@@ -3620,7 +3622,8 @@ function ftftApply() {
     s === 'Registered'    ? 'chip-green'  :
     s === 'Has Hold'      ? 'chip-red'    :
     s === 'Can Register'  ? 'chip-teal'   :
-    s === 'Not Returning' ? 'chip-amber'  : 'chip-gray';
+    s === 'Not Returning'           ? 'chip-amber'   :
+    s === 'Not Returning from Fall' ? 'chip-crimson' : 'chip-gray';
   tbody.innerHTML = rows.map(r => {
     const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>`;
     const majorVal   = r.major || '';
