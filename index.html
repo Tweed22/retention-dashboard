@@ -935,16 +935,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
       <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior semester withdraws)"><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
-      <div class="kpi-card purple kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">Total FTFT</div><div class="kpi-value" id="s-ftft-total">—</div><div class="kpi-sub">First-Time Full-Time roster</div></div>
-      <div class="kpi-card teal" style="display:flex;flex-direction:column;justify-content:center;">
-        <div class="kpi-label">Semester Retention</div>
-        <div class="kpi-value" id="s-ftft-rate-sem" style="font-size:22px;">—</div>
-        <div class="kpi-sub">Reg FTFT ÷ (Total − NR from Fall)</div>
-        <div style="border-top:1px solid rgba(180,180,180,0.35);margin:7px 0;"></div>
-        <div class="kpi-label">Fall-to-Fall Retention</div>
-        <div class="kpi-value" id="s-ftft-rate-f2f" style="font-size:22px;">—</div>
-        <div class="kpi-sub">Reg FTFT ÷ Total FTFT</div>
-      </div>
+      <div class="kpi-card teal kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">FTFT Semester Retention</div><div class="kpi-value" id="s-ftft-rate-sem">—</div><div class="kpi-sub">Reg FTFT ÷ (Total − NR from Fall)</div></div>
+      <div class="kpi-card indigo kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">FTFT Fall-to-Fall Retention</div><div class="kpi-value" id="s-ftft-rate-f2f">—</div><div class="kpi-sub">Reg FTFT ÷ Total FTFT</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
@@ -953,7 +945,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <div id="returning-donuts-grid" class="returning-donuts-grid"></div>
       </div>
       <div class="card" id="ftft-status-card" style="display:none;">
-        <div class="card-title">First-Time Full-Time Status</div>
+        <div class="card-title">First-Time Full-Time Status — <span id="ftft-donut-total" style="font-weight:400;color:#555;font-size:14px;">0 students</span></div>
         <div class="card-subtitle">Registered · Has Hold · Can Register · Not Returning · Not Returning from Fall — Each segment of the FTFT cohort</div>
         <div id="ftft-donuts-grid" class="returning-donuts-grid" style="grid-template-columns: repeat(5, 1fr);"></div>
       </div>
@@ -2667,17 +2659,16 @@ function renderFTFTDonuts(nrIdsActive) {
   const row  = document.getElementById('status-cards-row');
   const container = document.getElementById('ftft-donuts-grid');
   if (!card || !container) return;
-  // Headline KPIs (Total FTFT + split Retention Rate) live in the kpi-row above.
-  // We always update them so they reflect either real counts or "—".
-  const totalEl  = document.getElementById('s-ftft-total');
-  const rateSemEl = document.getElementById('s-ftft-rate-sem');
-  const rateF2fEl = document.getElementById('s-ftft-rate-f2f');
+  // Retention rate KPIs live in the kpi-row above; total lives in the donut card title.
+  const donutTitleEl = document.getElementById('ftft-donut-total');
+  const rateSemEl    = document.getElementById('s-ftft-rate-sem');
+  const rateF2fEl    = document.getElementById('s-ftft-rate-f2f');
   if (!ftftIds.size) {
     card.style.display = 'none';
     if (row) row.style.gridTemplateColumns = '1fr';
-    if (totalEl)   totalEl.textContent   = '—';
-    if (rateSemEl) rateSemEl.textContent = '—';
-    if (rateF2fEl) rateF2fEl.textContent = '—';
+    if (donutTitleEl) donutTitleEl.textContent = '0 students';
+    if (rateSemEl)    rateSemEl.textContent    = '—';
+    if (rateF2fEl)    rateF2fEl.textContent    = '—';
     return;
   }
   card.style.display = '';
@@ -2716,9 +2707,9 @@ function renderFTFTDonuts(nrIdsActive) {
   const activeDenom = total - notReturningFromFall;
   const semRate = activeDenom > 0 ? Math.round(registered / activeDenom * 1000) / 10 : 0;
   const f2fRate = total       > 0 ? Math.round(registered / total       * 1000) / 10 : 0;
-  if (totalEl)   totalEl.textContent   = n(total);
-  if (rateSemEl) rateSemEl.textContent = semRate + '%';
-  if (rateF2fEl) rateF2fEl.textContent = f2fRate + '%';
+  if (donutTitleEl) donutTitleEl.textContent = n(total) + ' students';
+  if (rateSemEl)    rateSemEl.textContent    = semRate + '%';
+  if (rateF2fEl)    rateF2fEl.textContent    = f2fRate + '%';
 
   // Donut segments — 5 buckets, denominator is Total FTFT throughout.
   const segments = [
