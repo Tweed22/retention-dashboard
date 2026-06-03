@@ -935,8 +935,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card amber"><div class="kpi-label">Semester Persistence Rate</div><div class="kpi-value" id="s-ret-rate">—</div><div class="kpi-sub">Returning Reg ÷ Eligible to Return</div><div class="kpi-potential" id="s-ret-potential" title="If every student who could return did register">Potential: —</div></div>
       <div class="kpi-card orange" id="s-fall2fall-card" title="Fall-to-Fall Persistence Rate (full academic year)&#10;&#10;Formula:&#10;  Returning Registered ÷ (Eligible to Return + Prior semester withdraws)"><div class="kpi-label">Fall-to-Fall Persistence Rate</div><div class="kpi-value" id="s-fall2fall-rate">—</div><div class="kpi-sub" id="s-fall2fall-sub">Returning Reg ÷ (Eligible + N)</div><div class="kpi-potential" id="s-fall2fall-potential">Potential: —</div></div>
-      <div class="kpi-card teal kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">FTFT Semester Retention</div><div class="kpi-value" id="s-ftft-rate-sem">—</div><div class="kpi-sub">Reg FTFT ÷ (Total − NR from Fall)</div></div>
-      <div class="kpi-card indigo kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">FTFT Fall-to-Fall Retention</div><div class="kpi-value" id="s-ftft-rate-f2f">—</div><div class="kpi-sub">Reg FTFT ÷ Total FTFT</div></div>
+      <div class="kpi-card teal kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">FTFT Semester Retention</div><div class="kpi-value" id="s-ftft-rate-sem">—</div><div class="kpi-sub">Reg FTFT ÷ (Total − NR from Fall)</div><div class="kpi-potential" id="s-ftft-rate-sem-potential" title="If every active FTFT student not on the NR list registered">Potential: —</div></div>
+      <div class="kpi-card indigo kpi-clickable" onclick="goToFTFTPage()" title="Open the FTFT tab"><div class="kpi-label">FTFT Fall-to-Fall Retention</div><div class="kpi-value" id="s-ftft-rate-f2f">—</div><div class="kpi-sub">Reg FTFT ÷ Total FTFT</div><div class="kpi-potential" id="s-ftft-rate-f2f-potential" title="If every FTFT student not on the NR list registered">Potential: —</div></div>
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
@@ -2663,12 +2663,16 @@ function renderFTFTDonuts(nrIdsActive) {
   const donutTitleEl = document.getElementById('ftft-donut-total');
   const rateSemEl    = document.getElementById('s-ftft-rate-sem');
   const rateF2fEl    = document.getElementById('s-ftft-rate-f2f');
+  const potSemEl     = document.getElementById('s-ftft-rate-sem-potential');
+  const potF2fEl     = document.getElementById('s-ftft-rate-f2f-potential');
   if (!ftftIds.size) {
     card.style.display = 'none';
     if (row) row.style.gridTemplateColumns = '1fr';
     if (donutTitleEl) donutTitleEl.textContent = '0 students';
     if (rateSemEl)    rateSemEl.textContent    = '—';
     if (rateF2fEl)    rateF2fEl.textContent    = '—';
+    if (potSemEl)     potSemEl.textContent     = 'Potential: —';
+    if (potF2fEl)     potF2fEl.textContent     = 'Potential: —';
     return;
   }
   card.style.display = '';
@@ -2704,12 +2708,17 @@ function renderFTFTDonuts(nrIdsActive) {
   //     "Of FTFT students still active this semester, how many registered?"
   //   Fall-to-Fall Retention = Reg ÷ Total
   //     "Of all original FTFT students, how many registered this semester?"
-  const activeDenom = total - notReturningFromFall;
-  const semRate = activeDenom > 0 ? Math.round(registered / activeDenom * 1000) / 10 : 0;
-  const f2fRate = total       > 0 ? Math.round(registered / total       * 1000) / 10 : 0;
+  const activeDenom  = total - notReturningFromFall;
+  const canStillReg  = registered + hasHold + canReg; // everyone not on NR list and not NR-from-Fall
+  const semRate      = activeDenom > 0 ? Math.round(registered    / activeDenom * 1000) / 10 : 0;
+  const f2fRate      = total       > 0 ? Math.round(registered    / total       * 1000) / 10 : 0;
+  const semPotential = activeDenom > 0 ? Math.round(canStillReg   / activeDenom * 1000) / 10 : 0;
+  const f2fPotential = total       > 0 ? Math.round(canStillReg   / total       * 1000) / 10 : 0;
   if (donutTitleEl) donutTitleEl.textContent = n(total) + ' students';
   if (rateSemEl)    rateSemEl.textContent    = semRate + '%';
   if (rateF2fEl)    rateF2fEl.textContent    = f2fRate + '%';
+  if (potSemEl)     potSemEl.textContent     = 'Potential: ' + semPotential + '%';
+  if (potF2fEl)     potF2fEl.textContent     = 'Potential: ' + f2fPotential + '%';
 
   // Donut segments — 4 donuts; NR and NR-from-Fall share one dual-color donut.
   const segments = [
