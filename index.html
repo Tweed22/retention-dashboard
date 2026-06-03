@@ -1420,6 +1420,11 @@ let pendingFiles = {};
 // a re-upload. Tony 2026-05-11.
 let ftftIds = new Set();
 let ftftUploadedThisSession = false; // true after admin uploads a new FTFT CSV; prevents Supabase from overwriting the local roster
+// Phone numbers keyed by student ID, extracted from the unregistered CSV.
+// Stored in a separate Map so they survive Supabase reloads (which rebuild
+// returningStudents from DB rows that have no phone column). Never shown on
+// screen — only included in CSV downloads, matching the email pattern.
+let phoneNumbers = new Map();
 
 // Tony 2026-05-14: admin-set manual overrides for student registration
 // status. Populated from students.manual_status on every Supabase load.
@@ -1588,6 +1593,7 @@ const EXPORT_COLUMNS = {
     { header: 'First Name', getter: r => r.firstName },
     { header: 'Name',       getter: r => r.name },
     { header: 'Email',      getter: r => r.email },
+    { header: 'Phone',      getter: r => phoneNumbers.get(r.id) || '' },
     { header: 'Hold Type',  getter: r => r.__holdType },
     { header: 'Class Year', getter: r => r.classYear },
     { header: 'Major',      getter: r => r.major },
@@ -1601,6 +1607,7 @@ const EXPORT_COLUMNS = {
     { header: 'First Name', getter: r => r.firstName },
     { header: 'Name',       getter: r => r.name },
     { header: 'Email',      getter: r => r.email },
+    { header: 'Phone',      getter: r => phoneNumbers.get(r.id) || '' },
     { header: 'Class Year', getter: r => r.classYear },
     { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
     { header: 'Major',      getter: r => r.major },
@@ -1863,7 +1870,17 @@ function processAllCSVs() {
   if (!keys.length) { alert('Please drop at least one CSV file first.'); return; }
 
   // Parse each file that was loaded
-  if (pendingFiles.unreg)       { rawUnreg       = parseCSV(pendingFiles.unreg);       csvLoaded.unreg       = true; }
+  if (pendingFiles.unreg) {
+    rawUnreg = parseCSV(pendingFiles.unreg);
+    csvLoaded.unreg = true;
+    // Extract phone numbers from the unregistered CSV and store in the
+    // persistent phoneNumbers map so they survive Supabase reloads.
+    rawUnreg.forEach(r => {
+      const id    = findField(r, ['id_num','id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim();
+      const phone = findField(r, ['phone','phone number','cell phone','cell','mobile','telephone']).trim();
+      if (id && phone) phoneNumbers.set(id, phone);
+    });
+  }
   if (pendingFiles.reg)         { rawReg         = parseCSV(pendingFiles.reg);         csvLoaded.reg         = true; }
   if (pendingFiles.new)         { rawNew         = parseCSV(pendingFiles.new);         csvLoaded.new         = true; }
   if (pendingFiles.withdrawals) { rawWithdrawals = parseCSV(pendingFiles.withdrawals); csvLoaded.withdrawals = true; }
