@@ -7293,9 +7293,17 @@ if (HOSTED) {
   // shows immediately on page load and the dashboard content stays hidden
   // until Supabase confirms the session.
   document.body.classList.add('auth-anon');
-  // Wait for the auth state, then load. onAuthStateChange fires once
-  // immediately with INITIAL_SESSION, so we don't need a separate getSession().
-  sb.auth.onAuthStateChange((event, session) => {
+  (async () => {
+    // Handle SSO token handoff from Hub (?sso_at=...&sso_rt=...)
+    const _qp = new URLSearchParams(window.location.search);
+    const _at = _qp.get('sso_at'), _rt = _qp.get('sso_rt');
+    if (_at && _rt) {
+      await sb.auth.setSession({ access_token: _at, refresh_token: _rt });
+      history.replaceState(null, '', window.location.pathname);
+    }
+    // Wait for the auth state, then load. onAuthStateChange fires once
+    // immediately with INITIAL_SESSION, so we don't need a separate getSession().
+    sb.auth.onAuthStateChange((event, session) => {
     console.log(`auth: onAuthStateChange event=${event} hasSession=${!!session}`);
     // After a magic-link redirect, the URL has #access_token=... params.
     // Once Supabase has consumed them and stored the session, strip the
@@ -7320,6 +7328,7 @@ if (HOSTED) {
       startRealtime();
     }, 0);
   });
+  })();
 } else {
   // Local file mode — single-user fallback. Mark body as admin so the
   // upload panel + all tabs stay visible without auth.
