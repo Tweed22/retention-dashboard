@@ -6004,23 +6004,22 @@ async function refreshAuthState(session) {
     } else {
       currentUser = session.user;
       const lookup = await sb
-        .from('committee_members')
+        .from('user_app_access')
         .select('role, display_name')
+        .eq('app', 'dashboard')
         .eq('email', (session.user.email || '').toLowerCase())
-        .eq('is_active', true)
         .maybeSingle();
 
       if (lookup.error) {
         authGateMsg('error',
           `<strong>Sign-in succeeded</strong>, but role lookup failed: ${lookup.error.message}.<br>` +
-          `Check that the committee_members table exists and RLS allows committee SELECT. ` +
           `Email being checked: <code>${session.user.email}</code>.`);
         await sb.auth.signOut();
         currentUser = null; userRole = 'anon'; userDisplay = '';
       } else if (!lookup.data) {
         authGateMsg('error',
-          `<strong>${session.user.email}</strong> is not on the committee allowlist. ` +
-          `Ask Tony to add a row in committee_members with this exact email and is_active=true.`);
+          `<strong>${session.user.email}</strong> does not have access to the Registration Dashboard. ` +
+          `Contact an admin to be added.`);
         await sb.auth.signOut();
         currentUser = null; userRole = 'anon'; userDisplay = '';
       } else {
