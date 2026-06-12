@@ -486,6 +486,63 @@ body.dark .exp-btn:hover { color: #93c5fd; }
 .auth-status { font-size: 11px; color: rgba(255,255,255,0.85); display: inline-flex; align-items: center; gap: 6px; }
 .auth-status .auth-name { font-weight: 600; color: white; }
 
+/* ── App logo ── */
+.hub-logo { display: flex; align-items: center; gap: 11px; }
+.hub-logo-badge {
+  width: 34px; height: 34px; background: rgba(255,255,255,.18);
+  border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.hub-logo-text { font-size: 16px; font-weight: 700; letter-spacing: -.2px; }
+.hub-logo-divider { width: 1px; height: 18px; background: rgba(255,255,255,.25); margin: 0 4px; }
+.hub-logo-sub { font-size: 12px; opacity: .65; }
+.header-user { font-size: 13px; color: rgba(255,255,255,.85); }
+
+/* ── App Switcher ── */
+.app-switcher-wrap { position: relative; display: flex; }
+.app-switcher-btn {
+  padding: 6px 8px; background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.25); border-radius: 6px;
+  color: white; cursor: pointer; transition: background 0.15s;
+  font-family: inherit; display: flex; align-items: center;
+  justify-content: center; line-height: 1;
+}
+.app-switcher-btn:hover { background: rgba(255,255,255,.22); }
+body.dark .app-switcher-btn       { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.15); }
+body.dark .app-switcher-btn:hover { background: rgba(255,255,255,.15); }
+.app-switcher-popup {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 600;
+  background: #fff; border: 1px solid #dde2e8;
+  border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); min-width: 240px;
+}
+body.dark .app-switcher-popup { background: #262626; border-color: #353535; }
+.asp-header {
+  padding: 11px 16px 10px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.6px; color: #888;
+  border-bottom: 1px solid #e8ecf0;
+}
+body.dark .asp-header { color: #a8a8a8; border-bottom-color: #353535; }
+.asp-grid { padding: 8px; display: grid; grid-template-columns: repeat(2,1fr); gap: 4px; }
+.asp-item {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 8px; border-radius: 8px; border: none;
+  background: none; cursor: pointer; text-align: center;
+  transition: background 0.12s; color: #1a1d23; font-family: inherit;
+}
+body.dark .asp-item { color: #e0e0e0; }
+.asp-item:hover { background: #f0f2f5; }
+body.dark .asp-item:hover { background: #353535; }
+.asp-item.asp-current       { opacity: .55; cursor: default; }
+.asp-item.asp-current:hover { background: transparent; }
+.asp-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 7px;
+}
+.asp-name     { font-size: 11px; font-weight: 600; line-height: 1.35; }
+.asp-curr-tag { font-size: 10px; color: #5b7ab5; font-weight: 600; margin-top: 3px; }
+body.dark .asp-curr-tag { color: #93b4e8; }
+
 /* ── Dark mode toggle button (header, far right) ── */
 .theme-toggle {
   background: rgba(255,255,255,0.10);
@@ -794,21 +851,30 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 
 <!-- ── Header ── -->
 <div class="header">
-  <div class="header-left">
-    <h1>Registration Dashboard</h1>
-    <div class="subtitle" id="header-subtitle">Loading…</div>
+  <div class="hub-logo">
+    <div class="hub-logo-badge" style="font-size:12px;font-weight:900;letter-spacing:-0.5px;">RD</div>
+    <div class="hub-logo-text">Registration Dashboard</div>
+    <div class="hub-logo-divider"></div>
+    <div class="hub-logo-sub">William Woods University</div>
   </div>
   <div class="header-right">
-    <div class="auth-status show-when-authed" id="auth-status">
-      <span>Signed in as</span> <span class="auth-name" id="auth-name">—</span>
-      <span class="auth-name" id="auth-role" style="background:rgba(255,255,255,0.15);padding:2px 7px;border-radius:10px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;"></span>
-      <button class="upload-btn" onclick="signOut()" style="margin-left:6px;">Sign out</button>
-    </div>
-    <a href="https://hub.wwuapps.com" class="upload-btn admin-only" style="text-decoration:none;">← Academic Apps</a>
+    <span class="header-user show-when-authed" id="auth-name"></span>
     <button class="upload-btn admin-only" onclick="toggleUploadPanel()">Update Data</button>
+    <div class="app-switcher-wrap">
+      <button class="app-switcher-btn" id="app-switcher-btn" onclick="toggleAppGrid(event)" title="Switch app" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="2" cy="2" r="1.5"/><circle cx="7.5" cy="2" r="1.5"/><circle cx="13" cy="2" r="1.5"/>
+          <circle cx="2" cy="7.5" r="1.5"/><circle cx="7.5" cy="7.5" r="1.5"/><circle cx="13" cy="7.5" r="1.5"/>
+          <circle cx="2" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/><circle cx="13" cy="13" r="1.5"/>
+        </svg>
+      </button>
+      <div class="app-switcher-popup" id="app-switcher-popup" style="display:none;"></div>
+    </div>
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
+    <button class="upload-btn show-when-authed" onclick="signOut()">Sign out</button>
   </div>
 </div>
+<span id="header-subtitle" style="display:none;"></span>
 
 <!-- ── Auth Gate (full-screen, shown only when not signed in) ── -->
 <div class="auth-gate anon-only" id="auth-gate">
@@ -5992,6 +6058,74 @@ function toggleTheme() {
 // Apply immediately so the page paints in the correct theme on load.
 applyTheme();
 
+// ── App Switcher ─────────────────────────────────────────────────────────────
+const CURRENT_APP_ID = 'dashboard';
+
+const _ASP_APPS = [
+  { id:'hub',       name:'Academic Apps',          abbr:'AA',  bg:'rgba(90,181,125,.18)', fg:'#5ab57d', url:()=>'https://hub.wwuapps.com' },
+  { id:'grades',    name:'Missing Att. & Grades',  abbr:'MAG', bg:'rgba(201,169,97,.18)', fg:'#c9a961', url:()=>'https://hub.wwuapps.com/missing-grades.html' },
+  { id:'dashboard', name:'Registration Dashboard', abbr:'RD',  bg:'rgba(91,122,181,.18)', fg:'#5b7ab5', url:()=>location.href },
+];
+let _aspApps = [];
+
+function initAppSwitcher(accessRows) {
+  const access = new Set((accessRows||[]).map(r=>r.app));
+  const ids = ['dashboard'];
+  if(access.has('hub')) { ids.push('hub','grades'); }
+  _aspApps = _ASP_APPS.filter(a=>ids.includes(a.id));
+  const btn = document.getElementById('app-switcher-btn');
+  if(btn) btn.style.display = _aspApps.length >= 2 ? 'flex' : 'none';
+}
+
+function toggleAppGrid(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('app-switcher-popup');
+  if(!popup) return;
+  if(popup.style.display==='block') { closeAppGrid(); return; }
+  popup.innerHTML = `<div class="asp-header">Switch App</div><div class="asp-grid">${
+    _aspApps.map(app => {
+      const isCurr = app.id === CURRENT_APP_ID;
+      return `<button class="asp-item${isCurr?' asp-current':''}" onclick="aspNav('${app.id}')">
+        <div class="asp-icon" style="background:${app.bg};color:${app.fg};">${app.abbr}</div>
+        <div class="asp-name">${app.name}</div>
+        ${isCurr?'<div class="asp-curr-tag">Current</div>':''}
+      </button>`;
+    }).join('')
+  }</div>`;
+  popup.style.display = 'block';
+  setTimeout(()=>document.addEventListener('click',_aspOutside), 0);
+}
+
+function closeAppGrid() {
+  const p = document.getElementById('app-switcher-popup');
+  if(p) p.style.display = 'none';
+  document.removeEventListener('click', _aspOutside);
+}
+
+function _aspOutside(e) {
+  const p = document.getElementById('app-switcher-popup');
+  const b = document.getElementById('app-switcher-btn');
+  if(!p?.contains(e.target) && !b?.contains(e.target)) closeAppGrid();
+}
+
+async function aspNav(appId) {
+  closeAppGrid();
+  if(appId === CURRENT_APP_ID) return;
+  const app = _aspApps.find(a=>a.id===appId);
+  if(!app) return;
+  const url = app.url();
+  if(!url) return;
+  const win = window.open('about:blank','_blank');
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    const sep = url.includes('?')?'&':'?';
+    const dest = session?.access_token
+      ? `${url}${sep}sso_at=${encodeURIComponent(session.access_token)}&sso_rt=${encodeURIComponent(session.refresh_token)}`
+      : url;
+    if(win) win.location.href = dest;
+  } catch { if(win) win.location.href = url; }
+}
+
 // Translate the current Supabase auth session into our role model. Looks up
 // committee_members for role + display_name. Failures are surfaced visibly
 // on the auth gate so they can't disappear into the console.
@@ -6003,12 +6137,11 @@ async function refreshAuthState(session) {
       userDisplay = '';
     } else {
       currentUser = session.user;
-      const lookup = await sb
+      const { data: rows, error: lookupErr } = await sb
         .from('user_app_access')
-        .select('role, display_name')
-        .eq('app', 'dashboard')
-        .eq('email', (session.user.email || '').toLowerCase())
-        .maybeSingle();
+        .select('app, role, display_name')
+        .eq('email', (session.user.email || '').toLowerCase());
+      const lookup = { data: (rows||[]).find(r=>r.app==='dashboard'), error: lookupErr };
 
       if (lookup.error) {
         authGateMsg('error',
@@ -6016,15 +6149,18 @@ async function refreshAuthState(session) {
           `Email being checked: <code>${session.user.email}</code>.`);
         await sb.auth.signOut();
         currentUser = null; userRole = 'anon'; userDisplay = '';
+        initAppSwitcher([]);
       } else if (!lookup.data) {
         authGateMsg('error',
           `<strong>${session.user.email}</strong> does not have access to the Registration Dashboard. ` +
           `Contact an admin to be added.`);
         await sb.auth.signOut();
         currentUser = null; userRole = 'anon'; userDisplay = '';
+        initAppSwitcher([]);
       } else {
         userRole = lookup.data.role || 'member';
         userDisplay = lookup.data.display_name || session.user.email;
+        initAppSwitcher(rows || []);
       }
     }
   } catch (e) {
