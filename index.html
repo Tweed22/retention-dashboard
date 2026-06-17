@@ -6394,12 +6394,18 @@ async function loadHostedDashboardData() {
   data.students.forEach(s => {
     if (s.manual_status) manualStatusOverrides.set(s.id, s.manual_status);
   });
-  // Only show students from the most recent upload. Student records
-  // accumulate across uploads — filtering to the latest snapshot_id
-  // ensures stale records from previous terms don't appear in any
-  // category (registered, returning, or new). Manual-status overrides
-  // are always included so admin pins survive across uploads.
-  const latestSnapId = data.latestSnapshot && data.latestSnapshot.id;
+  // Only show students from the most recent COMPLETE upload. Student records
+  // accumulate across uploads — filtering to the correct snapshot_id ensures
+  // stale records from previous terms don't appear. We derive the correct
+  // snapshot from the students table itself (the snapshot_id that the most
+  // students point to) rather than from csv_snapshots.uploaded_at, because
+  // interrupted/retried uploads create empty snapshot rows with a newer
+  // timestamp that would otherwise become the "latest" and show 0 students.
+  const snapCounts = {};
+  data.students.forEach(s => {
+    if (s.snapshot_id) snapCounts[s.snapshot_id] = (snapCounts[s.snapshot_id] || 0) + 1;
+  });
+  const latestSnapId = Object.entries(snapCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
   data.students.forEach(s => {
     if (latestSnapId && s.snapshot_id !== latestSnapId && !s.manual_status) return;
