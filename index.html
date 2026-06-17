@@ -1943,7 +1943,7 @@ function processAllCSVs() {
     // Extract phone numbers from the unregistered CSV and store in the
     // persistent phoneNumbers map so they survive Supabase reloads.
     rawUnreg.forEach(r => {
-      const id    = findField(r, ['id_num','id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim();
+      const id    = findField(r, ['id_num','id#','student id','studentid','stu id','sid','id']).replace(/^#/,'').trim();
       const phone = findField(r, ['phone','phone number','cell phone','cell','mobile','telephone']).trim();
       if (id && phone) phoneNumbers.set(id, phone);
     });
@@ -1958,7 +1958,7 @@ function processAllCSVs() {
     // columns are ignored — only IDs are needed to drive the badge. The
     // existing findField() resolver matches loose header names like "Student ID".
     ftftIds = new Set(
-      rawFTFT.map(r => findField(r, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim())
+      rawFTFT.map(r => findField(r, ['id#','student id','studentid','stu id','sid','id']).replace(/^#/,'').trim())
             .filter(Boolean)
     );
     saveFTFTIds();
@@ -2075,7 +2075,7 @@ function normalizeStudent(row) {
   const careerGpa = (gpaNum != null && isFinite(gpaNum)) ? gpaNum : null;
 
   return {
-    id:        findField(row, ['id_num','id#','id','student id','studentid','stu id','sid']).replace(/^#/,''),
+    id:        findField(row, ['id_num','id#','student id','studentid','stu id','sid','id']).replace(/^#/,''),
     firstName,
     lastName,
     name,
@@ -2104,7 +2104,7 @@ function normalizeStudent(row) {
 // stored as YYYY-MM-DD strings (or '' if missing/unparseable) so they're cheap
 // to compare against the term window without timezone surprises.
 function normalizeWithdrawal(row) {
-  const id = findField(row, ['id#','id','student id','studentid','stu id','sid']).replace(/^#/,'').trim();
+  const id = findField(row, ['id#','student id','studentid','stu id','sid','id']).replace(/^#/,'').trim();
   // Last Active Date — the field used for the current-term filter. Be flexible
   // on header naming; prefer a column whose lowercase name CONTAINS one of
   // these phrases. Order matters: more specific matches first. The registrar's
