@@ -2247,6 +2247,9 @@ function buildData() {
     // `hrs_enrolled` column header. If yes → new format → take MAX on
     // duplicates (each "duplicate" carries the same total). If no →
     // legacy format → SUM credit hours across rows to recover the
+    // per-student total. The 0-credit filter applies to the FINAL total
+    // either way (new format: filter per row before merge; legacy
+    // format: sum first, then drop students whose total is 0).
     const firstKeys = Object.keys(rawReg[0] || {}).map(k => k.toLowerCase());
     const isNewFormat = firstKeys.some(k => k.includes('hrs_enrolled') || k.includes('hrs enrolled'));
 
@@ -2254,6 +2257,11 @@ function buildData() {
     rawReg.forEach(r => {
       const s = normalizeStudent(r);
       if (!s.id) return;
+      // New format: the row IS the student. A row with 0 hours means the
+      // student isn't enrolled; skip it entirely. Legacy format: a single
+      // course with 0 credits doesn't disqualify the student — they may
+      // have other rows with real credits — so don't filter per-row.
+      if (isNewFormat && (s.creditHours || 0) <= 0) return;
       if (!registeredStudents[s.id]) {
         registeredStudents[s.id] = s;
       } else {
@@ -2287,6 +2295,13 @@ function buildData() {
       }
     });
 
+    // Legacy format intentionally keeps every unique student who appears
+    // in the registered CSV. Tony's 2026-05-14 framing: "look for unique
+    // students and count their credit hours" — presence in the file is
+    // the registration signal, credit hours are a secondary attribute
+    // (and may be absent entirely from older exports). The new format's
+    // 0-hour filter above is what guards against unregistered students
+    // sneaking into counts.
   }
   // Always derive registeredIds from current registeredStudents (even on partial uploads)
   registeredIds = new Set(Object.keys(registeredStudents));
@@ -6381,7 +6396,15 @@ async function loadHostedDashboardData() {
   });
   data.students.forEach(s => {
     const c = toClient(s);
-    let isRegisteredNow = !!s.is_registered;
+    // Tony 2026-05-13: "registered" means credit_hours > 0. The DB's
+    // is_registered flag can linger from a prior upload (the new
+    // 0-hour filter in buildData doesn't actively flip stale rows
+    // back to is_registered=false), so re-evaluate at load time from
+    // credit_hours. A student previously marked registered but now
+    // showing 0 hours becomes "returning unregistered" until the next
+    // upload pushes the corrected flag back.
+    const hasHours = Number(s.credit_hours || 0) > 0;
+    let isRegisteredNow = !!s.is_registered && hasHours;
     // Apply manual override (Tony 2026-05-14): 'registered' forces in,
     // 'not_returning' forces out. Overrides win over CSV-driven flag.
     if (s.manual_status === 'registered')     isRegisteredNow = true;
@@ -6696,35 +6719,6 @@ async function pushDataToSupabase() {
       for (let i = 0; i < chunks.length; i++) {
         expect(`students upsert chunk ${i+1}/${chunks.length}`,
           await sb.from('students').upsert(chunks[i], { onConflict: 'id' }));
-      }
-    }
-
-    // 2b) After upserting, clear stale is_registered flags for any student the DB
-    //     still has marked registered but who isn't in the current registeredIds set.
-    //     This handles students who appear in the registered CSV with 0 credit hours —
-    //     buildData's post-filter removes them from registeredStudents/registeredIds,
-    //     but because they aren't in returningStudents or newStudents either, they never
-    //     appear in allStudents above and their old DB row (is_registered=true,
-    //     credit_hours=N from a prior upload) survives the upsert untouched.
-    //     We skip students with a manual_status override so admin pins are never cleared.
-    if (csvLoaded.reg) {
-      status('Step 2b/6: clearing stale registration flags…');
-      const dbReg = await sb.from('students')
-        .select('id')
-        .eq('is_registered', true)
-        .is('manual_status', null);
-      if (!dbReg.error && dbReg.data) {
-        const toReset = dbReg.data.map(r => r.id).filter(id => !registeredIds.has(id));
-        if (toReset.length) {
-          const resetChunks = chunk(toReset, 500);
-          for (let i = 0; i < resetChunks.length; i++) {
-            expect(`registration reset chunk ${i+1}/${resetChunks.length}`,
-              await sb.from('students')
-                .update({ is_registered: false, credit_hours: null })
-                .in('id', resetChunks[i])
-                .is('manual_status', null));
-          }
-        }
       }
     }
 
