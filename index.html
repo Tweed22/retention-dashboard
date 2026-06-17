@@ -2295,13 +2295,21 @@ function buildData() {
       }
     });
 
-    // Legacy format intentionally keeps every unique student who appears
-    // in the registered CSV. Tony's 2026-05-14 framing: "look for unique
-    // students and count their credit hours" — presence in the file is
-    // the registration signal, credit hours are a secondary attribute
-    // (and may be absent entirely from older exports). The new format's
-    // 0-hour filter above is what guards against unregistered students
-    // sneaking into counts.
+    // When the CSV includes a credit-hours column, drop any student whose
+    // hours total 0 — they appear in the file but aren't enrolled in any
+    // credit-bearing course. This covers both format paths: new format
+    // already filters per-row (line above), so this is a no-op there;
+    // legacy format sums rows first and this catches students whose sum
+    // is still 0. We skip the filter when the column is entirely absent
+    // (creditHours defaults to 0 for every row) to avoid clearing out
+    // truly old exports where credit hours weren't exported at all.
+    const creditColPresent = firstKeys.some(k =>
+      ['hrs_enrolled','hrs enrolled','credit_hrs','credit hours','credit hrs','credits','credithours','credit_hours'].includes(k));
+    if (creditColPresent) {
+      Object.keys(registeredStudents).forEach(id => {
+        if ((registeredStudents[id].creditHours || 0) <= 0) delete registeredStudents[id];
+      });
+    }
   }
   // Always derive registeredIds from current registeredStudents (even on partial uploads)
   registeredIds = new Set(Object.keys(registeredStudents));
