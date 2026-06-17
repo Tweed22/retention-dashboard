@@ -2556,8 +2556,7 @@ function renderSummary() {
   // Tony 2026-05-07: count uses the deduped list (one row per student) so
   // students with both a manual entry and a CSV-auto-imported row aren't
   // double-counted.
-  const dedupedNR             = getDedupedNRList();
-  const notReturning          = dedupedNR.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+  const dedupedNR = getDedupedNRList();
 
   // Dedupe: students who are both returning-registered AND on NR list count
   // once (in the NR bucket, not in the registered bucket). Graduating IDs are
@@ -2574,14 +2573,15 @@ function renderSummary() {
     ...Object.keys(returningStudents).filter(isActive),
     ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
   ]);
-  const totalReturning  = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
-  // Tony 2026-05-11: Eligible to Return = every student we're tracking minus
-  // new students. That's the full returning pool (registered + unregistered,
-  // excluding NR) plus the NR list (excluding graduating). Including the
-  // unregistered-in-limbo group in the denominator makes the rate stricter
-  // and guarantees the Registered donut % ≥ Semester Persistence Rate, since the
-  // donut's denominator (totalReturning) is a subset of this one.
-  const eligibleReturn  = totalReturning + notReturning;
+  const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  // Only count NR entries for students in the current cohort (returning pool).
+  // Entries from prior imports whose IDs don't match any current-snapshot student
+  // inflate notReturning without a compensating decrease in totalReturning.
+  const notReturning = dedupedNR.filter(r =>
+    (r.reason || '').toLowerCase() !== 'graduating' &&
+    r.id && returningIdSet.has(r.id)
+  ).length;
+  const eligibleReturn = totalReturning + notReturning;
   const totalRegistered = allRegistered;
   const retRate = eligibleReturn
     ? Math.round(effectiveReturningReg / eligibleReturn * 1000) / 10
@@ -2948,7 +2948,6 @@ async function backfillRecentHistoryToToday() {
   const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered' && isActive(s.id)).length;
   const returningRegistered = allRegistered - newRegCount;
   const dedupedNR = getDedupedNRList();
-  const notReturningCount = dedupedNR.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
   const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
   const overlap = [...registeredIds]
     .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
@@ -2958,6 +2957,10 @@ async function backfillRecentHistoryToToday() {
     ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
   ]);
   const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  const notReturningCount = dedupedNR.filter(r =>
+    (r.reason || '').toLowerCase() !== 'graduating' &&
+    r.id && returningIdSet.has(r.id)
+  ).length;
   const eligibleReturn = totalReturning + notReturningCount;
   const rate = eligibleReturn ? Math.round(effReg / eligibleReturn * 1000) / 10 : 0;
 
@@ -3106,13 +3109,16 @@ async function renderTrendChart() {
   const gradIdsTrend = getGraduatingIdSet();
   const isActiveTrend = id => !gradIdsTrend.has(id);
   const dedupedNRTrend = getDedupedNRList();
-  const notReturningTrend = dedupedNRTrend.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
   const nrIdSetTrend = new Set(dedupedNRTrend.map(s => s.id).filter(Boolean));
   const returningIdSetTrend = new Set([
     ...Object.keys(returningStudents).filter(isActiveTrend),
     ...[...registeredIds].filter(id => isActiveTrend(id) && !newStudents[id]),
   ]);
   const totalReturningTrend = [...returningIdSetTrend].filter(id => !nrIdSetTrend.has(id)).length;
+  const notReturningTrend = dedupedNRTrend.filter(r =>
+    (r.reason || '').toLowerCase() !== 'graduating' &&
+    r.id && returningIdSetTrend.has(r.id)
+  ).length;
   const eligibleTrend = totalReturningTrend + notReturningTrend;
   const currentNrRate = eligibleTrend ? Math.round(notReturningTrend / eligibleTrend * 1000) / 10 : null;
 
@@ -6833,7 +6839,6 @@ async function pushDataToSupabase() {
       const returningRegistered = allRegistered - newRegCount;
       // Use the deduped list so duplicates don't inflate the daily snapshot.
       const dedupedSnap = getDedupedNRList();
-      const notReturningCount = dedupedSnap.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
       const nrIdSetSnap = new Set(dedupedSnap.map(s => s.id).filter(Boolean));
       const overlapSnap = [...registeredIds]
         .filter(id => isActiveSnap(id) && !newStudents[id] && nrIdSetSnap.has(id)).length;
@@ -6846,6 +6851,10 @@ async function pushDataToSupabase() {
         ...[...registeredIds].filter(id => isActiveSnap(id) && !newStudents[id]),
       ]);
       const totalReturningSnap = [...returningIdSetSnap].filter(id => !nrIdSetSnap.has(id)).length;
+      const notReturningCount = dedupedSnap.filter(r =>
+        (r.reason || '').toLowerCase() !== 'graduating' &&
+        r.id && returningIdSetSnap.has(r.id)
+      ).length;
       const eligibleSnap = totalReturningSnap + notReturningCount;
       const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
       // Tony 2026-05-13: NR rate snapshot for the inverted red volume on
