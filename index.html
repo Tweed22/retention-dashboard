@@ -6399,7 +6399,7 @@ async function loadHostedDashboardData() {
   // ensures stale records from previous terms don't appear in any
   // category (registered, returning, or new). Manual-status overrides
   // are always included so admin pins survive across uploads.
-  const latestSnapId = data.snapshots && data.snapshots[0] && data.snapshots[0].id;
+  const latestSnapId = data.latestSnapshot && data.latestSnapshot.id;
 
   data.students.forEach(s => {
     if (latestSnapId && s.snapshot_id !== latestSnapId && !s.manual_status) return;
