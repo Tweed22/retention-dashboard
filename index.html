@@ -6624,6 +6624,13 @@ async function loadHostedDashboardData() {
     document.getElementById('header-subtitle').textContent =
       `Loaded: ${summary}`;
   }
+  // DEBUG: log what the snapshot filter selected and what ended up in each map.
+  // Check the browser console (F12 → Console) to see these values.
+  console.log('[loadHostedDashboardData] total fetched from DB:', data.students.length);
+  console.log('[loadHostedDashboardData] latestSnapId (most students):', latestSnapId);
+  console.log('[loadHostedDashboardData] snap breakdown:', Object.entries(snapCounts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id,c])=>`${id.slice(0,8)}…:${c}`).join(', '));
+  console.log('[loadHostedDashboardData] registeredIds:', registeredIds.size, '| returningStudents:', Object.keys(returningStudents).length, '| newStudents:', Object.keys(newStudents).length);
+
   renderAll();
 }
 
