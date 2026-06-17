@@ -4553,7 +4553,7 @@ function nrRemove(idx) {
   }
   nrList.splice(idx, 1);
   saveNRList(); nrUpdateKpis(); nrRender();
-  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); }
+  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); renderCanRegister(); }
   renderReasonsChart();
   if (csvLoaded.withdrawals) renderWithdrawals();
 }
