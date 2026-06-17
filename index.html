@@ -2247,9 +2247,6 @@ function buildData() {
     // `hrs_enrolled` column header. If yes → new format → take MAX on
     // duplicates (each "duplicate" carries the same total). If no →
     // legacy format → SUM credit hours across rows to recover the
-    // per-student total. The 0-credit filter applies to the FINAL total
-    // either way (new format: filter per row before merge; legacy
-    // format: sum first, then drop students whose total is 0).
     const firstKeys = Object.keys(rawReg[0] || {}).map(k => k.toLowerCase());
     const isNewFormat = firstKeys.some(k => k.includes('hrs_enrolled') || k.includes('hrs enrolled'));
 
@@ -2257,11 +2254,6 @@ function buildData() {
     rawReg.forEach(r => {
       const s = normalizeStudent(r);
       if (!s.id) return;
-      // New format: the row IS the student. A row with 0 hours means the
-      // student isn't enrolled; skip it entirely. Legacy format: a single
-      // course with 0 credits doesn't disqualify the student — they may
-      // have other rows with real credits — so don't filter per-row.
-      if (isNewFormat && (s.creditHours || 0) <= 0) return;
       if (!registeredStudents[s.id]) {
         registeredStudents[s.id] = s;
       } else {
@@ -2295,21 +2287,6 @@ function buildData() {
       }
     });
 
-    // When the CSV includes a credit-hours column, drop any student whose
-    // hours total 0 — they appear in the file but aren't enrolled in any
-    // credit-bearing course. This covers both format paths: new format
-    // already filters per-row (line above), so this is a no-op there;
-    // legacy format sums rows first and this catches students whose sum
-    // is still 0. We skip the filter when the column is entirely absent
-    // (creditHours defaults to 0 for every row) to avoid clearing out
-    // truly old exports where credit hours weren't exported at all.
-    const creditColPresent = firstKeys.some(k =>
-      ['hrs_enrolled','hrs enrolled','credit_hrs','credit hours','credit hrs','credits','credithours','credit_hours'].includes(k));
-    if (creditColPresent) {
-      Object.keys(registeredStudents).forEach(id => {
-        if ((registeredStudents[id].creditHours || 0) <= 0) delete registeredStudents[id];
-      });
-    }
   }
   // Always derive registeredIds from current registeredStudents (even on partial uploads)
   registeredIds = new Set(Object.keys(registeredStudents));
@@ -6404,15 +6381,7 @@ async function loadHostedDashboardData() {
   });
   data.students.forEach(s => {
     const c = toClient(s);
-    // Tony 2026-05-13: "registered" means credit_hours > 0. The DB's
-    // is_registered flag can linger from a prior upload (the new
-    // 0-hour filter in buildData doesn't actively flip stale rows
-    // back to is_registered=false), so re-evaluate at load time from
-    // credit_hours. A student previously marked registered but now
-    // showing 0 hours becomes "returning unregistered" until the next
-    // upload pushes the corrected flag back.
-    const hasHours = Number(s.credit_hours || 0) > 0;
-    let isRegisteredNow = !!s.is_registered && hasHours;
+    let isRegisteredNow = !!s.is_registered;
     // Apply manual override (Tony 2026-05-14): 'registered' forces in,
     // 'not_returning' forces out. Overrides win over CSV-driven flag.
     if (s.manual_status === 'registered')     isRegisteredNow = true;
