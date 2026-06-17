@@ -6216,7 +6216,7 @@ async function fetchDashboardData() {
     sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }).limit(10000),
     sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('updated_at', { ascending: false }).limit(10000),
     sb.from('terms').select('*').order('start_date', { ascending: true }),
-    sb.from('csv_snapshots').select('*').order('uploaded_at', { ascending: false }).limit(1),
+    sb.from('csv_snapshots').select('id, source_files, uploaded_at').order('uploaded_at', { ascending: false }).limit(50),
     // FTFT roster — separate table, just IDs. Missing table is non-fatal
     // (the dashboard still renders, just without FTFT badges/donuts).
     sb.from('ftft_students').select('id').limit(10000),
@@ -6394,18 +6394,19 @@ async function loadHostedDashboardData() {
   data.students.forEach(s => {
     if (s.manual_status) manualStatusOverrides.set(s.id, s.manual_status);
   });
+  // Find the most recent snapshot that included an unregistered CSV.
+  // Returning students are filtered to this snapshot so stale records from
+  // old uploads don't inflate the eligible-to-return and can-register counts.
+  const latestUnregSnap = data.snapshots && data.snapshots.find(s => s.source_files && s.source_files.unreg);
+  const latestUnregSnapId = latestUnregSnap ? latestUnregSnap.id : null;
+
   data.students.forEach(s => {
     const c = toClient(s);
-    // Tony 2026-05-13: "registered" means credit_hours > 0. The DB's
-    // is_registered flag can linger from a prior upload (the new
-    // 0-hour filter in buildData doesn't actively flip stale rows
-    // back to is_registered=false), so re-evaluate at load time from
-    // credit_hours. A student previously marked registered but now
-    // showing 0 hours becomes "returning unregistered" until the next
-    // upload pushes the corrected flag back.
-    const hasHours = Number(s.credit_hours || 0) > 0;
-    let isRegisteredNow = !!s.is_registered && hasHours;
-    // Apply manual override (Tony 2026-05-14): 'registered' forces in,
+    // Trust is_registered flag directly — step 2b in pushDataToSupabase
+    // resets stale is_registered=true rows after each upload, so this
+    // flag is authoritative without needing a credit_hours cross-check.
+    let isRegisteredNow = !!s.is_registered;
+    // Apply manual override: 'registered' forces in,
     // 'not_returning' forces out. Overrides win over CSV-driven flag.
     if (s.manual_status === 'registered')     isRegisteredNow = true;
     else if (s.manual_status === 'not_returning') isRegisteredNow = false;
@@ -6417,11 +6418,14 @@ async function loadHostedDashboardData() {
       c.status = isRegisteredNow ? 'Registered' : 'Not Yet Registered';
       newStudents[s.id] = c;
     } else if (!isRegisteredNow) {
-      // Returning unregistered = neither new nor actively registered. This
-      // catches the formerly-registered-now-0-hours case so the Summary's
-      // Returning Student Status donuts categorize them correctly (Has
-      // Hold or Can Register, depending on their holds).
-      returningStudents[s.id] = c;
+      // Only include returning students from the most recent upload that
+      // had an unregistered CSV. Without this filter, stale records from
+      // previous uploads accumulate and inflate eligible-to-return /
+      // can-register counts. If no unreg snapshot exists yet (first use),
+      // latestUnregSnapId is null and we fall back to showing everyone.
+      if (!latestUnregSnapId || s.snapshot_id === latestUnregSnapId) {
+        returningStudents[s.id] = c;
+      }
     }
   });
   // Hold groups + can-register fan-out (mirror buildData logic)
@@ -6719,6 +6723,31 @@ async function pushDataToSupabase() {
       for (let i = 0; i < chunks.length; i++) {
         expect(`students upsert chunk ${i+1}/${chunks.length}`,
           await sb.from('students').upsert(chunks[i], { onConflict: 'id' }));
+      }
+    }
+
+    // 2b) Reset is_registered for any student the DB still has marked registered
+    //     but who is NOT in the current registeredIds. Without this, students from
+    //     old uploads keep is_registered=true indefinitely and inflate the count.
+    //     Skips students with a manual_status override so admin pins are preserved.
+    if (csvLoaded.reg) {
+      status('Step 2b/6: clearing stale registration flags…');
+      const dbReg = await sb.from('students')
+        .select('id')
+        .eq('is_registered', true)
+        .is('manual_status', null);
+      if (!dbReg.error && dbReg.data) {
+        const toReset = dbReg.data.map(r => r.id).filter(id => !registeredIds.has(id));
+        if (toReset.length) {
+          const resetChunks = chunk(toReset, 500);
+          for (let i = 0; i < resetChunks.length; i++) {
+            expect(`registration reset chunk ${i+1}/${resetChunks.length}`,
+              await sb.from('students')
+                .update({ is_registered: false, credit_hours: null })
+                .in('id', resetChunks[i])
+                .is('manual_status', null));
+          }
+        }
       }
     }
 
