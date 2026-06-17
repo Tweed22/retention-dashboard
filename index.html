@@ -2075,7 +2075,7 @@ function normalizeStudent(row) {
   const careerGpa = (gpaNum != null && isFinite(gpaNum)) ? gpaNum : null;
 
   return {
-    id:        findField(row, ['id_num','id#','student id','studentid','stu id','sid','id']).replace(/^#/,''),
+    id:        findField(row, ['id_num','id#','student id','studentid','stu id','sid','id']).replace(/^#/,'').trim(),
     firstName,
     lastName,
     name,
@@ -7162,13 +7162,17 @@ processAllCSVs = async function processAllCSVsWithSupabase() {
     const _savedFtftIds = ftftUploadedThisSession ? new Set(ftftIds) : null;
     const ok = await pushDataToSupabase();
     _uploadInProgress = false;
-    if (ok) await loadHostedDashboardData();
-    // Restore uploaded FTFT roster if Supabase returned stale data.
-    if (_savedFtftIds && _savedFtftIds.size > 0) {
-      ftftIds = _savedFtftIds;
-      csvLoaded.ftft = true;
-      renderFTFT();
-      renderSummary();
+    if (ok) {
+      // Do NOT call loadHostedDashboardData() here. The local data from
+      // buildData() is authoritative and already on screen. Reloading from
+      // Supabase would pull stale returning-student records from previous
+      // uploads (they accumulate in the DB across terms) and overwrite the
+      // correct counts. Other committee members get fresh data when they
+      // load the page; the admin who uploaded sees the correct local data.
+      const sub = document.getElementById('header-subtitle');
+      if (sub) sub.textContent = 'Upload complete.';
+      // No need to restore FTFT either — loadHostedDashboardData isn't
+      // called, so FTFT data was never overwritten.
     }
   }
 };
