@@ -7046,6 +7046,16 @@ async function pushDataToSupabase() {
       }
     }
 
+    // Cleanup: delete students from old snapshots so the DB never grows past
+    // Supabase's 1000-row default limit. Students with manual overrides are kept
+    // (they have snapshot_id = snapshotId from the upsert above, so this is safe).
+    status('Cleanup: removing stale snapshot rows…');
+    const { error: cleanupErr } = await sb.from('students')
+      .delete()
+      .neq('snapshot_id', snapshotId)
+      .is('manual_status', null);
+    if (cleanupErr) console.warn('Old snapshot cleanup failed (non-fatal):', cleanupErr.message);
+
     status(`Upload complete: ${studentRows.length} students, ${withdrawalsList.length} withdrawals, NR sync: +${syncInserts} new, ${syncUpdates} updated, ${syncHidden} duplicates hidden. Refreshing…`);
     return true;
   } catch (e) {
