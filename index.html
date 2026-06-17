@@ -2574,14 +2574,19 @@ function renderSummary() {
     ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
   ]);
   const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
-  // Only count NR entries for students in the current cohort (returning pool).
-  // Entries from prior imports whose IDs don't match any current-snapshot student
-  // inflate notReturning without a compensating decrease in totalReturning.
+  // All non-graduating NR entries — shown as "Total Not Returning" on the dashboard.
+  // Includes prior-term auto-imports whose IDs are no longer in the current snapshot.
   const notReturning = dedupedNR.filter(r =>
+    (r.reason || '').toLowerCase() !== 'graduating'
+  ).length;
+  // For Eligible to Return, only count NR entries whose student is actually in the
+  // current cohort. Orphan entries from prior-term imports inflate the denominator
+  // without a compensating decrease in totalReturning.
+  const notReturningInCohort = dedupedNR.filter(r =>
     (r.reason || '').toLowerCase() !== 'graduating' &&
     r.id && returningIdSet.has(r.id)
   ).length;
-  const eligibleReturn = totalReturning + notReturning;
+  const eligibleReturn = totalReturning + notReturningInCohort;
   const totalRegistered = allRegistered;
   const retRate = eligibleReturn
     ? Math.round(effectiveReturningReg / eligibleReturn * 1000) / 10
