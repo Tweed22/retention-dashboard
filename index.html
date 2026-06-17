@@ -6730,6 +6730,35 @@ async function pushDataToSupabase() {
       }
     }
 
+    // 2b) After upserting, clear stale is_registered flags for any student the DB
+    //     still has marked registered but who isn't in the current registeredIds set.
+    //     This handles students who appear in the registered CSV with 0 credit hours —
+    //     buildData's post-filter removes them from registeredStudents/registeredIds,
+    //     but because they aren't in returningStudents or newStudents either, they never
+    //     appear in allStudents above and their old DB row (is_registered=true,
+    //     credit_hours=N from a prior upload) survives the upsert untouched.
+    //     We skip students with a manual_status override so admin pins are never cleared.
+    if (csvLoaded.reg) {
+      status('Step 2b/6: clearing stale registration flags…');
+      const dbReg = await sb.from('students')
+        .select('id')
+        .eq('is_registered', true)
+        .is('manual_status', null);
+      if (!dbReg.error && dbReg.data) {
+        const toReset = dbReg.data.map(r => r.id).filter(id => !registeredIds.has(id));
+        if (toReset.length) {
+          const resetChunks = chunk(toReset, 500);
+          for (let i = 0; i < resetChunks.length; i++) {
+            expect(`registration reset chunk ${i+1}/${resetChunks.length}`,
+              await sb.from('students')
+                .update({ is_registered: false, credit_hours: null })
+                .in('id', resetChunks[i])
+                .is('manual_status', null));
+          }
+        }
+      }
+    }
+
     // 3) Sync `terms` table from local termSettings (so other admins see same window)
     // prior_term_leavers is stamped onto the CURRENT term row so it
     // propagates to every committee viewer on their next load. The value is
