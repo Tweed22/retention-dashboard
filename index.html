@@ -880,23 +880,51 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="auth-gate anon-only" id="auth-gate">
   <div class="auth-gate-card">
     <div class="auth-gate-title">Registration Dashboard</div>
-    <div class="auth-gate-sub">Committee members only. Sign in with your authorized email and we'll send you a 6-digit code.</div>
+    <div class="auth-gate-sub">Committee members only. Sign in with your authorized email.</div>
 
-    <!-- Step 1: ask for email -->
+    <!-- Step 1: email -->
     <div id="auth-gate-step-email">
       <label for="auth-gate-email">Email address</label>
       <input type="email" id="auth-gate-email" placeholder="you@example.com" autocomplete="email" />
-      <button id="auth-gate-send" onclick="sendOtpFromGate()">Send code</button>
+      <button id="auth-gate-send" onclick="authGateSubmitEmail()">Continue</button>
     </div>
 
-    <!-- Step 2: ask for the OTP code (6-10 digits, depending on project config) -->
-    <div id="auth-gate-step-code" style="display:none;">
-      <label for="auth-gate-code">Login code</label>
-      <input type="text" id="auth-gate-code" placeholder="00000000" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="one-time-code" style="letter-spacing:0.3em; font-size:18px; text-align:center;" />
-      <button id="auth-gate-verify" onclick="verifyOtpFromGate()">Verify and sign in</button>
+    <!-- Step 2a: password (returning user) -->
+    <div id="auth-gate-step-password" style="display:none;">
+      <label for="auth-gate-password">Password</label>
+      <input type="password" id="auth-gate-password" placeholder="Your password" autocomplete="current-password" />
+      <button id="auth-gate-signin" onclick="authGateSignIn()">Sign in</button>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px;">
-        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Use a different email</a>
-        <a href="#" id="auth-gate-resend" onclick="event.preventDefault(); resendOtpFromGate();" style="color:#2563eb; text-decoration:none;">Resend code</a>
+        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Different email</a>
+        <a href="#" onclick="event.preventDefault(); authGateForgotPassword();" style="color:#2563eb; text-decoration:none;">Forgot password?</a>
+      </div>
+    </div>
+
+    <!-- Step 2b: set password (new user, first login) -->
+    <div id="auth-gate-step-set-password" style="display:none;">
+      <p id="auth-gate-set-welcome" style="margin:0 0 14px; font-size:13px; color:#444;"></p>
+      <label for="auth-gate-new-password">Create a password</label>
+      <input type="password" id="auth-gate-new-password" placeholder="Minimum 8 characters" autocomplete="new-password" />
+      <label for="auth-gate-new-password-confirm">Confirm password</label>
+      <input type="password" id="auth-gate-new-password-confirm" placeholder="Repeat your password" autocomplete="new-password" />
+      <button id="auth-gate-set-pw-btn" onclick="authGateSetPassword()">Create password &amp; sign in</button>
+      <div style="font-size:12px; margin-top:10px;">
+        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Different email</a>
+      </div>
+    </div>
+
+    <!-- Step 2c: reset password with 6-digit code -->
+    <div id="auth-gate-step-reset" style="display:none;">
+      <p id="auth-gate-reset-sent-to" style="margin:0 0 14px; font-size:13px; color:#444;"></p>
+      <label for="auth-gate-reset-code">6-digit code</label>
+      <input type="text" id="auth-gate-reset-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
+      <label for="auth-gate-reset-pw">New password</label>
+      <input type="password" id="auth-gate-reset-pw" placeholder="Minimum 8 characters" autocomplete="new-password" />
+      <label for="auth-gate-reset-pw-confirm">Confirm password</label>
+      <input type="password" id="auth-gate-reset-pw-confirm" placeholder="Repeat your password" autocomplete="new-password" />
+      <button id="auth-gate-reset-btn" onclick="authGateResetPassword()">Reset password &amp; sign in</button>
+      <div style="font-size:12px; margin-top:10px;">
+        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Start over</a>
       </div>
     </div>
 
@@ -1345,6 +1373,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 // actually enforce security.
 const SUPABASE_URL = 'https://xyissgatpbldeedhomol.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_EGxcMamBsRAXAi1inpjTqw_KZAL485m';
+const AUTH_SETUP_URL = SUPABASE_URL + '/functions/v1/auth-setup';
 
 // Detect whether we're running in hosted mode (Supabase reachable + page
 // served over http(s)) vs local-file mode (file:// — fall back to localStorage
@@ -5903,23 +5932,12 @@ function authGateMsg(kind, html) {
   m.innerHTML = html;
 }
 
-// Two-step OTP flow:
-//   1) sendOtpFromGate  — ask Supabase to email a 6-digit code, swap the
-//      gate to show the code input.
-//   2) verifyOtpFromGate — call verifyOtp with the code; on success the
-//      onAuthStateChange handler reveals the dashboard.
-//
-// We also keep a magic-link fallback: signInWithOtp emails BOTH a link and
-// a token, controlled by the Supabase email template. So if a user clicks
-// the link in another tab it still works (legacy behavior). The OTP path
-// solves the multi-tab confusion because the user stays in one tab.
+let _authGateEmail = '';
 
-let _otpEmail = ''; // captured at step 1, reused at verify + resend
-
-async function sendOtpFromGate() {
+async function authGateSubmitEmail() {
   const emailEl = document.getElementById('auth-gate-email');
   const btnEl   = document.getElementById('auth-gate-send');
-  const email = (emailEl?.value || '').trim();
+  const email   = (emailEl?.value || '').trim();
   if (!email || !email.includes('@')) {
     authGateMsg('error', 'Please enter a valid email address.');
     return;
@@ -5929,115 +5947,163 @@ async function sendOtpFromGate() {
     return;
   }
   btnEl.disabled = true;
-  authGateMsg('info', 'Sending code…');
-  const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: cleanUrl, shouldCreateUser: true },
-  });
-  btnEl.disabled = false;
-  if (error) {
-    authGateMsg('error', '<strong>Error:</strong> ' + error.message);
-    return;
+  authGateMsg('info', 'Checking…');
+  try {
+    const res  = await fetch(AUTH_SETUP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      body: JSON.stringify({ action: 'check', email, app: 'dashboard' }),
+    });
+    const data = await res.json();
+    btnEl.disabled = false;
+    if (!res.ok || !data.authorized) {
+      authGateMsg('error', `<strong>${email}</strong> does not have access to the Registration Dashboard. Contact an admin to be added.`);
+      return;
+    }
+    _authGateEmail = email;
+    document.getElementById('auth-gate-step-email').style.display = 'none';
+    document.getElementById('auth-gate-msg').className = '';
+    document.getElementById('auth-gate-msg').innerHTML = '';
+    if (data.hasPassword) {
+      document.getElementById('auth-gate-step-password').style.display = 'block';
+      document.getElementById('auth-gate-password').value = '';
+      setTimeout(() => document.getElementById('auth-gate-password')?.focus(), 50);
+    } else {
+      document.getElementById('auth-gate-set-welcome').textContent = `Welcome! Create a password for ${email}`;
+      document.getElementById('auth-gate-step-set-password').style.display = 'block';
+      setTimeout(() => document.getElementById('auth-gate-new-password')?.focus(), 50);
+    }
+  } catch {
+    btnEl.disabled = false;
+    authGateMsg('error', 'Could not connect. Please try again.');
   }
-  _otpEmail = email;
-  // Swap to the code-entry step.
-  document.getElementById('auth-gate-step-email').style.display = 'none';
-  document.getElementById('auth-gate-step-code').style.display  = 'block';
-  authGateMsg('success', `<strong>Code sent to ${email}.</strong> Enter the 6-digit code from the email below. Code expires in 1 hour.`);
-  // Focus the code input so the user can start typing immediately.
-  setTimeout(() => document.getElementById('auth-gate-code')?.focus(), 50);
 }
 
-// Guard against double-fire — paste + Enter + click can trigger this several
-// times in a row, and Supabase will reject the second attempt as "Invalid
-// token" because the first attempt already consumed it. Plus we don't want
-// to show error messages from a stale request.
-let _verifyInFlight = false;
+async function authGateSignIn() {
+  const password = document.getElementById('auth-gate-password')?.value || '';
+  const btnEl    = document.getElementById('auth-gate-signin');
+  if (!password) { authGateMsg('error', 'Please enter your password.'); return; }
+  btnEl.disabled = true;
+  authGateMsg('info', 'Signing in…');
+  const { error } = await sb.auth.signInWithPassword({ email: _authGateEmail, password });
+  if (error) {
+    authGateMsg('error', '<strong>Error:</strong> ' + error.message);
+    btnEl.disabled = false;
+    return;
+  }
+  // onAuthStateChange fires
+}
 
-async function verifyOtpFromGate() {
-  if (_verifyInFlight) { console.log('verifyOtp: already in flight, ignoring duplicate'); return; }
-  const codeEl = document.getElementById('auth-gate-code');
-  const btnEl  = document.getElementById('auth-gate-verify');
-  const token  = (codeEl?.value || '').trim().replace(/\s+/g, '');
-  if (!/^\d{6,10}$/.test(token)) {
-    authGateMsg('error', 'Please enter the numeric code from the email.');
-    return;
+async function authGateSetPassword() {
+  const pw      = document.getElementById('auth-gate-new-password')?.value || '';
+  const confirm = document.getElementById('auth-gate-new-password-confirm')?.value || '';
+  const btnEl   = document.getElementById('auth-gate-set-pw-btn');
+  if (pw.length < 8) { authGateMsg('error', 'Password must be at least 8 characters.'); return; }
+  if (pw !== confirm) { authGateMsg('error', 'Passwords do not match.'); return; }
+  btnEl.disabled = true;
+  authGateMsg('info', 'Setting password…');
+  try {
+    const res  = await fetch(AUTH_SETUP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      body: JSON.stringify({ action: 'set_password', email: _authGateEmail, password: pw }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      authGateMsg('error', data.error || 'Could not set password. Try again.');
+      btnEl.disabled = false;
+      return;
+    }
+    authGateMsg('info', 'Signing in…');
+    const { error } = await sb.auth.signInWithPassword({ email: _authGateEmail, password: pw });
+    if (error) {
+      authGateMsg('error', error.message);
+      btnEl.disabled = false;
+    }
+    // onAuthStateChange fires
+  } catch {
+    authGateMsg('error', 'Could not connect. Please try again.');
+    btnEl.disabled = false;
   }
-  if (!sb || !_otpEmail) {
-    authGateMsg('error', 'Session lost. Please request a new code.');
-    return;
+}
+
+async function authGateForgotPassword() {
+  authGateMsg('info', 'Sending reset code…');
+  try {
+    const res  = await fetch(AUTH_SETUP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      body: JSON.stringify({ action: 'send_reset_code', email: _authGateEmail }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      authGateMsg('error', data.error || 'Could not send reset code. Try again.');
+      return;
+    }
+    document.getElementById('auth-gate-step-password').style.display = 'none';
+    document.getElementById('auth-gate-reset-sent-to').textContent =
+      `A 6-digit code was sent to ${_authGateEmail}. Enter it below with your new password.`;
+    document.getElementById('auth-gate-step-reset').style.display = 'block';
+    document.getElementById('auth-gate-msg').className = '';
+    document.getElementById('auth-gate-msg').innerHTML = '';
+    setTimeout(() => document.getElementById('auth-gate-reset-code')?.focus(), 50);
+  } catch {
+    authGateMsg('error', 'Could not connect. Please try again.');
   }
-  _verifyInFlight = true;
+}
+
+async function authGateResetPassword() {
+  const code    = (document.getElementById('auth-gate-reset-code')?.value || '').trim();
+  const pw      = document.getElementById('auth-gate-reset-pw')?.value || '';
+  const confirm = document.getElementById('auth-gate-reset-pw-confirm')?.value || '';
+  const btnEl   = document.getElementById('auth-gate-reset-btn');
+  if (code.length < 6) { authGateMsg('error', 'Please enter the full 6-digit code.'); return; }
+  if (pw.length < 8)   { authGateMsg('error', 'Password must be at least 8 characters.'); return; }
+  if (pw !== confirm)   { authGateMsg('error', 'Passwords do not match.'); return; }
   btnEl.disabled = true;
   authGateMsg('info', 'Verifying…');
-  const t0 = performance.now();
-  console.log(`verifyOtp: calling Supabase with email=${_otpEmail} token=${token.slice(0,2)}…`);
-  let error;
   try {
-    const res = await sb.auth.verifyOtp({
-      email: _otpEmail,
-      token,
-      type: 'email',
+    const res  = await fetch(AUTH_SETUP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      body: JSON.stringify({ action: 'reset_password_with_code', email: _authGateEmail, code, password: pw }),
     });
-    error = res.error;
-    console.log(`verifyOtp: Supabase responded in ${Math.round(performance.now() - t0)}ms`,
-                error ? `error=${error.message}` : `OK, user=${res.data?.user?.email}`);
-  } catch (e) {
-    console.error('verifyOtp: exception', e);
-    error = { message: e.message || String(e) };
-  }
-  _verifyInFlight = false;
-  btnEl.disabled = false;
-  if (error) {
-    authGateMsg('error', '<strong>Error:</strong> ' + error.message + ' (Codes expire after 1 hour. Click "Resend code" if needed.)');
-    return;
-  }
-  authGateMsg('success', 'Signed in. Loading your data…');
-  // The onAuthStateChange handler should fire and dismiss the gate. If it
-  // doesn't within 5s (e.g. committee_members lookup hung), call refreshAuthState
-  // ourselves so the user isn't stuck staring at "Loading your data…".
-  setTimeout(async () => {
-    if (document.body.classList.contains('auth-anon')) {
-      console.warn('verifyOtp: 5s after success and gate is still visible — running refreshAuthState manually');
-      const { data } = await sb.auth.getSession();
-      await refreshAuthState(data?.session);
-      if (isCommittee()) await loadHostedDashboardData();
+    const data = await res.json();
+    if (!res.ok) {
+      authGateMsg('error', data.error || 'Could not reset password. Try again.');
+      btnEl.disabled = false;
+      return;
     }
-  }, 5000);
-}
-
-async function resendOtpFromGate() {
-  if (!_otpEmail) { resetAuthGate(); return; }
-  authGateMsg('info', 'Resending code…');
-  const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
-  const { error } = await sb.auth.signInWithOtp({
-    email: _otpEmail,
-    options: { emailRedirectTo: cleanUrl, shouldCreateUser: true },
-  });
-  if (error) {
-    authGateMsg('error', '<strong>Error:</strong> ' + error.message);
-    return;
+    authGateMsg('info', 'Signing in…');
+    const { error } = await sb.auth.signInWithPassword({ email: _authGateEmail, password: pw });
+    if (error) {
+      authGateMsg('error', error.message);
+      btnEl.disabled = false;
+    }
+    // onAuthStateChange fires
+  } catch {
+    authGateMsg('error', 'Could not connect. Please try again.');
+    btnEl.disabled = false;
   }
-  authGateMsg('success', `<strong>New code sent to ${_otpEmail}.</strong> Use the most recent code; older codes are now invalid.`);
 }
 
 function resetAuthGate() {
-  _otpEmail = '';
+  _authGateEmail = '';
   document.getElementById('auth-gate-step-email').style.display = 'block';
-  document.getElementById('auth-gate-step-code').style.display  = 'none';
-  const codeEl = document.getElementById('auth-gate-code');
-  if (codeEl) codeEl.value = '';
-  authGateMsg('info', '');
+  document.getElementById('auth-gate-step-password').style.display = 'none';
+  document.getElementById('auth-gate-step-set-password').style.display = 'none';
+  document.getElementById('auth-gate-step-reset').style.display = 'none';
+  const emailEl = document.getElementById('auth-gate-email');
+  if (emailEl) emailEl.value = '';
   document.getElementById('auth-gate-msg').className = '';
   document.getElementById('auth-gate-msg').innerHTML = '';
 }
 
-// Legacy aliases — anything still calling the old name routes to OTP step 1.
+// Legacy aliases
 function openAuthModal() {}
 function closeAuthModal() {}
-async function sendMagicLink() { return sendOtpFromGate(); }
-async function sendMagicLinkFromGate() { return sendOtpFromGate(); }
+async function sendMagicLink() {}
+async function sendMagicLinkFromGate() {}
 
 async function signOut() {
   if (!sb) return;
@@ -7502,17 +7568,12 @@ if (HOSTED) {
     // immediately with INITIAL_SESSION, so we don't need a separate getSession().
     sb.auth.onAuthStateChange((event, session) => {
     console.log(`auth: onAuthStateChange event=${event} hasSession=${!!session}`);
-    // After a magic-link redirect, the URL has #access_token=... params.
-    // Once Supabase has consumed them and stored the session, strip the
-    // hash so the access token isn't shareable / browser-history-leaky.
-    if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
-      history.replaceState(null, '', window.location.pathname + window.location.search);
-    }
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
     // CRITICAL: defer Supabase queries to the next tick. supabase-js holds
-    // an auth lock during verifyOtp/signInWithPassword; if we await another
+    // an auth lock during signInWithPassword; if we await another
     // sb.from(...) query inside this handler, it deadlocks against the
     // still-in-flight auth call. setTimeout 0 lets the current event finish
-    // and releases the lock before we run committee_members lookup.
+    // and releases the lock before we run the user_app_access lookup.
     setTimeout(async () => {
       const t0 = performance.now();
       await refreshAuthState(session);
