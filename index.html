@@ -788,25 +788,45 @@ body.dark .theme-toggle:hover { background: rgba(255,255,255,0.24); }
 /* Full-screen auth gate. Anon users see only this — the rest of the dashboard
    (header, nav, all pages) is hidden under body.auth-anon. After sign-in the
    body class flips and the gate disappears. */
-.auth-gate { display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #1e2d4f 0%, #2563eb 100%); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
+.auth-gate { display: none; position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; padding: 20px; background: rgba(8,14,26,0.78); backdrop-filter: blur(6px); }
 body.auth-anon .auth-gate { display: flex; }
 body.auth-anon .header,
 body.auth-anon .nav,
 body.auth-anon .page,
 body.auth-anon .upload-panel { display: none !important; }
-.auth-gate-card { background: white; border-radius: 16px; padding: 40px 44px; width: 460px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
-.auth-gate-title { font-size: 22px; font-weight: 700; color: #1a1d23; margin-bottom: 6px; }
-.auth-gate-sub { font-size: 13px; color: #666; margin-bottom: 22px; line-height: 1.5; }
-.auth-gate-card label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #555; margin-bottom: 8px; }
-.auth-gate-card input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 11px 14px; font-size: 14px; outline: none; margin-bottom: 14px; box-sizing: border-box; }
-.auth-gate-card input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
-.auth-gate-card button { width: 100%; background: #2563eb; color: white; border: none; border-radius: 8px; padding: 12px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
-.auth-gate-card button:hover { background: #1d4ed8; }
-.auth-gate-card button[disabled] { opacity: 0.6; cursor: wait; }
-.auth-gate-msg { font-size: 13px; padding: 10px 14px; border-radius: 7px; margin-top: 14px; line-height: 1.4; }
-.auth-gate-msg.auth-gate-msg-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
-.auth-gate-msg.auth-gate-msg-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
-.auth-gate-msg.auth-gate-msg-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.auth-gate-card {
+  background: #ffffff; border: 1px solid #d9dfdc;
+  border-radius: 12px; padding: 32px;
+  max-width: 440px; width: 100%;
+  color: #1b2620; box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+.auth-gate-card h2 { margin: 0 0 8px; font-size: 22px; color: #1b2620; }
+.auth-gate-card .auth-sub { margin: 0 0 20px; color: #5a6b63; font-size: 14px; line-height: 1.5; }
+.auth-gate-card label { display: block; font-size: 11px; color: #5a6b63; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0; }
+.auth-gate-card input[type=email],
+.auth-gate-card input[type=text],
+.auth-gate-card input[type=password] {
+  width: 100%; padding: 10px 14px; font-size: 15px;
+  background: #f0f3f1; border: 1px solid #b6bfbb;
+  border-radius: 8px; color: #1b2620;
+  box-sizing: border-box; outline: none; font-family: inherit;
+}
+.auth-gate-card input:focus { border-color: #00563f; box-shadow: 0 0 0 3px rgba(0,86,63,0.15); }
+.auth-gate-card .btn-primary {
+  padding: 11px 14px; background: #00563f; color: #fff;
+  border: none; border-radius: 8px; font-weight: 600; font-size: 15px;
+  cursor: pointer; width: 100%; font-family: inherit; transition: filter 0.15s;
+}
+.auth-gate-card .btn-primary:hover:not([disabled]) { filter: brightness(1.08); }
+.auth-gate-card .btn-primary[disabled] { opacity: 0.6; cursor: wait; }
+.auth-gate-card .btn-secondary {
+  padding: 9px 18px; background: transparent; color: #5a6b63;
+  border: 1px solid #d9dfdc; border-radius: 8px;
+  cursor: pointer; font-size: 13px; width: 100%; font-family: inherit;
+}
+.auth-gate-card .btn-secondary:hover { color: #1b2620; border-color: #5a6b63; }
+#auth-gate-msg { margin: 14px 0 0; font-size: 13px; color: #5a6b63; min-height: 18px; }
+#auth-gate-msg.error { color: #b03a2e; }
 
 /* Auth-driven visibility for elements that ARE shown to authed users but
    not all of them. Body gets exactly one class: auth-anon, auth-committee,
@@ -879,56 +899,60 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <!-- ── Auth Gate (full-screen, shown only when not signed in) ── -->
 <div class="auth-gate anon-only" id="auth-gate">
   <div class="auth-gate-card">
-    <div class="auth-gate-title">Registration Dashboard</div>
-    <div class="auth-gate-sub">Committee members only. Sign in with your authorized email.</div>
+    <h2>Registration Dashboard</h2>
 
     <!-- Step 1: email -->
     <div id="auth-gate-step-email">
-      <label for="auth-gate-email">Email address</label>
-      <input type="email" id="auth-gate-email" placeholder="you@example.com" autocomplete="email" />
-      <button id="auth-gate-send" onclick="authGateSubmitEmail()">Continue</button>
+      <form style="display:flex;flex-direction:column;gap:12px;" onsubmit="event.preventDefault();authGateSubmitEmail()">
+        <p class="auth-sub" style="margin:0;">Committee members only. Sign in with your authorized email.</p>
+        <label for="auth-gate-email">Email address</label>
+        <input type="email" id="auth-gate-email" required autocomplete="email" placeholder="you@example.com">
+        <button type="submit" id="auth-gate-send" class="btn-primary">Continue</button>
+      </form>
     </div>
 
     <!-- Step 2a: password (returning user) -->
     <div id="auth-gate-step-password" style="display:none;">
-      <label for="auth-gate-password">Password</label>
-      <input type="password" id="auth-gate-password" placeholder="Your password" autocomplete="current-password" />
-      <button id="auth-gate-signin" onclick="authGateSignIn()">Sign in</button>
-      <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px;">
-        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Different email</a>
-        <a href="#" onclick="event.preventDefault(); authGateForgotPassword();" style="color:#2563eb; text-decoration:none;">Forgot password?</a>
-      </div>
+      <form style="display:flex;flex-direction:column;gap:12px;" onsubmit="event.preventDefault();authGateSignIn()">
+        <p class="auth-sub" style="margin:0;">Welcome back! Enter your password to sign in.</p>
+        <label for="auth-gate-password">Password</label>
+        <input type="password" id="auth-gate-password" required autocomplete="current-password" placeholder="Your password">
+        <button type="submit" id="auth-gate-signin" class="btn-primary">Sign In</button>
+        <button type="button" class="btn-secondary" onclick="resetAuthGate()">← Different email</button>
+        <button type="button" class="btn-secondary" onclick="authGateForgotPassword()">Forgot password?</button>
+      </form>
     </div>
 
     <!-- Step 2b: set password (new user, first login) -->
     <div id="auth-gate-step-set-password" style="display:none;">
-      <p id="auth-gate-set-welcome" style="margin:0 0 14px; font-size:13px; color:#444;"></p>
-      <label for="auth-gate-new-password">Create a password</label>
-      <input type="password" id="auth-gate-new-password" placeholder="Minimum 8 characters" autocomplete="new-password" />
-      <label for="auth-gate-new-password-confirm">Confirm password</label>
-      <input type="password" id="auth-gate-new-password-confirm" placeholder="Repeat your password" autocomplete="new-password" />
-      <button id="auth-gate-set-pw-btn" onclick="authGateSetPassword()">Create password &amp; sign in</button>
-      <div style="font-size:12px; margin-top:10px;">
-        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Different email</a>
-      </div>
+      <form style="display:flex;flex-direction:column;gap:12px;" onsubmit="event.preventDefault();authGateSetPassword()">
+        <p class="auth-sub" id="auth-gate-set-welcome" style="margin:0;"></p>
+        <label for="auth-gate-new-password">Create a password</label>
+        <input type="password" id="auth-gate-new-password" required autocomplete="new-password" placeholder="Minimum 8 characters">
+        <label for="auth-gate-new-password-confirm">Confirm password</label>
+        <input type="password" id="auth-gate-new-password-confirm" required autocomplete="new-password" placeholder="Repeat your password">
+        <button type="submit" id="auth-gate-set-pw-btn" class="btn-primary">Create Password &amp; Sign In</button>
+        <button type="button" class="btn-secondary" onclick="resetAuthGate()">← Different email</button>
+      </form>
     </div>
 
     <!-- Step 2c: reset password with 6-digit code -->
     <div id="auth-gate-step-reset" style="display:none;">
-      <p id="auth-gate-reset-sent-to" style="margin:0 0 14px; font-size:13px; color:#444;"></p>
-      <label for="auth-gate-reset-code">6-digit code</label>
-      <input type="text" id="auth-gate-reset-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
-      <label for="auth-gate-reset-pw">New password</label>
-      <input type="password" id="auth-gate-reset-pw" placeholder="Minimum 8 characters" autocomplete="new-password" />
-      <label for="auth-gate-reset-pw-confirm">Confirm password</label>
-      <input type="password" id="auth-gate-reset-pw-confirm" placeholder="Repeat your password" autocomplete="new-password" />
-      <button id="auth-gate-reset-btn" onclick="authGateResetPassword()">Reset password &amp; sign in</button>
-      <div style="font-size:12px; margin-top:10px;">
-        <a href="#" onclick="event.preventDefault(); resetAuthGate();" style="color:#2563eb; text-decoration:none;">← Start over</a>
-      </div>
+      <form style="display:flex;flex-direction:column;gap:12px;" onsubmit="event.preventDefault();authGateResetPassword()">
+        <p class="auth-sub" id="auth-gate-reset-sent-to" style="margin:0;"></p>
+        <label for="auth-gate-reset-code">6-digit reset code</label>
+        <input type="text" id="auth-gate-reset-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+               placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+        <label for="auth-gate-reset-pw">New password</label>
+        <input type="password" id="auth-gate-reset-pw" autocomplete="new-password" placeholder="Minimum 8 characters">
+        <label for="auth-gate-reset-pw-confirm">Confirm new password</label>
+        <input type="password" id="auth-gate-reset-pw-confirm" autocomplete="new-password" placeholder="Repeat your password">
+        <button type="submit" id="auth-gate-reset-btn" class="btn-primary">Reset Password &amp; Sign In</button>
+        <button type="button" class="btn-secondary" onclick="resetAuthGate()">← Start over</button>
+      </form>
     </div>
 
-    <div id="auth-gate-msg"></div>
+    <p id="auth-gate-msg" class="auth-msg"></p>
   </div>
 </div>
 
@@ -5928,7 +5952,7 @@ function nrPopulateAddReason() {
 function authGateMsg(kind, html) {
   const m = document.getElementById('auth-gate-msg');
   if (!m) return;
-  m.className = 'auth-gate-msg auth-gate-msg-' + kind;
+  m.className = 'auth-msg' + (kind === 'error' ? ' error' : '');
   m.innerHTML = html;
 }
 
