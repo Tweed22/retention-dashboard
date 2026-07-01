@@ -7587,22 +7587,46 @@ nrPopulateReasonFilter();
 nrUpdateKpis();
 nrRender();
 
+// ── Shared session cookies (*.wwuapps.com SSO) ───────────────────────────────
+function _wwuWriteSession(s) {
+  if (!HOSTED || !s?.access_token) return;
+  const f = `domain=.wwuapps.com; path=/; max-age=${7*24*3600}; SameSite=Lax; Secure`;
+  document.cookie = `wwu_at=${encodeURIComponent(s.access_token)}; ${f}`;
+  document.cookie = `wwu_rt=${encodeURIComponent(s.refresh_token)}; ${f}`;
+}
+function _wwuClearSession() {
+  if (!HOSTED) return;
+  const f = `domain=.wwuapps.com; path=/; max-age=0; SameSite=Lax; Secure`;
+  document.cookie = `wwu_at=; ${f}`; document.cookie = `wwu_rt=; ${f}`;
+}
+function _wwuReadSession() {
+  const a = document.cookie.match(/(?:^|;\s*)wwu_at=([^;]*)/);
+  const r = document.cookie.match(/(?:^|;\s*)wwu_rt=([^;]*)/);
+  const at = a?.[1] ? decodeURIComponent(a[1]) : '';
+  const rt = r?.[1] ? decodeURIComponent(r[1]) : '';
+  return (at && rt) ? { access_token: at, refresh_token: rt } : null;
+}
+
 if (HOSTED) {
   // Default to anon BEFORE the auth callback fires, so the auth gate
   // shows immediately on page load and the dashboard content stays hidden
   // until Supabase confirms the session.
   document.body.classList.add('auth-anon');
   (async () => {
-    // Handle SSO token handoff from Hub (?sso_at=...&sso_rt=...)
+    // SSO: URL params take priority, then shared domain cookie
     const _qp = new URLSearchParams(window.location.search);
     const _at = _qp.get('sso_at'), _rt = _qp.get('sso_rt');
     if (_at && _rt) {
       history.replaceState(null, '', window.location.pathname);
       try { await sb.auth.setSession({ access_token: _at, refresh_token: _rt }); } catch {}
+    } else {
+      const shared = _wwuReadSession();
+      if (shared) try { await sb.auth.setSession(shared); } catch {}
     }
     // Wait for the auth state, then load. onAuthStateChange fires once
     // immediately with INITIAL_SESSION, so we don't need a separate getSession().
     sb.auth.onAuthStateChange((event, session) => {
+    if (session) _wwuWriteSession(session); else if (event === 'SIGNED_OUT') _wwuClearSession();
     console.log(`auth: onAuthStateChange event=${event} hasSession=${!!session}`);
     if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
     // CRITICAL: defer Supabase queries to the next tick. supabase-js holds
