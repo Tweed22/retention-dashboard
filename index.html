@@ -6166,13 +6166,32 @@ const _ASP_APPS = [
   { id:'hub',       name:'Academic Apps',          abbr:'AA',  bg:'rgba(90,181,125,.18)', fg:'#5ab57d', url:()=>'https://hub.wwuapps.com' },
   { id:'grades',    name:'Missing Att. & Grades',  abbr:'MAG', bg:'rgba(201,169,97,.18)', fg:'#c9a961', url:()=>'https://hub.wwuapps.com/missing-grades.html' },
   { id:'dashboard', name:'Registration Dashboard', abbr:'RD',  bg:'rgba(91,122,181,.18)', fg:'#5b7ab5', url:()=>location.href },
+  { id:'scheduler', name:'Course Scheduler',       abbr:'CS',  bg:'rgba(0,86,63,.18)',    fg:'#00563f', url:()=>_aspSchedUrl() },
 ];
 let _aspApps = [];
+
+function _aspSchedUrl() {
+  try { return JSON.parse(localStorage.getItem('dashboard-config-v1')||'{}').schedulerUrl||''; }
+  catch { return ''; }
+}
+function _aspSetSchedUrl() {
+  const url = prompt('Enter the WWU Course Scheduler URL (include https://):', _aspSchedUrl());
+  if (url === null) return '';
+  const trimmed = url.trim();
+  if (trimmed && !/^https?:\/\//i.test(trimmed)) { alert('URL must start with https://'); return ''; }
+  try {
+    const cfg = JSON.parse(localStorage.getItem('dashboard-config-v1')||'{}');
+    cfg.schedulerUrl = trimmed;
+    localStorage.setItem('dashboard-config-v1', JSON.stringify(cfg));
+  } catch {}
+  return trimmed;
+}
 
 function initAppSwitcher(accessRows) {
   const access = new Set((accessRows||[]).map(r=>r.app));
   const ids = ['dashboard'];
   if(access.has('hub')) { ids.push('hub','grades'); }
+  if(access.has('scheduler')) { ids.push('scheduler'); }
   _aspApps = _ASP_APPS.filter(a=>ids.includes(a.id));
   const btn = document.getElementById('app-switcher-btn');
   if(btn) btn.style.display = _aspApps.length >= 2 ? 'flex' : 'none';
@@ -6214,7 +6233,8 @@ async function aspNav(appId) {
   if(appId === CURRENT_APP_ID) return;
   const app = _aspApps.find(a=>a.id===appId);
   if(!app) return;
-  const url = app.url();
+  let url = app.url();
+  if(!url && appId === 'scheduler') url = _aspSetSchedUrl();
   if(!url) return;
   const win = window.open('about:blank','_blank');
   try {
