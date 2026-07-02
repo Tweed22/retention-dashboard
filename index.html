@@ -512,14 +512,14 @@ body.dark .app-switcher-btn       { background: rgba(255,255,255,.08); border-co
 body.dark .app-switcher-btn:hover { background: rgba(255,255,255,.15); }
 .app-switcher-popup {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 600;
-  background: #fff; border: 1px solid #dde2e8;
-  border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); min-width: 240px;
+  background: #fff; border: 1px solid #d9dfdc;
+  border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.22); min-width: 240px;
 }
 body.dark .app-switcher-popup { background: #262626; border-color: #353535; }
 .asp-header {
   padding: 11px 16px 10px; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.6px; color: #888;
-  border-bottom: 1px solid #e8ecf0;
+  text-transform: uppercase; letter-spacing: 0.6px; color: #5a6b63;
+  border-bottom: 1px solid #d9dfdc;
 }
 body.dark .asp-header { color: #a8a8a8; border-bottom-color: #353535; }
 .asp-grid { padding: 8px; display: grid; grid-template-columns: repeat(2,1fr); gap: 4px; }
@@ -527,11 +527,11 @@ body.dark .asp-header { color: #a8a8a8; border-bottom-color: #353535; }
   display: flex; flex-direction: column; align-items: center;
   padding: 14px 8px; border-radius: 8px; border: none;
   background: none; cursor: pointer; text-align: center;
-  transition: background 0.12s; color: #1a1d23; font-family: inherit;
+  transition: background 0.12s; color: #1b2620; font-family: inherit;
 }
 body.dark .asp-item { color: #e0e0e0; }
-.asp-item:hover { background: #f0f2f5; }
-body.dark .asp-item:hover { background: #353535; }
+.asp-item:hover { background: #f0f3f1; }
+body.dark .asp-item:hover { background: #2e2e2e; }
 .asp-item.asp-current       { opacity: .55; cursor: default; }
 .asp-item.asp-current:hover { background: transparent; }
 .asp-icon {
@@ -540,8 +540,8 @@ body.dark .asp-item:hover { background: #353535; }
   font-size: 11px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 7px;
 }
 .asp-name     { font-size: 11px; font-weight: 600; line-height: 1.35; }
-.asp-curr-tag { font-size: 10px; color: #5b7ab5; font-weight: 600; margin-top: 3px; }
-body.dark .asp-curr-tag { color: #93b4e8; }
+.asp-curr-tag { font-size: 10px; color: #00563f; font-weight: 600; margin-top: 3px; }
+body.dark .asp-curr-tag { color: #5ab57d; }
 
 /* ── Dark mode toggle button (header, far right) ── */
 .theme-toggle {
@@ -6183,8 +6183,9 @@ async function _aspLoadSchedUrl() {
 function initAppSwitcher(accessRows) {
   const access = new Set((accessRows||[]).map(r=>r.app));
   const ids = ['dashboard'];
-  if(access.has('hub')) { ids.push('hub','oat','grades'); }
-  if(access.has('scheduler')) { ids.push('scheduler'); }
+  if(access.has('hub'))                       { ids.push('hub','grades'); }
+  if(access.has('hub') || access.has('oat'))  { ids.push('oat'); }
+  if(access.has('scheduler'))                 { ids.push('scheduler'); }
   _aspApps = _ASP_APPS.filter(a=>ids.includes(a.id));
   const btn = document.getElementById('app-switcher-btn');
   if(btn) btn.style.display = _aspApps.length >= 2 ? 'flex' : 'none';
