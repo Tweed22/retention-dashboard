@@ -6168,6 +6168,7 @@ const _ASP_APPS = [
   { id:'grades',    name:'Missing Att. & Grades',  abbr:'MAG', bg:'rgba(201,169,97,.18)', fg:'#c9a961', url:()=>'https://hub.wwuapps.com/missing-grades.html' },
   { id:'dashboard', name:'Registration Dashboard', abbr:'RD',  bg:'rgba(91,122,181,.18)', fg:'#5b7ab5', url:()=>location.href },
   { id:'scheduler', name:'Course Scheduler',       abbr:'CS',  bg:'rgba(0,86,63,.18)',    fg:'#00563f', url:()=>_aspSchedUrl() },
+  { id:'planner',   name:'Degree Planner',         abbr:'DP',  bg:'rgba(30,107,82,.18)',  fg:'#1e6b52', url:()=>'https://planner.wwuapps.com' },
 ];
 let _aspApps = [];
 
@@ -6186,6 +6187,7 @@ function initAppSwitcher(accessRows) {
   if(access.has('hub'))                       { ids.push('hub','grades'); }
   if(access.has('hub') || access.has('oat'))  { ids.push('oat'); }
   if(access.has('scheduler'))                 { ids.push('scheduler'); }
+  if(access.has('planner'))                   { ids.push('planner'); }
   _aspApps = _ASP_APPS.filter(a=>ids.includes(a.id));
   const btn = document.getElementById('app-switcher-btn');
   if(btn) btn.style.display = _aspApps.length >= 2 ? 'flex' : 'none';
