@@ -1046,8 +1046,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card blue kpi-clickable" onclick="goToRegisteredPage()" title="Open the Registered tab"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">All returning + Not Returning</div></div>
-      <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR list rows (Pending + Withdrawn)</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning + NR in current rosters</div></div>
+      <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR entries incl. prior-term (ex-Graduating)</div></div>
       <div class="kpi-card sky kpi-clickable" onclick="goToNewPage()" title="Open the New Students tab"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
     </div>
     <div class="section-label">Persistence &amp; Retention</div>
@@ -1653,7 +1653,11 @@ function parseCSVRow(line) {
   const result = []; let cur = ''; let inQ = false;
   for (let i=0;i<line.length;i++) {
     const c = line[i];
-    if (c==='"') { inQ=!inQ; }
+    if (c==='"') {
+      // RFC 4180: a doubled quote inside a quoted field is a literal quote.
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    }
     else if (c===',' && !inQ) { result.push(cur); cur=''; }
     else cur += c;
   }
@@ -1899,6 +1903,10 @@ function getNewStudentsExportData() {
 
 function getWithdrawalsExportData() {
   const all = [...withdrawalsList];
+  // The Withdrawals tab (and its wd-* filter controls) was removed
+  // 2026-05-05; if this export is ever triggered without them, fall back
+  // to exporting everything instead of crashing on a missing element.
+  if (!document.getElementById('wd-term')) return { visible: all, all };
   const termFilter = document.getElementById('wd-term').value;
   const cls     = document.getElementById('wd-class').value.toLowerCase();
   const major   = document.getElementById('wd-major').value;
@@ -2239,10 +2247,17 @@ function getCurrentTermWindow() {
   let end = termSettings.nextStart || '';
   let isOpenEnded = false;
   if (!end) {
-    // Fall back to today as the upper bound — withdrawals dated after today
-    // are presumed to belong to whichever term the admin sets up next.
-    const today = new Date();
-    end = today.toISOString().slice(0,10);
+    // Fall back to tomorrow (local time) as the exclusive upper bound —
+    // withdrawals dated after today are presumed to belong to whichever term
+    // the admin sets up next. Two fixes here (2026-07-15):
+    //   • was toISOString() (UTC) — in US evenings that's already tomorrow,
+    //     so the window shifted depending on time of day. Use local date.
+    //   • was `end = today` with an EXCLUSIVE comparison, so a withdrawal
+    //     with a last-active date of today never counted until the next
+    //     day. Tomorrow-exclusive === today-inclusive.
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    end = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     isOpenEnded = true;
   }
   return { start, end, name: termSettings.currentName || 'current term', isOpenEnded };
@@ -3188,9 +3203,14 @@ async function renderTrendChart() {
   if (currentLabel && currentPts && currentRate != null) {
     const todayStr = todayLocalISO();
     const todayIdx = currentPts.findIndex(d => d.snapshot_date === todayStr);
-    const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
-    const allReg = registeredIds.size;
-    const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered').length;
+    // Same graduating-aware filters the stored term_history snapshot uses
+    // (pushDataToSupabase step 5b) — otherwise today's live point showed
+    // unfiltered counts that disagreed with what gets persisted on upload.
+    const totalHolds = Object.values(holdGroups)
+      .reduce((a, g) => a + g.filter(s => isActiveTrend(s.id)).length, 0);
+    const allReg = [...registeredIds].filter(isActiveTrend).length;
+    const newRegCount = Object.values(newStudents)
+      .filter(s => s.status === 'Registered' && isActiveTrend(s.id)).length;
     const retReg = allReg - newRegCount;
     if (todayIdx >= 0) {
       currentPts = currentPts.map((d, i) => i === todayIdx
@@ -3727,7 +3747,10 @@ function ftftSort(col) {
 // dropdown and falls back to "Unknown" when the FTFT student isn't in
 // any current CSV (likely a roster mismatch — surfaces for cleanup).
 function buildFTFTRows() {
-  const nrIds = new Set(nrList.map(s => s.id).filter(Boolean));
+  // Deduped NR set — same source the Summary's FTFT donuts use, so a student
+  // buckets identically on both surfaces (raw nrList includes new-student
+  // rows and duplicates that the donuts exclude).
+  const nrIds = new Set(getDedupedNRList().map(s => s.id).filter(Boolean));
   const holdIdSet = new Set();
   Object.values(holdGroups).forEach(g => g.forEach(s => holdIdSet.add(s.id)));
   const canRegIdSet = new Set(canRegisterStudents.map(s => s.id));
@@ -3920,6 +3943,14 @@ function applySort(rows, state) {
     // Arrays (sports) — sort by first value
     if (Array.isArray(av)) av = av[0] || '';
     if (Array.isArray(bv)) bv = bv[0] || '';
+    // Numeric columns (credit hours, GPA) — compare as numbers so 9 sorts
+    // before 12 and null/0 group together, instead of mixed string compares.
+    if (typeof av === 'number' || typeof bv === 'number') {
+      const an = Number(av) || 0, bn = Number(bv) || 0;
+      if (an !== bn) return (an - bn) * state.dir;
+      return 0;
+    }
+    if ((av||'') === (bv||'')) return 0;
     return ((av||'') > (bv||'') ? 1 : -1) * state.dir;
   });
 }
@@ -4275,7 +4306,10 @@ function nsApply() {
   rows = applyFTFTFilter(rows, 'ns-ftft');
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,nsSort_);
-  document.getElementById('ns-title').textContent = `${n(Object.keys(newStudents).length)} New Students`;
+  const nsTotal = Object.keys(newStudents).length;
+  document.getElementById('ns-title').textContent = rows.length !== nsTotal
+    ? `${n(rows.length)} of ${n(nsTotal)} New Students`
+    : `${n(nsTotal)} New Students`;
   const tbody=document.getElementById('ns-tbody');
   tbody.innerHTML = rows.length
     ? rows.map(r => {
@@ -4426,9 +4460,16 @@ function dedupeNRForDisplay(rows) {
   // identifier. Used in two places below: merging no-id rows against
   // by-id rows, and a final by-name collapse so two rows with
   // different-looking IDs but identical names still merge.
+  // Prefer the structured first/last fields; fall back to the combined name.
+  // Tokens are lowercased and SORTED so "Smith, John", "John Smith", and
+  // "Smith John" all produce the same key. (The old key concatenated
+  // firstName+lastName+name, so a row with name="John Smith" and one with
+  // name="Smith, John" never matched even for the same student, while the
+  // doubled concatenation created other spurious keys.)
   const nameKey = r => {
-    const parts = [r.firstName || '', r.lastName || '', r.name || ''];
-    return parts.join(' ').toLowerCase().replace(/[\s,]+/g, '');
+    const fl = [r.firstName || '', r.lastName || ''].filter(Boolean).join(' ');
+    const src = fl || r.name || '';
+    return src.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
   };
 
   // Pass 1 — dedupe by normalized student id.
@@ -4472,7 +4513,14 @@ function dedupeNRForDisplay(rows) {
     const k = nameKey(r);
     if (!k) { noName.push(r); continue; }
     const prev = byName.get(k);
-    if (!prev || isBetter(r, prev)) byName.set(k, r);
+    if (!prev) { byName.set(k, r); continue; }
+    // Two rows with the SAME name but DIFFERENT student IDs are two real
+    // students (siblings, common names) — never merge those. The old code
+    // merged by name alone, silently dropping one student from every count.
+    const idA = normalizeId(prev.id);
+    const idB = normalizeId(r.id);
+    if (idA && idB && idA !== idB) { noName.push(r); continue; }
+    if (isBetter(r, prev)) byName.set(k, r);
   }
   return [...byName.values(), ...noName];
 }
@@ -4568,7 +4616,7 @@ function nrAdd() {
   // the registered-CSV fallback OR if their resolved ID is in registeredIds.
   const isRegistered = foundInRegisteredOnly || (resolvedId && registeredIds.has(resolvedId));
 
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayLocalISO(); // local date — toISOString() is UTC and flips a day early in US evenings
   const newRow = {
     id:           resolvedId,
     name:         name       || csvStudent?.name    || '',
@@ -4584,6 +4632,9 @@ function nrAdd() {
   };
   ensureNRNameFields(newRow); // backfill firstName/lastName from typed name if needed
   nrList.unshift(newRow);
+  // Every existing row's index just shifted by one — drop transient
+  // per-index UI state so an open "Other reason" input doesn't jump rows.
+  Object.keys(nrOtherMode).forEach(k => delete nrOtherMode[k]);
 
   saveNRList(); nrUpdateKpis(); nrRender();
   if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); } // refresh hold counts
@@ -4613,11 +4664,19 @@ function nrRemove(idx) {
   if (!confirm(msg)) return;
   if (isFromCSV) {
     nrIgnoredWithdrawalIds.add(row._sourceWithdrawalId);
+    // Also record a student-keyed entry. In hosted mode _sourceWithdrawalId
+    // is 'wd-<NR row uuid>' (from the Supabase load) but syncWithdrawalsToNR
+    // builds its keys as 'wd-<studentId>-<LDA>' — the two never match, so
+    // without this the ignore list is a no-op after a page reload and the
+    // row comes back on the next withdrawal CSV import.
+    if (row.id) nrIgnoredWithdrawalIds.add('sid-' + row.id);
     saveIgnoredWithdrawals();
   }
   nrList.splice(idx, 1);
+  // Row indices shifted — transient per-index UI state is now stale.
+  Object.keys(nrOtherMode).forEach(k => delete nrOtherMode[k]);
   saveNRList(); nrUpdateKpis(); nrRender();
-  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); renderCanRegister(); }
+  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); renderCanReg(); }
   renderReasonsChart();
   if (csvLoaded.withdrawals) renderWithdrawals();
 }
@@ -4633,13 +4692,19 @@ function nrUpdateKpis() {
   // Withdrawn and Registered-for-Courses sub-counts that previously slipped
   // graduating rows through.
   const nonGrad = dedupedNR.filter(s => (s.reason || '').toLowerCase() !== 'graduating');
+  // 2026-07-15: KPIs use the same EFFECTIVE status as the table's chip and
+  // the status filter (nrEffectiveStatus). Previously Pending counted raw
+  // r.withdrawal (including rows auto-promoted to Registered) and Registered
+  // counted isNRRegistered() (including Withdrawn rows), so the three cards
+  // overlapped, summed past the total, and disagreed with what clicking a
+  // card filtered to.
   document.getElementById('nr-count').textContent    = n(nonGrad.length);
-  document.getElementById('nr-pending').textContent  = n(nonGrad.filter(s=>s.withdrawal==='Pending').length);
-  document.getElementById('nr-withdrawn').textContent = n(nonGrad.filter(s=>s.withdrawal==='Withdrawn').length);
+  document.getElementById('nr-pending').textContent  = n(nonGrad.filter(s => nrEffectiveStatus(s) === 'Pending').length);
+  document.getElementById('nr-withdrawn').textContent = n(nonGrad.filter(s => nrEffectiveStatus(s) === 'Withdrawn').length);
   // "Registered for Courses" count: students on the NR list who are also enrolled
   // in at least one course. Surfaces the discrepancy between "flagged not returning"
   // and "actually still registered" so the committee can reconcile.
-  const regNRCount = nonGrad.filter(s => isNRRegistered(s)).length;
+  const regNRCount = nonGrad.filter(s => nrEffectiveStatus(s) === 'Registered').length;
   const regEl = document.getElementById('nr-registered');
   if (regEl) regEl.textContent = n(regNRCount);
 }
@@ -4651,6 +4716,16 @@ function isNRRegistered(r) {
   if (r.isRegistered) return true;
   if (r.id && registeredIds && registeredIds.has(r.id)) return true;
   return false;
+}
+
+// Effective withdrawal status for an NR row — the single source of truth
+// shared by the KPI cards, the status filter, and the row chip so all three
+// always agree. Withdrawn wins; otherwise a still-enrolled student is
+// auto-promoted to Registered; otherwise the stored value (default Pending).
+function nrEffectiveStatus(r) {
+  if (r.withdrawal === 'Withdrawn') return 'Withdrawn';
+  if (r.withdrawal === 'Registered' || isNRRegistered(r)) return 'Registered';
+  return r.withdrawal || 'Pending';
 }
 
 function nrRender() {
@@ -4677,14 +4752,7 @@ function nrRender() {
   // those rows was still "Pending" — so the filter returned 0. The
   // computed status here mirrors `effectiveStatus` in nrRenderStaticRow.
   if (wf) {
-    indexed = indexed.filter(r => {
-      const eff = r.withdrawal === 'Withdrawn'
-        ? 'Withdrawn'
-        : (r.withdrawal === 'Registered' || isNRRegistered(r))
-          ? 'Registered'
-          : (r.withdrawal || 'Pending');
-      return eff === wf;
-    });
+    indexed = indexed.filter(r => nrEffectiveStatus(r) === wf);
   }
   if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
   if (cf) indexed=indexed.filter(r => (r.classYear || '') === cf);
@@ -5186,11 +5254,7 @@ function nrRenderStaticRow(r) {
   // wins on conflict — a withdrawn student shouldn't visually flip back
   // to Registered just because the registered CSV is stale).
   // Tony 2026-05-07: this replaces the soft-yellow row tint.
-  const effectiveStatus = r.withdrawal === 'Withdrawn'
-    ? 'Withdrawn'
-    : (r.withdrawal === 'Registered' || isNRRegistered(r))
-      ? 'Registered'
-      : (r.withdrawal || 'Pending');
+  const effectiveStatus = nrEffectiveStatus(r);
   const wChip = effectiveStatus === 'Withdrawn'  ? 'chip-red'
               : effectiveStatus === 'Registered' ? 'chip-blue'
               : 'chip-amber';
@@ -5491,7 +5555,7 @@ function updateTermWindowDisplay() {
   if (!el) return;
   const w = getCurrentTermWindow();
   if (!w.start) { el.textContent = '[set dates]'; return; }
-  el.textContent = `[${w.start}, ${w.end})${w.isOpenEnded ? ' — open-ended (uses today)' : ''}`;
+  el.textContent = `[${w.start}, ${w.end})${w.isOpenEnded ? ' — open-ended (through today)' : ''}`;
 }
 
 // Auto-sync rule: each current-term withdrawal becomes a Not Returning row
@@ -5516,7 +5580,11 @@ function syncWithdrawalsToNR() {
   let added = 0, updated = 0;
   inTerm.forEach(w => {
     const sourceId = `wd-${w.id}-${w.lastActiveDate}`;
+    // Two key formats: 'wd-<id>-<LDA>' (rows created locally) and
+    // 'sid-<studentId>' (recorded by nrRemove — covers hosted-mode rows whose
+    // _sourceWithdrawalId is a Supabase uuid we can't reconstruct here).
     if (nrIgnoredWithdrawalIds.has(sourceId)) return; // user removed this earlier — don't bring it back
+    if (w.id && nrIgnoredWithdrawalIds.has('sid-' + w.id)) return;
     if (newStudents && w.id && newStudents[w.id]) return; // new-student withdrawals stay only on the new student list
     const mappedReason = mapWithdrawalReason(w.reason);
     const csvNotes = w.processedDate
@@ -5547,7 +5615,7 @@ function syncWithdrawalsToNR() {
         reason: mappedReason,
         notes: csvNotes,
         withdrawal: 'Withdrawn',
-        dateAdded: new Date().toISOString().slice(0,10),
+        dateAdded: todayLocalISO(),
         _sourceWithdrawalId: sourceId,
         _withdrawalLDA: w.lastActiveDate,
         _updatedAt: new Date().toISOString(),
@@ -6360,6 +6428,7 @@ async function fetchDashboardData() {
     nrReports: nrReports.data || [],
     terms: terms.data || [],
     latestSnapshot: snapshots.data?.[0] || null,
+    snapshots: snapshots.data || [],
     // ftft uses null (not []) when the fetch erred so the consumer can
     // distinguish "Supabase confirmed: no FTFT" (array, possibly empty)
     // from "Supabase fetch failed, don't know" (null). Without this the
@@ -6382,19 +6451,22 @@ async function renderPublicSummary() {
   }
   empty.style.display = 'none';
   content.style.display = 'block';
-  // Set the simple count widgets directly from snapshot_metrics
-  document.getElementById('s-total-ret').textContent  = n(m.total_returning || 0);
-  document.getElementById('s-ret-reg').textContent    = n(m.total_registered || 0);
-  document.getElementById('s-ret-unreg').textContent  = n((m.total_returning || 0) - (m.total_registered || 0));
-  document.getElementById('s-ret-rate').textContent   = (m.registration_rate != null ? Math.round(m.registration_rate * 10)/10 : 0) + '%';
-  // "Total New" on the public Summary mirrors the committee Summary: only
-  // currently-registered new students, not the raw new-students-CSV count.
-  // m.new_registered comes from computeSnapshotMetrics' status filter.
-  document.getElementById('s-new-total').textContent  = n(m.new_registered || 0);
-  document.getElementById('s-new-reg').textContent    = n(m.new_registered || 0);
-  document.getElementById('s-all-total').textContent  = n((m.total_returning || 0) + (m.total_new || 0));
-  document.getElementById('s-all-reg').textContent    = n((m.total_registered || 0) + (m.new_registered || 0));
-  document.getElementById('s-can-reg').textContent    = n(m.can_register || 0);
+  // Null-safe setter — the Summary layout has evolved and several of the IDs
+  // this function originally wrote to no longer exist. The old direct
+  // document.getElementById(...).textContent calls threw on the first missing
+  // element, so the public Summary never populated ANY value.
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  // Set the count widgets from snapshot_metrics, mapped to the committee
+  // Summary's KPI cards. total_registered is returning-only, so the "Total
+  // Registered (returning + new)" card adds new_registered back.
+  setText('s-all-reg',  n((m.total_registered || 0) + (m.new_registered || 0)));
+  setText('s-eligible', n((m.total_returning || 0) + (m.not_returning_count || 0)));
+  setText('s-not-ret',  n(m.not_returning_count || 0));
+  setText('s-new-total', n(m.new_registered || 0));
+  setText('s-ret-rate', (m.registration_rate != null ? Math.round(m.registration_rate * 10)/10 : 0) + '%');
   // Fall-to-Fall Persistence Rate — pulled from snapshot_metrics so anon
   // viewers see the same value as committee members. Falls back to "—"
   // when the column is missing (pre-0010 snapshot) or N is 0 and there's
@@ -6522,7 +6594,20 @@ async function loadHostedDashboardData() {
   data.students.forEach(s => {
     if (s.snapshot_id) snapCounts[s.snapshot_id] = (snapCounts[s.snapshot_id] || 0) + 1;
   });
-  const latestSnapId = Object.entries(snapCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  // Among snapshots that actually HAVE student rows, prefer the most recently
+  // uploaded one. (Empty snapshot rows from interrupted uploads are skipped
+  // because they never appear in snapCounts.) 2026-07-15: previously this
+  // picked the snapshot with the MOST students, which could silently pin the
+  // dashboard to an older, larger upload whenever the end-of-upload cleanup
+  // of stale rows failed. Row-count remains the fallback for snapshot ids
+  // missing from the csv_snapshots fetch (limited to the 50 most recent).
+  const snapUploadedAt = new Map((data.snapshots || []).map(s => [s.id, s.uploaded_at || '']));
+  const latestSnapId =
+    Object.keys(snapCounts)
+      .filter(id => snapUploadedAt.has(id))
+      .sort((a, b) => snapUploadedAt.get(b).localeCompare(snapUploadedAt.get(a)))[0]
+    || Object.entries(snapCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
+    || null;
 
   data.students.forEach(s => {
     if (latestSnapId && s.snapshot_id !== latestSnapId && !s.manual_status) return;
@@ -6666,7 +6751,7 @@ async function loadHostedDashboardData() {
   });
   // Term settings — pick "current" + "next"
   if (data.terms.length) {
-    const today = new Date().toISOString().slice(0,10);
+    const today = todayLocalISO(); // local date — UTC would advance the term a day early in US evenings
     const past = data.terms.filter(t => t.start_date <= today);
     const future = data.terms.filter(t => t.start_date > today);
     const cur = past[past.length - 1];
@@ -7069,10 +7154,13 @@ async function pushDataToSupabase() {
       // silently overwritten on every withdrawal re-upload. Same risk
       // applied to major, sport, reason, withdrawal_status, notes — pull
       // them all so the guards have real values to compare against.
+      // Fetch hidden rows too. A student whose ONLY NR rows are hidden was
+      // explicitly removed by a committee member (nrRemove soft-deletes via
+      // is_hidden=true) — re-inserting a fresh row on every withdrawal CSV
+      // re-upload resurrected rows the user had moderated away.
       const exRes = await sb.from('not_returning_reports')
-        .select('id, student_id, source_withdrawal_id, updated_at, class_year, major, sport, reason, withdrawal_status, notes')
-        .in('student_id', studentIds)
-        .eq('is_hidden', false);
+        .select('id, student_id, source_withdrawal_id, updated_at, is_hidden, class_year, major, sport, reason, withdrawal_status, notes')
+        .in('student_id', studentIds);
       expect('NR existing-by-student select', exRes);
       const byStudent = new Map();
       for (const r of (exRes.data || [])) {
@@ -7101,7 +7189,12 @@ async function pushDataToSupabase() {
           source_withdrawal_id: w.id,
           notes: `Auto-imported. Last active ${w.last_active_date}.`,
         };
-        const existing = byStudent.get(w.student_id) || [];
+        const allRows = byStudent.get(w.student_id) || [];
+        const existing = allRows.filter(r => !r.is_hidden);
+        // Rows exist but every one is hidden → the committee removed this
+        // student from the NR list on purpose. Leave them removed; the admin
+        // can re-add via the NR form or the manual NR override if needed.
+        if (allRows.length > 0 && existing.length === 0) continue;
         if (existing.length === 0) {
           // No NR row for this student yet — fresh insert. Look up sport
           // in the in-memory students map; if the student appears in any
@@ -7192,27 +7285,58 @@ async function pushDataToSupabase() {
 }
 
 // Compute a snapshot_metrics row from current in-memory data.
+// 2026-07-15: rewritten to mirror renderSummary's formulas exactly. The old
+// version predated the graduating-exclusion and NR-dedupe fixes, so every
+// persisted aggregate (and therefore the public Summary) disagreed with the
+// committee dashboard: total_returning included NR students, nothing filtered
+// graduating IDs, and registration_rate was registered ÷ total rather than
+// the Semester Persistence Rate (effective registered ÷ eligible to return).
 function computeSnapshotMetrics() {
-  const totalRet = Object.keys(returningStudents).length + [...registeredIds].filter(id => !newStudents[id]).length;
-  const retRegistered = [...registeredIds].filter(id => !newStudents[id]).length;
-  const totalNew = Object.keys(newStudents).length;
-  const newReg = Object.values(newStudents).filter(s => s.status === 'Registered').length;
-  const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.length, 0);
-  const holdsBy = HOLD_DISPLAY.map(h => (holdGroups[h] || []).length);
-  const wdThisTerm = withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate)).length;
-  // Fall-to-Fall rate — same numerator as the public registration_rate
-  // above, but denominator gets the prior semester's withdraws added back.
-  // When N=0 the rate equals registration_rate (which is the Semester
-  // Persistence value the public Summary already shows). Persisting both
-  // here lets renderPublicSummary populate the Fall-to-Fall card without
-  // joining the terms table.
+  const gradIds = getGraduatingIdSet();
+  const isActive = id => !gradIds.has(id);
+  const dedupedNR = getDedupedNRList();
+  const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
+
+  const totalNew = Object.values(newStudents).filter(s => isActive(s.id)).length;
+  const newReg = Object.values(newStudents)
+    .filter(s => s.status === 'Registered' && isActive(s.id)).length;
+  const allRegistered = [...registeredIds].filter(isActive).length;
+  const returningRegistered = allRegistered - newReg;
+  const overlapRegNR = [...registeredIds]
+    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
+  const effReg = returningRegistered - overlapRegNR;
+
+  const returningIdSet = new Set([
+    ...Object.keys(returningStudents).filter(isActive),
+    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
+  ]);
+  const totalRet = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  const notReturningInCohort = dedupedNR.filter(r =>
+    (r.reason || '').toLowerCase() !== 'graduating' &&
+    r.id && returningIdSet.has(r.id)
+  ).length;
+  const eligible = totalRet + notReturningInCohort;
+  const persistenceRate = eligible ? Math.round(effReg / eligible * 1000) / 10 : 0;
+
+  const totalHolds = Object.values(holdGroups)
+    .reduce((a, g) => a + g.filter(s => isActive(s.id)).length, 0);
+  const holdsBy = HOLD_DISPLAY.map(h =>
+    (holdGroups[h] || []).filter(s => isActive(s.id)).length);
+  // Unique students (not rows) — a corrected last-active date creates a second
+  // withdrawal row for the same student and shouldn't count twice.
+  const wdThisTerm = new Set(
+    withdrawalsList.filter(w => isInCurrentTerm(w.lastActiveDate)).map(w => w.id)
+  ).size;
+  // Fall-to-Fall rate — same numerator as the Semester Persistence Rate, but
+  // the denominator adds back the prior semester's leavers.
   const priorLeavers = Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0);
-  const f2fDenom = totalRet + priorLeavers;
-  const fallToFall = f2fDenom ? Math.round(retRegistered / f2fDenom * 1000) / 10 : 0;
-  // Slice breakdowns
+  const f2fDenom = eligible + priorLeavers;
+  const fallToFall = f2fDenom ? Math.round(effReg / f2fDenom * 1000) / 10 : 0;
+  // Slice breakdowns (unregistered returning students, ex-graduating)
   function tally(getter) {
     const t = {};
     Object.values(returningStudents).forEach(s => {
+      if (!isActive(s.id)) return;
       const v = getter(s); if (!v) return;
       t[v] = t[v] || { total: 0, registered: 0 };
       t[v].total++;
@@ -7222,8 +7346,8 @@ function computeSnapshotMetrics() {
   }
   return {
     total_returning: totalRet,
-    total_registered: retRegistered,
-    registration_rate: totalRet ? (retRegistered / totalRet) * 100 : 0,
+    total_registered: effReg,
+    registration_rate: persistenceRate,
     total_new: totalNew,
     new_registered: newReg,
     total_holds: totalHolds,
@@ -7232,8 +7356,10 @@ function computeSnapshotMetrics() {
     holds_registrar: holdsBy[2] || 0,
     holds_missing_docs: holdsBy[3] || 0,
     holds_immunization: holdsBy[4] || 0,
-    can_register: canRegisterStudents.length,
-    not_returning_count: getDedupedNRList().filter(r => !r.is_hidden).length,
+    can_register: canRegisterStudents.filter(s => isActive(s.id)).length,
+    // Matches the Summary's "Total Not Returning" card: deduped, ex-graduating.
+    not_returning_count: dedupedNR.filter(r =>
+      (r.reason || '').toLowerCase() !== 'graduating').length,
     withdrawals_this_term: wdThisTerm,
     high_risk_count: 0,
     critical_risk_count: 0,
@@ -7245,6 +7371,7 @@ function computeSnapshotMetrics() {
     by_sport: (() => {
       const t = {};
       Object.values(returningStudents).forEach(s => {
+        if (!isActive(s.id)) return;
         (s.sports || []).forEach(sp => {
           if (!sp) return;
           t[sp] = t[sp] || { total: 0, registered: 0 };
@@ -7663,27 +7790,10 @@ if (HOSTED) {
     'Local-file mode — data stays in your browser';
 }
 
-// Allow Enter on the auth gate fields to submit at each step.
-const _authGateInput = document.getElementById('auth-gate-email');
-if (_authGateInput) {
-  _authGateInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') sendOtpFromGate();
-  });
-}
-const _authGateCodeInput = document.getElementById('auth-gate-code');
-if (_authGateCodeInput) {
-  _authGateCodeInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') verifyOtpFromGate();
-  });
-  // Auto-submit as soon as the user has typed/pasted a 6-digit code. The
-  // _verifyInFlight guard inside verifyOtpFromGate prevents this from
-  // double-firing if the user also hits Enter or clicks Verify.
-  _authGateCodeInput.addEventListener('input', e => {
-    const v = e.target.value.replace(/\D/g, '');
-    e.target.value = v;
-    if (v.length === 6) verifyOtpFromGate();
-  });
-}
+// Enter on the auth-gate email field is handled by the surrounding form's
+// onsubmit (authGateSubmitEmail). The old keydown listeners here called
+// sendOtpFromGate/verifyOtpFromGate — leftovers from the removed OTP flow
+// that no longer exist, so every Enter press threw a ReferenceError.
 </script>
 </body>
 </html>
