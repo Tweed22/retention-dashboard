@@ -1046,7 +1046,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card blue kpi-clickable" onclick="goToRegisteredPage()" title="Open the Registered tab"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning + NR in current rosters</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning + current-term Not Returning</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR entries incl. prior-term (ex-Graduating)</div></div>
       <div class="kpi-card sky kpi-clickable" onclick="goToNewPage()" title="Open the New Students tab"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
     </div>
@@ -2647,12 +2647,17 @@ function renderSummary() {
   const notReturning = dedupedNR.filter(r =>
     (r.reason || '').toLowerCase() !== 'graduating'
   ).length;
-  // For Eligible to Return, only count NR entries whose student is actually in the
-  // current cohort. Orphan entries from prior-term imports inflate the denominator
-  // without a compensating decrease in totalReturning.
+  // For Eligible to Return, only count NR entries whose student is actually in
+  // the current cohort: present in a current roster OR withdrawn during the
+  // current term (the registrar's daily exports drop processed withdrawals
+  // from both rosters, but those students were enrolled this term and were
+  // eligible to return — Tony 2026-07-15). Entries that match neither are
+  // prior-term leavers with no possible numerator presence; they'd inflate
+  // the denominator without a compensating decrease in totalReturning.
+  const ctwIds = getCurrentTermWithdrawalIdSet();
   const notReturningInCohort = dedupedNR.filter(r =>
     (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && returningIdSet.has(r.id)
+    r.id && (returningIdSet.has(r.id) || ctwIds.has(r.id))
   ).length;
   const eligibleReturn = totalReturning + notReturningInCohort;
   const totalRegistered = allRegistered;
@@ -3030,9 +3035,10 @@ async function backfillRecentHistoryToToday() {
     ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
   ]);
   const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  const ctwIdsBackfill = getCurrentTermWithdrawalIdSet();
   const notReturningCount = dedupedNR.filter(r =>
     (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && returningIdSet.has(r.id)
+    r.id && (returningIdSet.has(r.id) || ctwIdsBackfill.has(r.id))
   ).length;
   const eligibleReturn = totalReturning + notReturningCount;
   const rate = eligibleReturn ? Math.round(effReg / eligibleReturn * 1000) / 10 : 0;
@@ -3188,9 +3194,10 @@ async function renderTrendChart() {
     ...[...registeredIds].filter(id => isActiveTrend(id) && !newStudents[id]),
   ]);
   const totalReturningTrend = [...returningIdSetTrend].filter(id => !nrIdSetTrend.has(id)).length;
+  const ctwIdsTrend = getCurrentTermWithdrawalIdSet();
   const notReturningTrend = dedupedNRTrend.filter(r =>
     (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && returningIdSetTrend.has(r.id)
+    r.id && (returningIdSetTrend.has(r.id) || ctwIdsTrend.has(r.id))
   ).length;
   const eligibleTrend = totalReturningTrend + notReturningTrend;
   const currentNrRate = eligibleTrend ? Math.round(notReturningTrend / eligibleTrend * 1000) / 10 : null;
@@ -4432,6 +4439,22 @@ function getGraduatingIdSet() {
     nrList
       .filter(r => (r.reason || '').toLowerCase() === 'graduating')
       .map(r => r.id)
+      .filter(Boolean)
+  );
+}
+
+// Student IDs with a withdrawal whose last-active date falls in the current
+// term. Tony 2026-07-15: the registrar's daily unregistered/registered
+// exports DROP a student as soon as their withdrawal is processed, so a
+// current-term withdrawer appears in NO roster — but they were enrolled this
+// term and eligible to return, so the persistence denominator must treat
+// them as in-cohort. Used alongside returningIdSet in every eligible-to-
+// return computation.
+function getCurrentTermWithdrawalIdSet() {
+  return new Set(
+    withdrawalsList
+      .filter(w => isInCurrentTerm(w.lastActiveDate))
+      .map(w => w.id)
       .filter(Boolean)
   );
 }
@@ -7047,9 +7070,10 @@ async function pushDataToSupabase() {
         ...[...registeredIds].filter(id => isActiveSnap(id) && !newStudents[id]),
       ]);
       const totalReturningSnap = [...returningIdSetSnap].filter(id => !nrIdSetSnap.has(id)).length;
+      const ctwIdsSnap = getCurrentTermWithdrawalIdSet();
       const notReturningCount = dedupedSnap.filter(r =>
         (r.reason || '').toLowerCase() !== 'graduating' &&
-        r.id && returningIdSetSnap.has(r.id)
+        r.id && (returningIdSetSnap.has(r.id) || ctwIdsSnap.has(r.id))
       ).length;
       const eligibleSnap = totalReturningSnap + notReturningCount;
       const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
@@ -7311,9 +7335,10 @@ function computeSnapshotMetrics() {
     ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
   ]);
   const totalRet = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  const ctwIds = getCurrentTermWithdrawalIdSet();
   const notReturningInCohort = dedupedNR.filter(r =>
     (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && returningIdSet.has(r.id)
+    r.id && (returningIdSet.has(r.id) || ctwIds.has(r.id))
   ).length;
   const eligible = totalRet + notReturningInCohort;
   const persistenceRate = eligible ? Math.round(effReg / eligible * 1000) / 10 : 0;
