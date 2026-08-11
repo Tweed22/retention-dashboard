@@ -213,6 +213,7 @@ const keepCol = idx => (idx >= 19 && idx <= 24) || idx >= 28;
 
 let processedWorkbook = null;
 let outputFileName = '';
+let reportSheetMap = new Map(); // data sheet name → actual report sheet name
 
 // ── DOM refs ─────────────────────────────────────────────────────
 const dropZone    = document.getElementById('dropZone');
@@ -273,6 +274,17 @@ function reportSheetName(dataSheetName) {
     : dataSheetName + suffix;
 }
 
+function safeReportSheetName(wb, dataSheetName) {
+  const base = reportSheetName(dataSheetName);
+  if (!wb.SheetNames.includes(base)) return base;
+  for (let n = 2; n <= 99; n++) {
+    const tag = ' ' + n;
+    const alt = base.slice(0, 31 - tag.length) + tag;
+    if (!wb.SheetNames.includes(alt)) return alt;
+  }
+  return null;
+}
+
 function processWorkbook(wb) {
   let totalDataRows = 0;
   let totalAnonymized = 0;
@@ -294,9 +306,18 @@ function processWorkbook(wb) {
   processedWorkbook = newWb;
 
   // Pass 2: add a summary report sheet after each data sheet
+  reportSheetMap = new Map();
   processed.forEach(({ name }) => {
-    const summaryWs = buildSummarySheet(name);
-    XLSX.utils.book_append_sheet(processedWorkbook, summaryWs, reportSheetName(name));
+    try {
+      const summaryWs = buildSummarySheet(name);
+      const rName = safeReportSheetName(processedWorkbook, name);
+      if (rName) {
+        XLSX.utils.book_append_sheet(processedWorkbook, summaryWs, rName);
+        reportSheetMap.set(name, rName);
+      }
+    } catch (e) {
+      console.error('Report sheet error for "' + name + '":', e);
+    }
   });
 
   // Update stats
@@ -375,16 +396,16 @@ downloadZipBtn.addEventListener('click', async () => {
     const baseName = outputFileName.replace(/_cleaned\.xlsx$/i, '');
     const reportSuffix = ' Report';
 
-    // Only iterate over data sheets (skip the auto-added report sheets)
-    const dataSheets = processedWorkbook.SheetNames.filter(n => !n.endsWith(reportSuffix));
+    // Only iterate over original data sheets (use the map we built during processing)
+    const dataSheets = [...reportSheetMap.keys()];
 
     dataSheets.forEach(sheetName => {
       const singleWb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(singleWb, processedWorkbook.Sheets[sheetName], sheetName);
 
-      // Include this program's report sheet
-      const rName = reportSheetName(sheetName);
-      if (processedWorkbook.Sheets[rName]) {
+      // Include this program's report sheet using the actual resolved name
+      const rName = reportSheetMap.get(sheetName);
+      if (rName && processedWorkbook.Sheets[rName]) {
         XLSX.utils.book_append_sheet(singleWb, processedWorkbook.Sheets[rName], rName);
       }
 
@@ -467,16 +488,19 @@ function buildSummarySheet(sheetName) {
 // ── Report Preview ────────────────────────────────────────────────
 
 function buildReportPreview() {
-  const wb = processedWorkbook;
-  const tabsBar  = document.getElementById('reportTabsBar');
-  const preview  = document.getElementById('reportPreview');
+  const tabsBar = document.getElementById('reportTabsBar');
+  const preview = document.getElementById('reportPreview');
 
-  tabsBar.innerHTML = wb.SheetNames.map((name, i) =>
+  // Only show tabs for original data sheets (keys of reportSheetMap)
+  const dataSheets = [...reportSheetMap.keys()];
+  if (!dataSheets.length) return;
+
+  tabsBar.innerHTML = dataSheets.map((name, i) =>
     `<button class="report-tab-btn${i === 0 ? ' active' : ''}" onclick="showReportTab(this,'${escHtml(name)}')">${escHtml(name)}</button>`
   ).join('');
 
   preview.classList.add('visible');
-  showReportTab(tabsBar.firstChild, wb.SheetNames[0]);
+  showReportTab(tabsBar.firstChild, dataSheets[0]);
 }
 
 function showReportTab(btn, sheetName) {
