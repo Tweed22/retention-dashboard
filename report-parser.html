@@ -266,21 +266,38 @@ function handleFile(file) {
 }
 
 // ── Workbook processor ────────────────────────────────────────────
+function reportSheetName(dataSheetName) {
+  const suffix = ' Report';
+  return (dataSheetName + suffix).length > 31
+    ? dataSheetName.slice(0, 31 - suffix.length) + suffix
+    : dataSheetName + suffix;
+}
+
 function processWorkbook(wb) {
-  const newWb = XLSX.utils.book_new();
   let totalDataRows = 0;
   let totalAnonymized = 0;
   const sheetResults = [];
+  const processed = []; // { name, ws, dataRows, anonymized }
 
+  // Pass 1: process all data sheets
   wb.SheetNames.forEach(name => {
     const { newWs, dataRows, anonymized } = processSheet(wb.Sheets[name]);
-    XLSX.utils.book_append_sheet(newWb, newWs, name);
+    processed.push({ name, ws: newWs, dataRows, anonymized });
     totalDataRows += dataRows;
     totalAnonymized += anonymized;
     sheetResults.push({ name, dataRows, anonymized });
   });
 
+  // Build workbook with data sheets first
+  const newWb = XLSX.utils.book_new();
+  processed.forEach(({ name, ws }) => XLSX.utils.book_append_sheet(newWb, ws, name));
   processedWorkbook = newWb;
+
+  // Pass 2: add a summary report sheet after each data sheet
+  processed.forEach(({ name }) => {
+    const summaryWs = buildSummarySheet(name);
+    XLSX.utils.book_append_sheet(processedWorkbook, summaryWs, reportSheetName(name));
+  });
 
   // Update stats
   document.getElementById('statSheets').textContent   = wb.SheetNames.length;
@@ -347,7 +364,7 @@ downloadBtn.addEventListener('click', () => {
   XLSX.writeFile(processedWorkbook, outputFileName);
 });
 
-// ── Download: ZIP (one XLSX per worksheet) ────────────────────────
+// ── Download: ZIP (one XLSX per worksheet, each with its report sheet) ──
 downloadZipBtn.addEventListener('click', async () => {
   if (!processedWorkbook) return;
   downloadZipBtn.disabled = true;
@@ -356,17 +373,23 @@ downloadZipBtn.addEventListener('click', async () => {
   try {
     const zip = new JSZip();
     const baseName = outputFileName.replace(/_cleaned\.xlsx$/i, '');
+    const reportSuffix = ' Report';
 
-    processedWorkbook.SheetNames.forEach(sheetName => {
-      // Create a standalone workbook for this sheet
+    // Only iterate over data sheets (skip the auto-added report sheets)
+    const dataSheets = processedWorkbook.SheetNames.filter(n => !n.endsWith(reportSuffix));
+
+    dataSheets.forEach(sheetName => {
       const singleWb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(singleWb, processedWorkbook.Sheets[sheetName], sheetName);
 
-      // Write to binary array
-      const xlsxBytes = XLSX.write(singleWb, { bookType: 'xlsx', type: 'array', cellDates: true });
+      // Include this program's report sheet
+      const rName = reportSheetName(sheetName);
+      if (processedWorkbook.Sheets[rName]) {
+        XLSX.utils.book_append_sheet(singleWb, processedWorkbook.Sheets[rName], rName);
+      }
 
-      // Sanitize sheet name for use as a filename
-      const safeName = sheetName.replace(/[\\/:*?"<>|]/g, '_');
+      const xlsxBytes = XLSX.write(singleWb, { bookType: 'xlsx', type: 'array', cellDates: true });
+      const safeName  = sheetName.replace(/[\\/:*?"<>|]/g, '_');
       zip.file(safeName + '.xlsx', xlsxBytes);
     });
 
@@ -385,6 +408,60 @@ downloadZipBtn.addEventListener('click', async () => {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Label cleaner ─────────────────────────────────────────────────
+// Strips preamble like "Please rate your satisfaction... - " leaving only
+// the text after the last " - ".
+function cleanLabel(raw) {
+  const s = String(raw || '').trim();
+  const idx = s.lastIndexOf(' - ');
+  return idx >= 0 ? s.slice(idx + 3).trim() : s;
+}
+
+// ── Summary sheet builder (added to XLSX output) ──────────────────
+function buildSummarySheet(sheetName) {
+  const ws   = processedWorkbook.Sheets[sheetName];
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+
+  if (data.length < 3) return XLSX.utils.aoa_to_sheet([['No data']]);
+
+  const headers  = data[0];
+  const labels   = data[1];
+  const dataRows = data.slice(2);
+
+  const cols = headers.map((header, ci) => {
+    const nums = dataRows
+      .map(r => { const n = parseFloat(r[ci]); return isFinite(n) ? n : null; })
+      .filter(v => v !== null);
+    return {
+      section: getSectionName(String(header || '')),
+      label:   cleanLabel(labels[ci] || header || ''),
+      avg:     nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null,
+      n:       nums.length
+    };
+  }).filter(c => c.avg !== null && c.n > 0);
+
+  if (!cols.length) return XLSX.utils.aoa_to_sheet([['No numeric data found']]);
+
+  const order = [], groups = {};
+  cols.forEach(c => {
+    if (!groups[c.section]) { groups[c.section] = []; order.push(c.section); }
+    groups[c.section].push(c);
+  });
+
+  const aoa = [['Item', 'Avg Rating', 'Responses (n)']];
+  order.forEach(section => {
+    aoa.push([section, '', '']);
+    groups[section].forEach(c => aoa.push([c.label, Math.round(c.avg * 1000) / 1000, c.n]));
+    aoa.push(['', '', '']);
+  });
+  if (aoa[aoa.length - 1].every(v => v === '')) aoa.pop();
+
+  // Apply column widths
+  const summaryWs = XLSX.utils.aoa_to_sheet(aoa);
+  summaryWs['!cols'] = [{ wch: 60 }, { wch: 14 }, { wch: 16 }];
+  return summaryWs;
 }
 
 // ── Report Preview ────────────────────────────────────────────────
@@ -421,7 +498,7 @@ function buildSheetReport(sheetName) {
   // Build per-column stats
   const cols = headers.map((header, ci) => {
     const section = getSectionName(String(header || ''));
-    const label   = String(labels[ci] || header || '').trim();
+    const label   = cleanLabel(labels[ci] || header || '');
 
     const nums = dataRows
       .map(r => { const v = r[ci]; const n = parseFloat(v); return isFinite(n) ? n : null; })
