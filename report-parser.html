@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Report Parser</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; color: #1a1d23; min-height: 100vh; }
+
+.header { background: #1e2d4f; color: white; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; }
+.header-left h1 { font-size: 17px; font-weight: 700; }
+.header-left .subtitle { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+.back-link { font-size: 12px; color: rgba(255,255,255,0.7); text-decoration: none; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; padding: 5px 12px; transition: background 0.15s; }
+.back-link:hover { background: rgba(255,255,255,0.12); color: white; }
+
+main { max-width: 700px; margin: 36px auto; padding: 0 20px 60px; }
+
+.card { background: white; border-radius: 12px; border: 1px solid #e0e4ec; padding: 28px; margin-bottom: 18px; }
+.card-title { font-size: 14px; font-weight: 700; color: #1a1d23; margin-bottom: 16px; }
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 44px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.drop-zone:hover, .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; }
+.drop-zone.loaded { border-color: #16a34a; background: #f0fdf4; }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-icon { font-size: 30px; margin-bottom: 10px; }
+.drop-label { font-size: 14px; font-weight: 700; color: #1a1d23; margin-bottom: 4px; }
+.drop-hint { font-size: 12px; color: #888; }
+.drop-status { font-size: 12px; font-weight: 600; color: #16a34a; margin-top: 10px; min-height: 18px; }
+
+/* Error */
+.error-box { display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 11px 14px; color: #dc2626; font-size: 13px; margin-top: 14px; }
+.error-box.visible { display: block; }
+
+/* Rules */
+.rules { background: #f8f9fb; border: 1px solid #e0e4ec; border-radius: 8px; padding: 14px 16px; margin-top: 20px; }
+.rules-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #aaa; margin-bottom: 10px; }
+.rules ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rules li { font-size: 12px; color: #555; display: flex; align-items: flex-start; gap: 7px; line-height: 1.4; }
+.rules li .check { color: #16a34a; font-weight: 700; flex-shrink: 0; margin-top: 0px; }
+
+/* Summary section */
+.summary-section { display: none; }
+.summary-section.visible { display: block; }
+
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat { background: white; border: 1px solid #e0e4ec; border-radius: 10px; padding: 16px; text-align: center; }
+.stat-value { font-size: 28px; font-weight: 700; color: #1e2d4f; line-height: 1; }
+.stat-label { font-size: 11px; color: #888; margin-top: 4px; }
+
+.sheet-list { background: white; border: 1px solid #e0e4ec; border-radius: 10px; overflow: hidden; }
+.sheet-list-header { background: #f8f9fb; padding: 10px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #aaa; border-bottom: 1px solid #e0e4ec; display: flex; justify-content: space-between; }
+.sheet-item { padding: 11px 16px; border-bottom: 1px solid #f0f2f6; display: flex; justify-content: space-between; align-items: center; }
+.sheet-item:last-child { border-bottom: none; }
+.sheet-name { font-size: 13px; font-weight: 600; color: #1a1d23; }
+.sheet-meta { font-size: 11px; color: #888; }
+.sheet-badge { display: inline-block; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+
+/* Download */
+.download-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.download-btn {
+  display: block; width: 100%; padding: 14px;
+  color: white; border: none; border-radius: 9px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background 0.15s; letter-spacing: 0.2px;
+}
+.download-btn.green  { background: #16a34a; }
+.download-btn.green:hover:not(:disabled)  { background: #15803d; }
+.download-btn.indigo { background: #4f46e5; }
+.download-btn.indigo:hover:not(:disabled) { background: #4338ca; }
+.download-btn:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+
+.processing-note { font-size: 11px; color: #888; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Report Parser</h1>
+    <div class="subtitle">Anonymize and clean survey reports for sharing</div>
+  </div>
+  <a href="/" class="back-link">← Dashboard</a>
+</div>
+
+<main>
+
+  <div class="card">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+      <div class="drop-icon">📊</div>
+      <div class="drop-label">Drag &amp; drop your XLSX report here</div>
+      <div class="drop-hint">or click to browse &mdash; accepts .xlsx and .xls files</div>
+      <div class="drop-status" id="dropStatus"></div>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="rules">
+      <div class="rules-title">Processing Rules</div>
+      <ul>
+        <li><span class="check">✓</span> All worksheets processed and preserved in output</li>
+        <li><span class="check">✓</span> Row 2 preserved exactly as-is (not modified) on every sheet</li>
+        <li><span class="check">✓</span> Columns A–S removed (first 19 columns)</li>
+        <li><span class="check">✓</span> Student names in column Y replaced with Student 1, Student 2… per sheet</li>
+        <li><span class="check">✓</span> Columns Z, AA, and AB removed</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="summary-section" id="summarySection">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-value" id="statSheets">—</div><div class="stat-label">Worksheets</div></div>
+      <div class="stat"><div class="stat-value" id="statRows">—</div><div class="stat-label">Data Rows</div></div>
+      <div class="stat"><div class="stat-value" id="statStudents">—</div><div class="stat-label">Names Anonymized</div></div>
+    </div>
+
+    <div class="sheet-list">
+      <div class="sheet-list-header">
+        <span>Worksheet</span>
+        <span>Result</span>
+      </div>
+      <div id="sheetListBody"></div>
+    </div>
+
+    <div class="download-row">
+      <button class="download-btn green"  id="downloadBtn"    disabled>⬇ Download as XLSX</button>
+      <button class="download-btn indigo" id="downloadZipBtn" disabled>⬇ Download as ZIP</button>
+    </div>
+    <div class="processing-note" id="processingNote"></div>
+  </div>
+
+</main>
+
+<script>
+// ── Column math (0-based) ─────────────────────────────────────────
+// A=0 … S=18  → remove (first 19 columns)
+// T=19 … Y=24 → keep   (col Y gets anonymized)
+// Z=25, AA=26, AB=27   → remove
+// AC=28+               → keep
+const COL_Y = 24;
+const keepCol = idx => (idx >= 19 && idx <= 24) || idx >= 28;
+
+let processedWorkbook = null;
+let outputFileName = '';
+
+// ── DOM refs ─────────────────────────────────────────────────────
+const dropZone    = document.getElementById('dropZone');
+const fileInput   = document.getElementById('fileInput');
+const dropStatus  = document.getElementById('dropStatus');
+const errorBox    = document.getElementById('errorBox');
+const summarySection = document.getElementById('summarySection');
+const sheetListBody  = document.getElementById('sheetListBody');
+const downloadBtn    = document.getElementById('downloadBtn');
+const downloadZipBtn = document.getElementById('downloadZipBtn');
+const processingNote = document.getElementById('processingNote');
+
+// ── Drag & drop ───────────────────────────────────────────────────
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+['dragleave','dragend'].forEach(ev => dropZone.addEventListener(ev, () => dropZone.classList.remove('drag-over')));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function showError(msg) { errorBox.textContent = msg; errorBox.classList.add('visible'); }
+function clearError()   { errorBox.classList.remove('visible'); }
+
+// ── File handler ─────────────────────────────────────────────────
+function handleFile(file) {
+  clearError();
+  if (!/\.(xlsx|xls)$/i.test(file.name)) {
+    showError('Please upload an .xlsx or .xls file.');
+    return;
+  }
+  outputFileName = file.name.replace(/\.xlsx?$/i, '') + '_cleaned.xlsx';
+  dropStatus.textContent = 'Reading file…';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+      processWorkbook(wb);
+    } catch (err) {
+      showError('Could not read the file. Make sure it is a valid Excel workbook. (' + err.message + ')');
+      dropStatus.textContent = '';
+    }
+  };
+  reader.onerror = () => showError('File could not be read.');
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Workbook processor ────────────────────────────────────────────
+function processWorkbook(wb) {
+  const newWb = XLSX.utils.book_new();
+  let totalDataRows = 0;
+  let totalAnonymized = 0;
+  const sheetResults = [];
+
+  wb.SheetNames.forEach(name => {
+    const { newWs, dataRows, anonymized } = processSheet(wb.Sheets[name]);
+    XLSX.utils.book_append_sheet(newWb, newWs, name);
+    totalDataRows += dataRows;
+    totalAnonymized += anonymized;
+    sheetResults.push({ name, dataRows, anonymized });
+  });
+
+  processedWorkbook = newWb;
+
+  // Update stats
+  document.getElementById('statSheets').textContent   = wb.SheetNames.length;
+  document.getElementById('statRows').textContent     = totalDataRows.toLocaleString();
+  document.getElementById('statStudents').textContent = totalAnonymized.toLocaleString();
+
+  // Sheet breakdown
+  sheetListBody.innerHTML = sheetResults.map(s =>
+    `<div class="sheet-item">
+      <span class="sheet-name">${escHtml(s.name)}</span>
+      <span class="sheet-meta">${s.dataRows} rows &nbsp;·&nbsp; <span class="sheet-badge">${s.anonymized} anonymized</span></span>
+    </div>`
+  ).join('');
+
+  // Show output
+  dropZone.classList.add('loaded');
+  dropStatus.textContent = '✓ Processed — ready to download';
+  summarySection.classList.add('visible');
+  downloadBtn.disabled    = false;
+  downloadZipBtn.disabled = false;
+  processingNote.textContent = 'Output file: ' + outputFileName;
+}
+
+// ── Sheet processor ───────────────────────────────────────────────
+function processSheet(ws) {
+  // Get all data as array-of-arrays preserving raw cell values
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+
+  let studentCounter = 0;
+
+  const out = rows.map((row, rowIdx) => {
+    // Ensure the row is long enough to reference all columns we care about
+    while (row.length < 29) row.push('');
+
+    // Anonymize column Y for data rows only (row index 2+ = Excel row 3+).
+    // Row index 0 = Excel row 1 (header), row index 1 = Excel row 2 (preserved).
+    if (rowIdx >= 2) {
+      studentCounter++;
+      row[COL_Y] = 'Student ' + studentCounter;
+    }
+
+    // Drop A-S (0-18), Z (25), AA (26), AB (27) — keep everything else
+    return row.filter((_, idx) => keepCol(idx));
+  });
+
+  // Strip trailing blank rows introduced by padding
+  while (out.length > 2) {
+    const last = out[out.length - 1];
+    if (last.every(v => v === '' || v == null)) out.pop();
+    else break;
+  }
+
+  const newWs = XLSX.utils.aoa_to_sheet(out, { cellDates: true });
+  // dataRows = everything past the two header rows
+  const dataRows = Math.max(0, out.length - 2);
+  return { newWs, dataRows, anonymized: studentCounter };
+}
+
+// ── Download: single XLSX ─────────────────────────────────────────
+downloadBtn.addEventListener('click', () => {
+  if (!processedWorkbook) return;
+  XLSX.writeFile(processedWorkbook, outputFileName);
+});
+
+// ── Download: ZIP (one XLSX per worksheet) ────────────────────────
+downloadZipBtn.addEventListener('click', async () => {
+  if (!processedWorkbook) return;
+  downloadZipBtn.disabled = true;
+  downloadZipBtn.textContent = 'Building ZIP…';
+
+  try {
+    const zip = new JSZip();
+    const baseName = outputFileName.replace(/_cleaned\.xlsx$/i, '');
+
+    processedWorkbook.SheetNames.forEach(sheetName => {
+      // Create a standalone workbook for this sheet
+      const singleWb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(singleWb, processedWorkbook.Sheets[sheetName], sheetName);
+
+      // Write to binary array
+      const xlsxBytes = XLSX.write(singleWb, { bookType: 'xlsx', type: 'array', cellDates: true });
+
+      // Sanitize sheet name for use as a filename
+      const safeName = sheetName.replace(/[\\/:*?"<>|]/g, '_');
+      zip.file(safeName + '.xlsx', xlsxBytes);
+    });
+
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = baseName + '_cleaned_sheets.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    downloadZipBtn.disabled = false;
+    downloadZipBtn.textContent = '⬇ Download as ZIP';
+  }
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>
