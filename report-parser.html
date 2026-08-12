@@ -503,19 +503,12 @@ function generateProgramPDF(name) {
   doc.setTextColor(30, 45, 79);
   doc.text(name, margin, 18);
 
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(136, 136, 136);
-  doc.text(
-    'Section Report  ·  ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-    margin, 25
-  );
   doc.setTextColor(0, 0, 0);
   doc.setDrawColor(224, 228, 236);
   doc.setLineWidth(0.3);
-  doc.line(margin, 28, pageW - margin, 28);
+  doc.line(margin, 22, pageW - margin, 22);
 
-  let y = 35;
+  let y = 28;
 
   sections.forEach(({ section, items }) => {
     if (y > 252) { doc.addPage(); y = 18; }
