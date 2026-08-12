@@ -127,6 +127,8 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .resp-pill.no    { background: #fee2e2; color: #dc2626; }
 .resp-pill.click { background: #dbeafe; color: #2563eb; }
 .resp-pill.other { background: #f3f4f6; color: #6b7280; }
+.resp-pill.freq  { background: #f1f5f9; color: #475569; }
+.pill-n { display: inline-block; background: #cbd5e1; color: #1e293b; border-radius: 8px; padding: 0 5px; font-size: 10px; margin-left: 4px; font-weight: 700; }
 .col-resp { width: 210px; }
 
 @media print {
@@ -224,6 +226,19 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 // AC=28+               → keep
 const COL_Y = 24;
 const keepCol = idx => (idx >= 19 && idx <= 24) || idx >= 28;
+
+// Precompute output-index → original-column-index map (used for per-column rules)
+const KEPT_COL_ORIGINALS = (() => {
+  const list = [];
+  for (let i = 0; i < 600; i++) { if (keepCol(i)) list.push(i); }
+  return list;
+})();
+
+// CI (86) – CY (102): binary presence columns — non-empty = responded, blank = N/A
+const ORIG_CI = 86, ORIG_CY = 102;
+
+// Section names whose columns get raw-frequency treatment (case-insensitive contains)
+const FREQ_SECTION_PATTERNS = ['causal', 'skill', 'debt'];
 
 let processedWorkbook = null;
 let outputFileName = '';
@@ -483,10 +498,11 @@ function getSheetSections(sheetName) {
 
   const cols = [];
   headers.forEach((header, ci) => {
+    const origIdx = KEPT_COL_ORIGINALS[ci];
     const values  = dataRows.map(r => r[ci]);
-    const type    = classifyColumn(header, values);
     const section = getSectionName(String(header || ''));
     const label   = cleanLabel(labels[ci] || header || '');
+    const type    = classifyColumn(header, values, origIdx, section);
 
     if (type === 'numeric') {
       const nums = values.map(v => parseFloat(v)).filter(v => isFinite(v));
@@ -494,6 +510,10 @@ function getSheetSections(sheetName) {
     } else if (type === 'categorical') {
       const { freqs, total } = getCatFreqs(values);
       if (total) cols.push({ type, section, label, freqs, n: total });
+    } else if (type === 'frequency') {
+      const entries = getFreqCounts(values);
+      const total   = entries.reduce((s, e) => s + e.count, 0);
+      if (total) cols.push({ type, section, label, entries, n: total });
     } else if (type === 'click') {
       const n = values.filter(v => v !== '' && v !== null && v !== undefined).length;
       if (n) cols.push({ type, section, label, n });
@@ -550,7 +570,8 @@ function generateProgramPDF(name) {
       body: items.map(item => {
         if (item.type === 'numeric')     return [item.label, item.avg.toFixed(2), item.n];
         if (item.type === 'categorical') return [item.label, catRespText(item.freqs), item.n];
-        if (item.type === 'click')       return [item.label, 'Clicked: ' + item.n, item.n];
+        if (item.type === 'frequency')   return [item.label, freqRespText(item.entries), item.n];
+        if (item.type === 'click')       return [item.label, 'Responded: ' + item.n, item.n];
         return [item.label, '', ''];
       }),
       styles: {
@@ -624,8 +645,10 @@ function buildSummarySheet(sheetName) {
         aoa.push([c.label, Math.round(c.avg * 1000) / 1000, c.n]);
       } else if (c.type === 'categorical') {
         aoa.push([c.label, catRespText(c.freqs), c.n]);
+      } else if (c.type === 'frequency') {
+        aoa.push([c.label, freqRespText(c.entries), c.n]);
       } else if (c.type === 'click') {
-        aoa.push([c.label, 'Clicked: ' + c.n, c.n]);
+        aoa.push([c.label, 'Responded: ' + c.n, c.n]);
       }
     });
     aoa.push(['', '', '']);
@@ -700,10 +723,20 @@ function buildSheetReport(sheetName) {
           <td class="col-n">${c.n}</td>
         </tr>`;
       }
+      if (c.type === 'frequency') {
+        const pills = c.entries.map(({val, count}) =>
+          `<span class="resp-pill freq">${escHtml(val)}<span class="pill-n">${count}</span></span>`
+        ).join('');
+        return `<tr>
+          <td class="col-item">${escHtml(c.label)}</td>
+          <td class="col-resp" style="white-space:normal;vertical-align:top;padding-top:10px">${pills}</td>
+          <td class="col-n">${c.n}</td>
+        </tr>`;
+      }
       if (c.type === 'click') {
         return `<tr>
           <td class="col-item">${escHtml(c.label)}</td>
-          <td class="col-resp"><span class="resp-pill click">&#10003;&nbsp;${c.n} clicked</span></td>
+          <td class="col-resp"><span class="resp-pill click">&#10003;&nbsp;${c.n} responded</span></td>
           <td class="col-n">${c.n}</td>
         </tr>`;
       }
@@ -753,16 +786,32 @@ function categorizeResponse(val) {
   return 'Other';
 }
 
-// Returns 'numeric' | 'categorical' | 'click' | 'empty'
-function classifyColumn(header, values) {
+// Returns 'numeric' | 'categorical' | 'frequency' | 'click' | 'empty'
+function classifyColumn(header, values, origColIdx, sectionName) {
+  // CI–CY: always binary presence regardless of cell content
+  if (origColIdx !== undefined && origColIdx >= ORIG_CI && origColIdx <= ORIG_CY) return 'click';
+
   if (/\(click\)/i.test(String(header || ''))) return 'click';
+
   const nonEmpty = values.filter(v => v !== '' && v !== null && v !== undefined);
   if (!nonEmpty.length) return 'empty';
+
   const numCount = nonEmpty.filter(v => isFinite(parseFloat(v))).length;
   if (numCount / nonEmpty.length >= 0.7) return 'numeric';
+
+  // Section-name override: causal factors, skills, student debt → raw frequency
+  const sl = (sectionName || '').toLowerCase();
+  if (FREQ_SECTION_PATTERNS.some(p => sl.includes(p))) return 'frequency';
+
+  // Standard yes/no/maybe responses
   const catCount = nonEmpty.filter(v => categorizeResponse(v) !== null).length;
   if (catCount / nonEmpty.length >= 0.5) return 'categorical';
-  return 'click';
+
+  // High-diversity free-text → frequency (catches CH and similar open-ended columns)
+  const distinct = new Set(nonEmpty.map(v => String(v).trim().toLowerCase()));
+  if (distinct.size >= 4) return 'frequency';
+
+  return 'click'; // non-empty = affirmative
 }
 
 function getCatFreqs(values) {
@@ -779,6 +828,23 @@ function catRespText(freqs) {
     freqs.No    ? `No: ${freqs.No}`       : '',
     freqs.Other ? `Other: ${freqs.Other}` : '',
   ].filter(Boolean).join(' / ');
+}
+
+// Returns [{val, count}] sorted by count desc for frequency-type columns
+function getFreqCounts(values) {
+  const map = {};
+  values.forEach(v => {
+    const s = String(v ?? '').trim();
+    if (!s) return;
+    map[s] = (map[s] || 0) + 1;
+  });
+  return Object.entries(map)
+    .sort((a, b) => b[1] - a[1])
+    .map(([val, count]) => ({ val, count }));
+}
+
+function freqRespText(entries) {
+  return entries.map(({val, count}) => `${val} (${count})`).join(' / ');
 }
 
 // ── Print ─────────────────────────────────────────────────────────
