@@ -543,14 +543,30 @@ function generateProgramPDF(name) {
     doc.setTextColor(0, 0, 0);
     y += 3;
 
+    // Sections where each frequency response gets its own row
+    const EXPAND_SECTIONS = new Set(['preparation', 'career support', 'skills']);
+    const expandRows = EXPAND_SECTIONS.has(section.toLowerCase());
+
+    const bodyRows = [];
+    items.forEach(item => {
+      if (item.type === 'numeric') {
+        bodyRows.push([item.label, item.avg.toFixed(2), item.n]);
+      } else if (item.type === 'frequency' && expandRows) {
+        item.entries.forEach(({ val, count }, i) => {
+          const display = val === '__click__' ? 'Responded' : val;
+          bodyRows.push([i === 0 ? item.label : '', display, count]);
+        });
+      } else if (item.type === 'frequency') {
+        bodyRows.push([item.label, freqRespText(item.entries), item.n]);
+      } else {
+        bodyRows.push([item.label, '', '']);
+      }
+    });
+
     doc.autoTable({
       startY: y,
       head: [['Item', col2Head, 'Count']],
-      body: items.map(item => {
-        if (item.type === 'numeric')   return [item.label, item.avg.toFixed(2), item.n];
-        if (item.type === 'frequency') return [item.label, freqRespText(item.entries), item.n];
-        return [item.label, '', ''];
-      }),
+      body: bodyRows,
       styles: {
         fontSize: 9,
         cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
@@ -569,7 +585,7 @@ function generateProgramPDF(name) {
       alternateRowStyles: { fillColor: [250, 251, 252] },
       columnStyles: {
         0: { cellWidth: 'auto' },
-        1: { halign: 'right', cellWidth: 40, fontStyle: 'bold' },
+        1: { halign: 'right', cellWidth: 80, fontStyle: 'bold' },
         2: { halign: 'right', cellWidth: 18, textColor: [136, 136, 136] },
       },
       didParseCell: function (data) {
