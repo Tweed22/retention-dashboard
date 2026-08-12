@@ -6,6 +6,8 @@
 <title>Report Parser</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root { color-scheme: light; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -69,7 +71,7 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .sheet-badge { display: inline-block; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
 
 /* Download */
-.download-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.download-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 18px; }
 .download-btn {
   display: block; width: 100%; padding: 14px;
   color: white; border: none; border-radius: 9px;
@@ -80,6 +82,8 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .download-btn.green:hover:not(:disabled)  { background: #15803d; }
 .download-btn.indigo { background: #4f46e5; }
 .download-btn.indigo:hover:not(:disabled) { background: #4338ca; }
+.download-btn.slate  { background: #0f172a; }
+.download-btn.slate:hover:not(:disabled)  { background: #1e293b; }
 .download-btn:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
 
 .processing-note { font-size: 11px; color: #888; text-align: center; margin-top: 8px; }
@@ -181,6 +185,7 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
     <div class="download-row">
       <button class="download-btn green"  id="downloadBtn"    disabled>⬇ Download as XLSX</button>
       <button class="download-btn indigo" id="downloadZipBtn" disabled>⬇ Download as ZIP</button>
+      <button class="download-btn slate"  id="downloadPdfZipBtn" disabled>⬇ Charts PDF ZIP</button>
     </div>
     <div class="processing-note" id="processingNote"></div>
   </div>
@@ -222,9 +227,10 @@ const dropStatus  = document.getElementById('dropStatus');
 const errorBox    = document.getElementById('errorBox');
 const summarySection = document.getElementById('summarySection');
 const sheetListBody  = document.getElementById('sheetListBody');
-const downloadBtn    = document.getElementById('downloadBtn');
-const downloadZipBtn = document.getElementById('downloadZipBtn');
-const processingNote = document.getElementById('processingNote');
+const downloadBtn       = document.getElementById('downloadBtn');
+const downloadZipBtn    = document.getElementById('downloadZipBtn');
+const downloadPdfZipBtn = document.getElementById('downloadPdfZipBtn');
+const processingNote    = document.getElementById('processingNote');
 
 // ── Drag & drop ───────────────────────────────────────────────────
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
@@ -337,8 +343,9 @@ function processWorkbook(wb) {
   dropZone.classList.add('loaded');
   dropStatus.textContent = '✓ Processed — ready to download';
   summarySection.classList.add('visible');
-  downloadBtn.disabled    = false;
-  downloadZipBtn.disabled = false;
+  downloadBtn.disabled       = false;
+  downloadZipBtn.disabled    = false;
+  downloadPdfZipBtn.disabled = false;
   processingNote.textContent = 'Output file: ' + outputFileName;
 
   buildReportPreview();
@@ -429,6 +436,147 @@ downloadZipBtn.addEventListener('click', async () => {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── PDF ZIP download ──────────────────────────────────────────────
+downloadPdfZipBtn.addEventListener('click', async () => {
+  if (!processedWorkbook || !reportSheetMap.size) return;
+  downloadPdfZipBtn.disabled = true;
+  downloadPdfZipBtn.textContent = 'Building PDFs…';
+  try {
+    const zip      = new JSZip();
+    const baseName = outputFileName.replace(/_cleaned\.xlsx$/i, '');
+    for (const [name] of reportSheetMap) {
+      const doc      = generateProgramPDF(name);
+      const pdfBytes = doc.output('arraybuffer');
+      const safe     = name.replace(/[\\/:*?"<>|]/g, '_');
+      zip.file(safe + '.pdf', pdfBytes);
+    }
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = baseName + '_charts.zip'; a.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    downloadPdfZipBtn.disabled = false;
+    downloadPdfZipBtn.textContent = '⬇ Charts PDF ZIP';
+  }
+});
+
+function getSheetSections(sheetName) {
+  const ws = processedWorkbook.Sheets[sheetName];
+  if (!ws) return [];
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  if (data.length < 3) return [];
+  const headers  = data[0];
+  const labels   = data[1];
+  const dataRows = data.slice(2);
+  const cols = headers.map((header, ci) => {
+    const nums = dataRows
+      .map(r => { const n = parseFloat(r[ci]); return isFinite(n) ? n : null; })
+      .filter(v => v !== null);
+    return {
+      section: getSectionName(String(header || '')),
+      label:   cleanLabel(labels[ci] || header || ''),
+      avg:     nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null,
+      n:       nums.length
+    };
+  }).filter(c => c.avg !== null && c.n > 0);
+  const order = [], groups = {};
+  cols.forEach(c => {
+    if (!groups[c.section]) { groups[c.section] = []; order.push(c.section); }
+    groups[c.section].push(c);
+  });
+  return order.map(s => ({ section: s, items: groups[s] }));
+}
+
+function generateProgramPDF(name) {
+  const { jsPDF } = window.jspdf;
+  const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const pageW  = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  const sections = getSheetSections(name);
+
+  // Header
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 45, 79);
+  doc.text(name, margin, 18);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(136, 136, 136);
+  doc.text(
+    'Section Report  ·  ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+    margin, 25
+  );
+  doc.setTextColor(0, 0, 0);
+  doc.setDrawColor(224, 228, 236);
+  doc.setLineWidth(0.3);
+  doc.line(margin, 28, pageW - margin, 28);
+
+  let y = 35;
+
+  sections.forEach(({ section, items }) => {
+    if (y > 252) { doc.addPage(); y = 18; }
+
+    // Section label
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(37, 99, 235);
+    doc.text(section.toUpperCase(), margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 3;
+
+    doc.autoTable({
+      startY: y,
+      head: [['Item', 'Avg Rating', 'Responses (n)']],
+      body: items.map(item => [item.label, item.avg.toFixed(2), item.n]),
+      styles: {
+        fontSize: 9,
+        cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+        textColor: [26, 29, 35],
+        lineColor: [240, 242, 246],
+        lineWidth: 0.1,
+      },
+      headStyles: {
+        fillColor: [248, 249, 251],
+        textColor: [170, 170, 170],
+        fontStyle: 'bold',
+        fontSize: 8,
+        lineWidth: 0.1,
+        lineColor: [224, 228, 236],
+      },
+      alternateRowStyles: { fillColor: [250, 251, 252] },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { halign: 'right', cellWidth: 28, fontStyle: 'bold' },
+        2: { halign: 'right', cellWidth: 28, textColor: [136, 136, 136] },
+      },
+      didParseCell: function (data) {
+        if (data.column.index === 1 && data.section === 'body') {
+          const avg = parseFloat(data.cell.raw);
+          if      (avg >= 4.5) data.cell.styles.textColor = [22, 163, 74];
+          else if (avg >= 4.0) data.cell.styles.textColor = [34, 197, 94];
+          else if (avg >= 3.5) data.cell.styles.textColor = [132, 204, 22];
+          else if (avg >= 3.0) data.cell.styles.textColor = [245, 158, 11];
+          else                 data.cell.styles.textColor = [239, 68, 68];
+        }
+      },
+      margin: { left: margin, right: margin },
+      rowPageBreak: 'avoid',
+    });
+
+    y = doc.lastAutoTable.finalY + 10;
+  });
+
+  if (!sections.length) {
+    doc.setFontSize(10);
+    doc.setTextColor(136, 136, 136);
+    doc.text('No numeric rating data found for this program.', margin, y);
+  }
+
+  return doc;
 }
 
 // ── Label cleaner ─────────────────────────────────────────────────
