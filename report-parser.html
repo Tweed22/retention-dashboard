@@ -120,6 +120,15 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .avg-num { font-size: 13px; font-weight: 700; color: #1a1d23; min-width: 32px; text-align: right; }
 .report-no-data { padding: 24px; text-align: center; color: #aaa; font-size: 13px; }
 
+/* Categorical / click response pills */
+.resp-pill { display: inline-flex; align-items: center; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; margin-right: 3px; white-space: nowrap; }
+.resp-pill.yes   { background: #dcfce7; color: #16a34a; }
+.resp-pill.maybe { background: #fef9c3; color: #a16207; }
+.resp-pill.no    { background: #fee2e2; color: #dc2626; }
+.resp-pill.click { background: #dbeafe; color: #2563eb; }
+.resp-pill.other { background: #f3f4f6; color: #6b7280; }
+.col-resp { width: 210px; }
+
 @media print {
   .header, .card, .stat-row, .sheet-list, .download-row, .processing-note,
   .report-card-header, .report-tabs-bar { display: none !important; }
@@ -471,17 +480,26 @@ function getSheetSections(sheetName) {
   const headers  = data[0];
   const labels   = data[1];
   const dataRows = data.slice(2);
-  const cols = headers.map((header, ci) => {
-    const nums = dataRows
-      .map(r => { const n = parseFloat(r[ci]); return isFinite(n) ? n : null; })
-      .filter(v => v !== null);
-    return {
-      section: getSectionName(String(header || '')),
-      label:   cleanLabel(labels[ci] || header || ''),
-      avg:     nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null,
-      n:       nums.length
-    };
-  }).filter(c => c.avg !== null && c.n > 0);
+
+  const cols = [];
+  headers.forEach((header, ci) => {
+    const values  = dataRows.map(r => r[ci]);
+    const type    = classifyColumn(header, values);
+    const section = getSectionName(String(header || ''));
+    const label   = cleanLabel(labels[ci] || header || '');
+
+    if (type === 'numeric') {
+      const nums = values.map(v => parseFloat(v)).filter(v => isFinite(v));
+      if (nums.length) cols.push({ type, section, label, avg: nums.reduce((a,b)=>a+b,0)/nums.length, n: nums.length });
+    } else if (type === 'categorical') {
+      const { freqs, total } = getCatFreqs(values);
+      if (total) cols.push({ type, section, label, freqs, n: total });
+    } else if (type === 'click') {
+      const n = values.filter(v => v !== '' && v !== null && v !== undefined).length;
+      if (n) cols.push({ type, section, label, n });
+    }
+  });
+
   const order = [], groups = {};
   cols.forEach(c => {
     if (!groups[c.section]) { groups[c.section] = []; order.push(c.section); }
@@ -513,6 +531,11 @@ function generateProgramPDF(name) {
   sections.forEach(({ section, items }) => {
     if (y > 252) { doc.addPage(); y = 18; }
 
+    const hasNumeric = items.some(i => i.type === 'numeric');
+    const hasOther   = items.some(i => i.type !== 'numeric');
+    const col2Head   = hasNumeric && !hasOther ? 'Avg Rating' :
+                       !hasNumeric             ? 'Response'   : 'Rating / Response';
+
     // Section label
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
@@ -523,8 +546,13 @@ function generateProgramPDF(name) {
 
     doc.autoTable({
       startY: y,
-      head: [['Item', 'Avg Rating', 'Responses (n)']],
-      body: items.map(item => [item.label, item.avg.toFixed(2), item.n]),
+      head: [['Item', col2Head, 'Count']],
+      body: items.map(item => {
+        if (item.type === 'numeric')     return [item.label, item.avg.toFixed(2), item.n];
+        if (item.type === 'categorical') return [item.label, catRespText(item.freqs), item.n];
+        if (item.type === 'click')       return [item.label, 'Clicked: ' + item.n, item.n];
+        return [item.label, '', ''];
+      }),
       styles: {
         fontSize: 9,
         cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
@@ -543,17 +571,19 @@ function generateProgramPDF(name) {
       alternateRowStyles: { fillColor: [250, 251, 252] },
       columnStyles: {
         0: { cellWidth: 'auto' },
-        1: { halign: 'right', cellWidth: 28, fontStyle: 'bold' },
-        2: { halign: 'right', cellWidth: 28, textColor: [136, 136, 136] },
+        1: { halign: 'right', cellWidth: 40, fontStyle: 'bold' },
+        2: { halign: 'right', cellWidth: 18, textColor: [136, 136, 136] },
       },
       didParseCell: function (data) {
         if (data.column.index === 1 && data.section === 'body') {
           const avg = parseFloat(data.cell.raw);
-          if      (avg >= 4.5) data.cell.styles.textColor = [22, 163, 74];
-          else if (avg >= 4.0) data.cell.styles.textColor = [34, 197, 94];
-          else if (avg >= 3.5) data.cell.styles.textColor = [132, 204, 22];
-          else if (avg >= 3.0) data.cell.styles.textColor = [245, 158, 11];
-          else                 data.cell.styles.textColor = [239, 68, 68];
+          if (isFinite(avg)) {
+            if      (avg >= 4.5) data.cell.styles.textColor = [22, 163, 74];
+            else if (avg >= 4.0) data.cell.styles.textColor = [34, 197, 94];
+            else if (avg >= 3.5) data.cell.styles.textColor = [132, 204, 22];
+            else if (avg >= 3.0) data.cell.styles.textColor = [245, 158, 11];
+            else                 data.cell.styles.textColor = [239, 68, 68];
+          }
         }
       },
       margin: { left: margin, right: margin },
@@ -566,7 +596,7 @@ function generateProgramPDF(name) {
   if (!sections.length) {
     doc.setFontSize(10);
     doc.setTextColor(136, 136, 136);
-    doc.text('No numeric rating data found for this program.', margin, y);
+    doc.text('No data found for this program.', margin, y);
   }
 
   return doc;
@@ -583,47 +613,28 @@ function cleanLabel(raw) {
 
 // ── Summary sheet builder (added to XLSX output) ──────────────────
 function buildSummarySheet(sheetName) {
-  const ws   = processedWorkbook.Sheets[sheetName];
-  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  const sections = getSheetSections(sheetName);
+  if (!sections.length) return XLSX.utils.aoa_to_sheet([['No data']]);
 
-  if (data.length < 3) return XLSX.utils.aoa_to_sheet([['No data']]);
-
-  const headers  = data[0];
-  const labels   = data[1];
-  const dataRows = data.slice(2);
-
-  const cols = headers.map((header, ci) => {
-    const nums = dataRows
-      .map(r => { const n = parseFloat(r[ci]); return isFinite(n) ? n : null; })
-      .filter(v => v !== null);
-    return {
-      section: getSectionName(String(header || '')),
-      label:   cleanLabel(labels[ci] || header || ''),
-      avg:     nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null,
-      n:       nums.length
-    };
-  }).filter(c => c.avg !== null && c.n > 0);
-
-  if (!cols.length) return XLSX.utils.aoa_to_sheet([['No numeric data found']]);
-
-  const order = [], groups = {};
-  cols.forEach(c => {
-    if (!groups[c.section]) { groups[c.section] = []; order.push(c.section); }
-    groups[c.section].push(c);
-  });
-
-  const aoa = [['Item', 'Avg Rating', 'Responses (n)']];
-  order.forEach(section => {
+  const aoa = [['Item', 'Rating / Response', 'Count']];
+  sections.forEach(({ section, items }) => {
     aoa.push([section, '', '']);
-    groups[section].forEach(c => aoa.push([c.label, Math.round(c.avg * 1000) / 1000, c.n]));
+    items.forEach(c => {
+      if (c.type === 'numeric') {
+        aoa.push([c.label, Math.round(c.avg * 1000) / 1000, c.n]);
+      } else if (c.type === 'categorical') {
+        aoa.push([c.label, catRespText(c.freqs), c.n]);
+      } else if (c.type === 'click') {
+        aoa.push([c.label, 'Clicked: ' + c.n, c.n]);
+      }
+    });
     aoa.push(['', '', '']);
   });
   if (aoa[aoa.length - 1].every(v => v === '')) aoa.pop();
 
-  // Apply column widths
-  const summaryWs = XLSX.utils.aoa_to_sheet(aoa);
-  summaryWs['!cols'] = [{ wch: 60 }, { wch: 14 }, { wch: 16 }];
-  return summaryWs;
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 60 }, { wch: 28 }, { wch: 12 }];
+  return ws;
 }
 
 // ── Report Preview ────────────────────────────────────────────────
@@ -651,55 +662,52 @@ function showReportTab(btn, sheetName) {
 }
 
 function buildSheetReport(sheetName) {
-  const ws   = processedWorkbook.Sheets[sheetName];
-  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  const sections = getSheetSections(sheetName);
+  if (!sections.length) return '<div class="report-no-data">No data columns found in this sheet.</div>';
 
-  if (data.length < 3) return '<div class="report-no-data">Not enough data rows to generate a report.</div>';
+  return sections.map(({ section, items }) => {
+    const hasNumeric = items.some(c => c.type === 'numeric');
+    const hasOther   = items.some(c => c.type !== 'numeric');
+    const midHeader  = hasNumeric && !hasOther ? 'Avg Rating' :
+                       !hasNumeric             ? 'Responses'  : 'Rating / Responses';
+    const midClass   = hasNumeric && !hasOther ? 'col-avg'    : 'col-resp';
 
-  const headers  = data[0];   // row 1 — column keys / section identifiers
-  const labels   = data[1];   // row 2 — human-readable item text (preserved)
-  const dataRows = data.slice(2);
-
-  // Build per-column stats
-  const cols = headers.map((header, ci) => {
-    const section = getSectionName(String(header || ''));
-    const label   = cleanLabel(labels[ci] || header || '');
-
-    const nums = dataRows
-      .map(r => { const v = r[ci]; const n = parseFloat(v); return isFinite(n) ? n : null; })
-      .filter(v => v !== null);
-
-    const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-    return { section, label, avg, n: nums.length };
-  });
-
-  // Filter to columns with numeric responses
-  const valid = cols.filter(c => c.avg !== null && c.n > 0);
-  if (!valid.length) return '<div class="report-no-data">No numeric rating columns found in this sheet.</div>';
-
-  // Group by section, preserving first-seen order
-  const order = [];
-  const groups = {};
-  valid.forEach(c => {
-    if (!groups[c.section]) { groups[c.section] = []; order.push(c.section); }
-    groups[c.section].push(c);
-  });
-
-  return order.map(section => {
-    const rows = groups[section].map(c => {
-      const pct   = Math.min(100, (c.avg / 5) * 100).toFixed(1);
-      const color = ratingColor(c.avg);
-      const avg   = c.avg.toFixed(2);
-      return `<tr>
-        <td class="col-item">${escHtml(c.label)}</td>
-        <td class="col-avg">
-          <div class="avg-wrap">
-            <div class="avg-bar-track"><div class="avg-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-            <span class="avg-num">${avg}</span>
-          </div>
-        </td>
-        <td class="col-n">${c.n}</td>
-      </tr>`;
+    const rows = items.map(c => {
+      if (c.type === 'numeric') {
+        const pct   = Math.min(100, (c.avg / 5) * 100).toFixed(1);
+        const color = ratingColor(c.avg);
+        return `<tr>
+          <td class="col-item">${escHtml(c.label)}</td>
+          <td class="col-avg">
+            <div class="avg-wrap">
+              <div class="avg-bar-track"><div class="avg-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+              <span class="avg-num">${c.avg.toFixed(2)}</span>
+            </div>
+          </td>
+          <td class="col-n">${c.n}</td>
+        </tr>`;
+      }
+      if (c.type === 'categorical') {
+        const pills = [
+          c.freqs.Yes   ? `<span class="resp-pill yes">Yes&nbsp;${c.freqs.Yes}</span>`     : '',
+          c.freqs.Maybe ? `<span class="resp-pill maybe">Maybe&nbsp;${c.freqs.Maybe}</span>` : '',
+          c.freqs.No    ? `<span class="resp-pill no">No&nbsp;${c.freqs.No}</span>`         : '',
+          c.freqs.Other ? `<span class="resp-pill other">Other&nbsp;${c.freqs.Other}</span>` : '',
+        ].filter(Boolean).join('');
+        return `<tr>
+          <td class="col-item">${escHtml(c.label)}</td>
+          <td class="col-resp">${pills}</td>
+          <td class="col-n">${c.n}</td>
+        </tr>`;
+      }
+      if (c.type === 'click') {
+        return `<tr>
+          <td class="col-item">${escHtml(c.label)}</td>
+          <td class="col-resp"><span class="resp-pill click">&#10003;&nbsp;${c.n} clicked</span></td>
+          <td class="col-n">${c.n}</td>
+        </tr>`;
+      }
+      return '';
     }).join('');
 
     return `<div class="report-section">
@@ -707,8 +715,8 @@ function buildSheetReport(sheetName) {
       <table class="report-table">
         <thead><tr>
           <th>Item</th>
-          <th class="col-avg">Avg Rating</th>
-          <th class="col-n">Responses (n)</th>
+          <th class="${midClass}">${midHeader}</th>
+          <th class="col-n">Count</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -729,6 +737,48 @@ function ratingColor(avg) {
   if (avg >= 3.5) return '#84cc16';
   if (avg >= 3.0) return '#f59e0b';
   return '#ef4444';
+}
+
+// ── Response classification (CB-DK text / click columns) ──────────
+const RESP_YES   = new Set(['yes','definitely yes','probably yes']);
+const RESP_MAYBE = new Set(['maybe','might or might not']);
+const RESP_NO    = new Set(['no','probably not','definitely not']);
+
+function categorizeResponse(val) {
+  const s = String(val ?? '').trim().toLowerCase();
+  if (!s) return null;
+  if (RESP_YES.has(s))   return 'Yes';
+  if (RESP_MAYBE.has(s)) return 'Maybe';
+  if (RESP_NO.has(s))    return 'No';
+  return 'Other';
+}
+
+// Returns 'numeric' | 'categorical' | 'click' | 'empty'
+function classifyColumn(header, values) {
+  if (/\(click\)/i.test(String(header || ''))) return 'click';
+  const nonEmpty = values.filter(v => v !== '' && v !== null && v !== undefined);
+  if (!nonEmpty.length) return 'empty';
+  const numCount = nonEmpty.filter(v => isFinite(parseFloat(v))).length;
+  if (numCount / nonEmpty.length >= 0.7) return 'numeric';
+  const catCount = nonEmpty.filter(v => categorizeResponse(v) !== null).length;
+  if (catCount / nonEmpty.length >= 0.5) return 'categorical';
+  return 'click';
+}
+
+function getCatFreqs(values) {
+  const freqs = { Yes: 0, Maybe: 0, No: 0, Other: 0 };
+  values.forEach(v => { const c = categorizeResponse(v); if (c) freqs[c]++; });
+  const total = freqs.Yes + freqs.Maybe + freqs.No + freqs.Other;
+  return { freqs, total };
+}
+
+function catRespText(freqs) {
+  return [
+    freqs.Yes   ? `Yes: ${freqs.Yes}`     : '',
+    freqs.Maybe ? `Maybe: ${freqs.Maybe}` : '',
+    freqs.No    ? `No: ${freqs.No}`       : '',
+    freqs.Other ? `Other: ${freqs.Other}` : '',
+  ].filter(Boolean).join(' / ');
 }
 
 // ── Print ─────────────────────────────────────────────────────────
