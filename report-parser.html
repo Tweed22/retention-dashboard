@@ -543,21 +543,15 @@ function generateProgramPDF(name) {
     doc.setTextColor(0, 0, 0);
     y += 3;
 
-    // Sections where each frequency response gets its own row
-    const EXPAND_SECTIONS = new Set(['preparation', 'career support', 'skills']);
-    const expandRows = EXPAND_SECTIONS.has(section.toLowerCase());
-
     const bodyRows = [];
     items.forEach(item => {
       if (item.type === 'numeric') {
         bodyRows.push([item.label, item.avg.toFixed(2), item.n]);
-      } else if (item.type === 'frequency' && expandRows) {
+      } else if (item.type === 'frequency') {
         item.entries.forEach(({ val, count }, i) => {
           const display = val === '__click__' ? 'Responded' : val;
           bodyRows.push([i === 0 ? item.label : '', display, count]);
         });
-      } else if (item.type === 'frequency') {
-        bodyRows.push([item.label, freqRespText(item.entries), item.n]);
       } else {
         bodyRows.push([item.label, '', '']);
       }
