@@ -480,6 +480,9 @@ function getSheetSections(sheetName) {
 
   const cols = [];
   headers.forEach((header, ci) => {
+    // Skip columns with no row-2 label — they are metadata, not survey questions
+    if (!String(labels[ci] || '').trim()) return;
+
     const values  = dataRows.map(r => r[ci]);
     const section = getSectionName(String(header || ''));
     const label   = cleanLabel(labels[ci] || header || '');
@@ -491,7 +494,10 @@ function getSheetSections(sheetName) {
     } else if (type === 'frequency') {
       const entries = getFreqCounts(values);
       const total   = entries.reduce((s, e) => s + e.count, 0);
-      if (total) cols.push({ type, section, label, entries, n: total });
+      // Skip if every value is unique — not a meaningful question (e.g. anonymized names)
+      if (total && entries.some(e => e.count > 1 || e.val === '__click__')) {
+        cols.push({ type, section, label, entries, n: total });
+      }
     }
   });
 
@@ -679,7 +685,9 @@ function buildSheetReport(sheetName) {
       }
       if (c.type === 'frequency') {
         const pills = c.entries.map(({val, count}) =>
-          `<span class="resp-pill">${escHtml(val)}<span class="pill-n">${count}</span></span>`
+          val === '__click__'
+            ? `<span class="resp-pill"><span class="pill-n">${count}</span>&nbsp;responded</span>`
+            : `<span class="resp-pill">${escHtml(val)}<span class="pill-n">${count}</span></span>`
         ).join('');
         return `<tr>
           <td class="col-item">${escHtml(c.label)}</td>
@@ -729,12 +737,14 @@ function classifyColumn(values) {
   return 'frequency';
 }
 
-// Returns [{val, count}] sorted by count desc
+// Returns [{val, count}] sorted by count desc.
+// Values containing "click" are collapsed to the sentinel '__click__'.
 function getFreqCounts(values) {
   const map = {};
   values.forEach(v => {
-    const s = String(v ?? '').trim();
+    let s = String(v ?? '').trim();
     if (!s) return;
+    if (/click/i.test(s)) s = '__click__';
     map[s] = (map[s] || 0) + 1;
   });
   return Object.entries(map)
@@ -743,7 +753,9 @@ function getFreqCounts(values) {
 }
 
 function freqRespText(entries) {
-  return entries.map(({val, count}) => `${val} (${count})`).join(' / ');
+  return entries.map(({val, count}) =>
+    val === '__click__' ? `Responded: ${count}` : `${val} (${count})`
+  ).join(' / ');
 }
 
 // ── Print ─────────────────────────────────────────────────────────
