@@ -485,8 +485,8 @@ function getSheetSections(sheetName) {
     // Skip columns with no row-2 label — they are metadata, not survey questions
     if (!String(labels[ci] || '').trim()) return;
 
-    const values  = dataRows.map(r => r[ci]);
-    const section = getSectionName(String(header || ''));
+    const values  = dataRows.map(r => normalizeText(r[ci]));
+    const section = getSectionName(normalizeText(header));
     const label   = cleanLabel(labels[ci] || header || '');
     const type    = classifyColumn(values);
 
@@ -661,11 +661,33 @@ function generateProgramPDF(name) {
   return doc;
 }
 
+// ── Text normalizer ────────────────────────────────────────────────
+// Strips rich-text objects, XML tags, Unicode whitespace variants, and
+// control characters so Excel formatting never distorts PDF/chart output.
+function normalizeText(v) {
+  if (v === null || v === undefined) return '';
+  // SheetJS rich-text objects expose .v (plain value) or .t (text)
+  if (typeof v === 'object') v = v.v ?? v.t ?? '';
+  let s = String(v);
+  // Strip any XML/HTML tags that leak from rich-text cells
+  s = s.replace(/<[^>]*>/g, '');
+  // Non-breaking space, soft-hyphen, zero-width chars, BOM → regular space / empty
+  s = s.replace(/[­​‌‍⁠﻿]/g, '');
+  s = s.replace(/[  -   　]/g, ' ');
+  // Line breaks / tabs inside a cell → single space
+  s = s.replace(/[\r\n\t]+/g, ' ');
+  // Strip remaining C0/C1 control characters
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+  // Collapse runs of spaces
+  s = s.replace(/ {2,}/g, ' ');
+  return s.trim();
+}
+
 // ── Label cleaner ─────────────────────────────────────────────────
 // Strips preamble like "Please rate your satisfaction... - " leaving only
 // the text after the last " - ".
 function cleanLabel(raw) {
-  const s = String(raw || '').trim();
+  const s = normalizeText(raw);
   const idx = s.lastIndexOf(' - ');
   return idx >= 0 ? s.slice(idx + 3).trim() : s;
 }
@@ -864,7 +886,7 @@ function classifyColumn(values) {
 function getFreqCounts(values) {
   const map = {};
   values.forEach(v => {
-    let s = String(v ?? '').trim();
+    let s = normalizeText(v);
     if (!s) return;
     if (/click/i.test(s)) s = '__click__';
     map[s] = (map[s] || 0) + 1;
