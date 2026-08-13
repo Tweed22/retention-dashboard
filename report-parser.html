@@ -104,7 +104,8 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .report-body { padding: 22px; }
 .report-section { margin-bottom: 28px; }
 .report-section:last-child { margin-bottom: 0; }
-.section-heading { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: #2563eb; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 2px solid #e0e4ec; }
+.section-heading { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: #2563eb; margin-bottom: 4px; padding-bottom: 7px; border-bottom: 2px solid #e0e4ec; }
+.section-subtitle { font-size: 11px; color: #64748b; font-style: italic; margin-bottom: 10px; line-height: 1.4; }
 .report-table { width: 100%; border-collapse: collapse; }
 .report-table th { background: #f8f9fb; padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #aaa; border-bottom: 1px solid #e0e4ec; }
 .report-table th.col-avg, .report-table th.col-n { text-align: right; }
@@ -541,7 +542,23 @@ function generateProgramPDF(name) {
     doc.setTextColor(37, 99, 235);
     doc.text(section.toUpperCase(), margin, y);
     doc.setTextColor(0, 0, 0);
-    y += 3;
+    y += 4;
+
+    // Section subtitle
+    const subtitle = getSectionSubtitle(section);
+    if (subtitle) {
+      const lines = Array.isArray(subtitle) ? subtitle : [subtitle];
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(80, 80, 80);
+      lines.forEach((line, li) => {
+        const wrapped = doc.splitTextToSize(line, pageW - margin * 2);
+        doc.text(wrapped, margin, y);
+        y += wrapped.length * 3.5 + (li < lines.length - 1 ? 2 : 0);
+      });
+      doc.setTextColor(0, 0, 0);
+      y += 2;
+    }
 
     const bodyRows = [];
     items.forEach(item => {
@@ -710,6 +727,7 @@ function buildSheetReport(sheetName) {
 
     return `<div class="report-section">
       <div class="section-heading">${escHtml(section)}</div>
+      ${(() => { const sub = getSectionSubtitle(section); return sub ? (Array.isArray(sub) ? sub : [sub]).map(s => `<div class="section-subtitle">${escHtml(s)}</div>`).join('') : ''; })()}
       <table class="report-table">
         <thead><tr>
           <th>Item</th>
@@ -738,6 +756,27 @@ function ratingColor(avg) {
 }
 
 // ── Column classification ─────────────────────────────────────────
+// ── Section subtitles (question descriptions shown under headings) ──
+const SECTION_SUBTITLES = {
+  'academics':      'Rate your Satisfaction (Likert 1–5)',
+  'services':       'Rate your Satisfaction (Likert 1–5)',
+  'prioritize':     'Identify the top three High-Priority Areas',
+  'advising':       'Other than your advisor, who else did you rely on for mentoring or advice?',
+  'financial':      'Note all the avenues you used to pay for college',
+  'future plans':   'Which category best describes your future plans?',
+  'causal factors': 'In the past 12 months, have you experienced any situations with…',
+  'student debt':   'How much debt did you incur from attending WWU?',
+  'preparation':    [
+    'What experiences at WWU have been most helpful in preparing you to be successful after college?',
+    'What suggestions, if any, can you provide university faculty/staff to help better prepare you in your profession?',
+  ],
+  'skills':         'Describe, if any, the skills you obtained from your studies at WWU that you will use after graduation',
+};
+
+function getSectionSubtitle(section) {
+  return SECTION_SUBTITLES[section.toLowerCase()] || null;
+}
+
 // Returns 'numeric' | 'frequency' | 'empty'
 function classifyColumn(values) {
   const nonEmpty = values.filter(v => v !== '' && v !== null && v !== undefined);
