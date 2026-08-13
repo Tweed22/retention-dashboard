@@ -112,7 +112,7 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .report-table td { padding: 9px 12px; border-bottom: 1px solid #f0f2f6; vertical-align: middle; }
 .report-table tr:last-child td { border-bottom: none; }
 .report-table tr:hover td { background: #fafbfc; }
-.col-item { font-size: 13px; color: #1a1d23; }
+.col-item { font-size: 13px; color: #1a1d23; font-weight: 700; }
 .col-avg { width: 200px; }
 .col-n { width: 90px; text-align: right; font-size: 12px; color: #888; }
 .avg-wrap { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
@@ -122,9 +122,10 @@ main { max-width: 860px; margin: 36px auto; padding: 0 20px 60px; }
 .report-no-data { padding: 24px; text-align: center; color: #aaa; font-size: 13px; }
 
 /* Response frequency pills */
-.resp-pill { display: inline-flex; align-items: center; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; margin-right: 3px; margin-bottom: 3px; white-space: nowrap; background: #f1f5f9; color: #475569; }
+.resp-pill { display: inline-flex; align-items: center; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 400; margin-right: 3px; margin-bottom: 3px; white-space: nowrap; background: #f1f5f9; color: #475569; }
 .pill-n { display: inline-block; background: #cbd5e1; color: #1e293b; border-radius: 8px; padding: 0 5px; font-size: 10px; margin-left: 4px; font-weight: 700; }
 .col-resp { width: 210px; }
+.response-line { font-size: 12px; color: #555; padding-left: 20px !important; }
 
 @media print {
   .header, .card, .stat-row, .sheet-list, .download-row, .processing-note,
@@ -560,60 +561,93 @@ function generateProgramPDF(name) {
       y += 2;
     }
 
-    const bodyRows = [];
-    items.forEach(item => {
-      if (item.type === 'numeric') {
-        bodyRows.push([item.label, item.avg.toFixed(2), item.n]);
-      } else if (item.type === 'frequency') {
-        item.entries.forEach(({ val, count }, i) => {
-          const display = val === '__click__' ? 'Responded' : val;
-          bodyRows.push([i === 0 ? item.label : '', display, count]);
-        });
-      } else {
-        bodyRows.push([item.label, '', '']);
-      }
-    });
+    const sharedStyles = {
+      fontSize: 9,
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      textColor: [26, 29, 35],
+      lineColor: [240, 242, 246],
+      lineWidth: 0.1,
+    };
+    const sharedHeadStyles = {
+      fillColor: [248, 249, 251],
+      textColor: [170, 170, 170],
+      fontStyle: 'bold',
+      fontSize: 8,
+      lineWidth: 0.1,
+      lineColor: [224, 228, 236],
+    };
 
-    doc.autoTable({
-      startY: y,
-      head: [['Item', col2Head, 'Count']],
-      body: bodyRows,
-      styles: {
-        fontSize: 9,
-        cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
-        textColor: [26, 29, 35],
-        lineColor: [240, 242, 246],
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fillColor: [248, 249, 251],
-        textColor: [170, 170, 170],
-        fontStyle: 'bold',
-        fontSize: 8,
-        lineWidth: 0.1,
-        lineColor: [224, 228, 236],
-      },
-      alternateRowStyles: { fillColor: [250, 251, 252] },
-      columnStyles: {
-        0: { cellWidth: 'auto' },
-        1: { halign: 'left', cellWidth: 80, fontStyle: 'bold' },
-        2: { halign: 'right', cellWidth: 18, textColor: [136, 136, 136] },
-      },
-      didParseCell: function (data) {
-        if (data.column.index === 1 && data.section === 'body') {
-          const avg = parseFloat(data.cell.raw);
-          if (isFinite(avg)) {
-            if      (avg >= 4.5) data.cell.styles.textColor = [22, 163, 74];
-            else if (avg >= 4.0) data.cell.styles.textColor = [34, 197, 94];
-            else if (avg >= 3.5) data.cell.styles.textColor = [132, 204, 22];
-            else if (avg >= 3.0) data.cell.styles.textColor = [245, 158, 11];
-            else                 data.cell.styles.textColor = [239, 68, 68];
-          }
+    if (section.toLowerCase() === 'preparation') {
+      const bodyRows = [];
+      items.forEach(item => {
+        if (item.type === 'numeric') {
+          bodyRows.push([item.label, item.avg.toFixed(2)]);
+        } else if (item.type === 'frequency') {
+          bodyRows.push([item.label, item.n]);
+          item.entries.forEach(({ val }) => {
+            const display = val === '__click__' ? 'Responded' : val;
+            bodyRows.push([{ content: display, colSpan: 2, styles: { fontStyle: 'normal', fontSize: 8.5, textColor: [80, 80, 80], cellPadding: { top: 2, bottom: 2, left: 14, right: 3 } } }]);
+          });
+        } else {
+          bodyRows.push([item.label, '']);
         }
-      },
-      margin: { left: margin, right: margin },
-      rowPageBreak: 'avoid',
-    });
+      });
+      doc.autoTable({
+        startY: y,
+        head: [['Item', 'Count']],
+        body: bodyRows,
+        styles: sharedStyles,
+        headStyles: sharedHeadStyles,
+        alternateRowStyles: { fillColor: [250, 251, 252] },
+        columnStyles: {
+          0: { cellWidth: 'auto', fontStyle: 'bold' },
+          1: { halign: 'right', cellWidth: 18, textColor: [136, 136, 136] },
+        },
+        margin: { left: margin, right: margin },
+        rowPageBreak: 'avoid',
+      });
+    } else {
+      const bodyRows = [];
+      items.forEach(item => {
+        if (item.type === 'numeric') {
+          bodyRows.push([item.label, item.avg.toFixed(2), item.n]);
+        } else if (item.type === 'frequency') {
+          item.entries.forEach(({ val, count }, i) => {
+            const display = val === '__click__' ? 'Responded' : val;
+            bodyRows.push([i === 0 ? item.label : '', display, count]);
+          });
+        } else {
+          bodyRows.push([item.label, '', '']);
+        }
+      });
+      doc.autoTable({
+        startY: y,
+        head: [['Item', col2Head, 'Count']],
+        body: bodyRows,
+        styles: sharedStyles,
+        headStyles: sharedHeadStyles,
+        alternateRowStyles: { fillColor: [250, 251, 252] },
+        columnStyles: {
+          0: { cellWidth: 'auto', fontStyle: 'bold' },
+          1: { halign: 'left', cellWidth: 80 },
+          2: { halign: 'right', cellWidth: 18, textColor: [136, 136, 136] },
+        },
+        didParseCell: function (data) {
+          if (data.column.index === 1 && data.section === 'body') {
+            const avg = parseFloat(data.cell.raw);
+            if (isFinite(avg)) {
+              if      (avg >= 4.5) data.cell.styles.textColor = [22, 163, 74];
+              else if (avg >= 4.0) data.cell.styles.textColor = [34, 197, 94];
+              else if (avg >= 3.5) data.cell.styles.textColor = [132, 204, 22];
+              else if (avg >= 3.0) data.cell.styles.textColor = [245, 158, 11];
+              else                 data.cell.styles.textColor = [239, 68, 68];
+            }
+          }
+        },
+        margin: { left: margin, right: margin },
+        rowPageBreak: 'avoid',
+      });
+    }
 
     y = doc.lastAutoTable.finalY + 10;
   });
@@ -689,6 +723,50 @@ function buildSheetReport(sheetName) {
   if (!sections.length) return '<div class="report-no-data">No data columns found in this sheet.</div>';
 
   return sections.map(({ section, items }) => {
+    const subtitleHtml = (() => {
+      const sub = getSectionSubtitle(section);
+      return sub ? (Array.isArray(sub) ? sub : [sub]).map(s => `<div class="section-subtitle">${escHtml(s)}</div>`).join('') : '';
+    })();
+    const headingHtml = `<div class="section-heading">${escHtml(section)}</div>${subtitleHtml}`;
+
+    // Preparation: 2-column table (Item | Count) with full-width response rows
+    if (section.toLowerCase() === 'preparation') {
+      const prepRows = items.map(c => {
+        if (c.type === 'numeric') {
+          return `<tr>
+            <td class="col-item">${escHtml(c.label)}</td>
+            <td class="col-n">${c.avg.toFixed(2)}</td>
+          </tr>`;
+        }
+        if (c.type === 'frequency') {
+          const responseRows = c.entries.map(({ val }) => {
+            const display = val === '__click__' ? 'Responded' : val;
+            return `<tr><td colspan="2" class="response-line">${escHtml(display)}</td></tr>`;
+          }).join('');
+          return `<tr>
+            <td class="col-item">${escHtml(c.label)}</td>
+            <td class="col-n">${c.n}</td>
+          </tr>${responseRows}`;
+        }
+        return `<tr>
+          <td class="col-item">${escHtml(c.label)}</td>
+          <td class="col-n"></td>
+        </tr>`;
+      }).join('');
+
+      return `<div class="report-section">
+        ${headingHtml}
+        <table class="report-table">
+          <thead><tr>
+            <th>Item</th>
+            <th class="col-n">Count</th>
+          </tr></thead>
+          <tbody>${prepRows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    // Standard layout
     const hasNumeric = items.some(c => c.type === 'numeric');
     const hasOther   = items.some(c => c.type !== 'numeric');
     const midHeader  = hasNumeric && !hasOther ? 'Avg Rating' :
@@ -726,8 +804,7 @@ function buildSheetReport(sheetName) {
     }).join('');
 
     return `<div class="report-section">
-      <div class="section-heading">${escHtml(section)}</div>
-      ${(() => { const sub = getSectionSubtitle(section); return sub ? (Array.isArray(sub) ? sub : [sub]).map(s => `<div class="section-subtitle">${escHtml(s)}</div>`).join('') : ''; })()}
+      ${headingHtml}
       <table class="report-table">
         <thead><tr>
           <th>Item</th>
@@ -766,10 +843,6 @@ const SECTION_SUBTITLES = {
   'future plans':   'Which category best describes your future plans?',
   'causal factors': 'In the past 12 months, have you experienced any situations with…',
   'student debt':   'How much debt did you incur from attending WWU?',
-  'preparation':    [
-    'What experiences at WWU have been most helpful in preparing you to be successful after college?',
-    'What suggestions, if any, can you provide university faculty/staff to help better prepare you in your profession?',
-  ],
   'skills':         'Describe, if any, the skills you obtained from your studies at WWU that you will use after graduation',
 };
 
