@@ -1113,6 +1113,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
       <select class="filter-select" id="reg-ptft" onchange="regApply()" title="Filter by Part-Time vs Full-Time enrollment status"><option value="">All Enrollment</option><option value="F">Full-Time</option><option value="P">Part-Time</option></select>
       <select class="filter-select" id="reg-ftft" onchange="regApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
+      <select class="filter-select tag-filter" id="reg-tags" onchange="regApply()" title="Filter by tag"></select>
       <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
     </div>
     <div class="table-wrap">
@@ -1130,7 +1131,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
         <th class="sortable mobile-secondary col-priority-2" onclick="regSort('creditHours')">Credits</th>
         <th class="sortable mobile-secondary col-priority-4 admin-only" onclick="regSort('careerGpa')" title="Career GPA from the registered CSV (admin-only)">GPA</th>
-        <th class="exp-th"></th>
+        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
     </div>
@@ -1155,6 +1156,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="h-sport" onchange="holdsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="h-team" onchange="holdsApply()"><option value="">All Teams</option></select>
       <select class="filter-select" id="h-ftft" onchange="holdsApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
+      <select class="filter-select tag-filter" id="h-tags" onchange="holdsApply()" title="Filter by tag"></select>
       <input class="table-search" type="text" id="h-search" placeholder="Search name, email, ID…" oninput="holdsApply()" />
     </div>
     <div class="table-wrap">
@@ -1174,7 +1176,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="holdsSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('sports')">Sport</th>
-        <th class="exp-th"></th>
+        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
         <th class="admin-only override-col">Override</th>
       </tr></thead>
       <tbody id="holds-tbody"></tbody></table>
@@ -1199,6 +1201,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="cr-sport" onchange="crApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="cr-team" onchange="crApply()"><option value="">All Teams</option></select>
       <select class="filter-select" id="cr-ftft" onchange="crApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
+      <select class="filter-select tag-filter" id="cr-tags" onchange="crApply()" title="Filter by tag"></select>
       <input class="table-search" type="text" id="cr-search" placeholder="Search name, email, ID…" oninput="crApply()" />
     </div>
     <div class="table-wrap">
@@ -1218,7 +1221,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="crSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="crSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="crSort('sports')">Sport</th>
-        <th class="exp-th"></th>
+        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
         <th class="admin-only override-col">Override</th>
       </tr></thead>
       <tbody id="cr-tbody"></tbody></table>
@@ -1250,6 +1253,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="ns-sport" onchange="nsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="ns-team" onchange="nsApply()"><option value="">All Teams</option></select>
       <select class="filter-select" id="ns-ftft" onchange="nsApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
+      <select class="filter-select tag-filter" id="ns-tags" onchange="nsApply()" title="Filter by tag"></select>
       <input class="table-search" type="text" id="ns-search" placeholder="Search name, email, ID…" oninput="nsApply()" />
     </div>
     <div class="table-wrap">
@@ -1269,7 +1273,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('sports')">Sport</th>
-        <th class="exp-th"></th>
+        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="ns-tbody"></tbody></table>
     </div>
@@ -1299,6 +1303,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Not Returning</option>
         <option>Not Returning from Fall</option>
       </select>
+      <select class="filter-select tag-filter" id="ftft-tags" onchange="ftftApply()" title="Filter by tag"></select>
       <input class="table-search" type="text" id="ftft-search" placeholder="Search name or ID…" oninput="ftftApply()" />
     </div>
     <div class="table-wrap">
@@ -1316,7 +1321,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-2" onclick="ftftSort('__status')">Status</th>
         <th class="sortable mobile-secondary col-priority-3" onclick="ftftSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="ftftSort('advisor')">Advisor</th>
-        <th class="exp-th"></th>
+        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="ftft-tbody"></tbody></table>
     </div>
@@ -1359,12 +1364,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option value="F">Full-Time</option>
         <option value="P">Part-Time</option>
       </select>
-      <select class="filter-select" id="co-flag" onchange="cohortApply()">
-        <option value="">All Flags</option>
-        <option value="midterm_meeting">Midterm Meeting</option>
-        <option value="provisional">Provisional</option>
-        <option value="__none">No flags</option>
-      </select>
+      <select class="filter-select tag-filter" id="co-flag" onchange="cohortApply()" title="Filter by tag"></select>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
     <div id="co-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#555;">
@@ -1398,7 +1398,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="cohortSort('ptFt')">PT/FT</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('hrsEnrolled')">Term Hrs</th>
-        <th class="exp-th"></th>
+        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="co-tbody"></tbody></table>
     </div>
@@ -1454,6 +1454,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <option value="">All Majors</option>
     </select>
     <select class="filter-select" id="nr-filter-ftft" onchange="nrRender()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
+      <select class="filter-select tag-filter" id="nr-filter-tags" onchange="nrRender()" title="Filter by tag"></select>
     <input class="table-search" type="text" id="nr-search" placeholder="Search name or ID…" oninput="nrRender()" style="width:180px;" />
   </div>
   <div class="table-wrap">
@@ -1476,7 +1477,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <th class="sortable mobile-secondary col-priority-2" onclick="nrSort('withdrawal')">Withdrawal</th>
       <th class="sortable mobile-secondary col-priority-4" onclick="nrSort('dateAdded')">Date Added</th>
       <th class="mobile-secondary col-priority-4"></th>
-      <th class="exp-th"></th>
+      <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
     </tr></thead>
     <tbody id="nr-tbody"></tbody></table>
   </div>
@@ -1694,17 +1695,39 @@ function isHSStudent(id) {
 function hsBadge(id) {
   return isHSStudent(id) ? ' <span class="hs-badge" title="High-school dual enrollment">HS</span>' : '';
 }
-function flagBadges(id) {
-  const set = id && studentFlags.get(id);
-  if (!set || !set.size) return '';
-  return Object.entries(FLAG_DEFS)
-    .filter(([key]) => set.has(key))
-    .map(([, def]) => ` <span class="flag-badge" title="${def.label}">${def.short}</span>`)
-    .join('');
-}
-// All name-cell badges. Use this (not ftftBadge) in table cells.
+// Name-cell badges (FTFT, HS). Student flags/tags have their own Tags
+// column on every table instead — see tagsCell().
 function studentBadges(id) {
-  return ftftBadge(id) + hsBadge(id) + flagBadges(id);
+  return ftftBadge(id) + hsBadge(id);
+}
+
+// Tags column cell: one chip per flag, full label.
+function tagsCell(id) {
+  const set = id && studentFlags.get(id);
+  const chips = set ? Object.entries(FLAG_DEFS)
+    .filter(([key]) => set.has(key))
+    .map(([, def]) => `<span class="flag-badge" style="margin:0 3px 2px 0;" title="${def.label}">${def.label}</span>`)
+    .join('') : '';
+  return chips || '<span style="color:#bbb;font-size:11px;">—</span>';
+}
+
+// Every tab's Tags filter is a <select class="tag-filter">; options are
+// generated from FLAG_DEFS so a new tag shows up everywhere automatically.
+function populateTagFilters() {
+  const opts = ['<option value="">All Tags</option>']
+    .concat(Object.entries(FLAG_DEFS).map(([key, def]) => `<option value="${key}">${def.label}</option>`))
+    .concat(['<option value="__all">Has all tags</option>',
+             '<option value="__any">Has any tag</option>',
+             '<option value="__none">No tags</option>'])
+    .join('');
+  document.querySelectorAll('select.tag-filter').forEach(sel => {
+    const cur = sel.value;
+    sel.innerHTML = opts;
+    sel.value = cur;
+  });
+}
+function tagFilterValue(selectId) {
+  return document.getElementById(selectId)?.value || '';
 }
 
 // Processed data
@@ -1863,6 +1886,7 @@ const EXPORT_COLUMNS = {
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
     { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
   ],
   canreg: [
     { header: 'Student ID', getter: r => r.id },
@@ -1877,6 +1901,7 @@ const EXPORT_COLUMNS = {
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
     { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
   ],
   registered: [
     { header: 'Student ID', getter: r => r.id },
@@ -1894,6 +1919,7 @@ const EXPORT_COLUMNS = {
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
     { header: 'On NR List', getter: r => r.__onNR ? 'Yes' : 'No' },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
   ],
   newstudents: [
     { header: 'Student ID', getter: r => r.id },
@@ -1906,6 +1932,7 @@ const EXPORT_COLUMNS = {
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Sports',     getter: r => r.sports },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
   ],
   withdrawals: [
     { header: 'Student ID',         getter: r => r.id },
@@ -1933,6 +1960,7 @@ const EXPORT_COLUMNS = {
     { header: 'Registered',     getter: r => r.isRegistered ? 'Yes' : 'No' },
     { header: 'Source',         getter: r => r._sourceWithdrawalId ? 'CSV import' : 'Human entry' },
     { header: 'Withdrawal LDA', getter: r => r._withdrawalLDA || '' },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
   ],
   cohort: [
     { header: 'Student ID', getter: r => r.id },
@@ -1943,7 +1971,7 @@ const EXPORT_COLUMNS = {
     { header: 'Status',     getter: r => r.__status },
     { header: 'Class Year', getter: r => r.classYear },
     { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
-    { header: 'Flags',      getter: r => flagLabels(r.id) },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Term Hours', getter: r => r.hrsEnrolled || '' },
@@ -1957,6 +1985,7 @@ const EXPORT_COLUMNS = {
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Tags',       getter: r => flagLabels(r.id) },
   ],
 };
 
@@ -1990,6 +2019,7 @@ function getHoldsExportData() {
   if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
   if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
   if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applyFlagFilter(visible, tagFilterValue('h-tags'));
   visible = applySort(visible, hSort);
   return { visible, all };
 }
@@ -2002,6 +2032,7 @@ function getRegisteredExportData() {
   let visible = [...all];
   if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
   if (q)       visible = visible.filter(r => (r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applyFlagFilter(visible, tagFilterValue('reg-tags'));
   visible = applySort(visible, regSort_);
   return { visible, all };
 }
@@ -2025,6 +2056,7 @@ function getCanRegExportData() {
   if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
   if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
   if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applyFlagFilter(visible, tagFilterValue('cr-tags'));
   visible = applySort(visible, crSort_);
   return { visible, all };
 }
@@ -2050,6 +2082,7 @@ function getNewStudentsExportData() {
   if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
   if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
   if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
+  visible = applyFlagFilter(visible, tagFilterValue('ns-tags'));
   visible = applySort(visible, nsSort_);
   return { visible, all };
 }
@@ -2086,6 +2119,7 @@ function getNRExportData() {
   if (wf) visible = visible.filter(r => r.withdrawal === wf);
   if (rf) visible = visible.filter(r => (r.reason || '') === rf);
   if (q)  visible = visible.filter(r => ((r.name||'') + (r.id||'')).toLowerCase().includes(q));
+  visible = applyFlagFilter(visible, tagFilterValue('nr-filter-tags'));
   visible = applySort(visible, nrSort_);
   return { visible, all };
 }
@@ -2100,6 +2134,7 @@ function getFTFTExportData() {
   if (q) visible = visible.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q)
   );
+  visible = applyFlagFilter(visible, tagFilterValue('ftft-tags'));
   visible = applySort(visible, ftftSort_);
   return { visible, all };
 }
@@ -2954,9 +2989,11 @@ function renderReturningDonuts(stats) {
     { label:'Registered',        count: registered,  color:'#16a34a',
       subtitle:'Returning + Registered ÷ (Eligible − NR)',
       onclick: go('Registered', "goToFilteredTab('registered', '')") },
+    // Always the Holds Breakdown tab on All Holds (Tony 2026-10-22), even in
+    // cohort mode — that's where hold students are worked.
     { label:'Has Blocking Hold', count: hasHold,     color:'#dc2626',
       subtitle:'Returning + Hold ÷ (Eligible − NR)',
-      onclick: go('Has Hold', "goToFilteredTab('holds', '', true)") },
+      onclick: "goToFilteredTab('holds', '', true)" },
     { label:'Can Register',      count: canRegister, color:'#0d9488',
       subtitle:'Returning + Can Reg ÷ (Eligible − NR)',
       onclick: go('Can Register', "goToFilteredTab('canreg', '')") },
@@ -3966,6 +4003,7 @@ function ftftApply() {
   const gradIds = getGraduatingIdSet();
   let rows = buildFTFTRows().filter(r => !gradIds.has(r.id));
   if (statusFilter) rows = rows.filter(r => r.__status === statusFilter);
+  rows = applyFlagFilter(rows, tagFilterValue('ftft-tags'));
   if (q) rows = rows.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q)
   );
@@ -3981,7 +4019,7 @@ function ftftApply() {
 
   const tbody = document.getElementById('ftft-tbody');
   if (!rows.length) {
-    tbody.innerHTML = emptyRow(7, 'No FTFT students match the current filters.');
+    tbody.innerHTML = emptyRow(8, 'No FTFT students match the current filters.');
     return;
   }
   const statusChip = (s) =>
@@ -4004,8 +4042,9 @@ function ftftApply() {
     <td class="mobile-secondary col-priority-2">${statusHtml}</td>
     <td class="mobile-secondary col-priority-3">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td class="mobile-secondary col-priority-4">${advisorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    ${expandBtnCell()}
-  </tr>${buildDetailRow(7, [
+    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+  </tr>${buildDetailRow(8, [
+    { label: 'Tags', value: tagsCell(r.id) },
     { label: 'First Name', value: firstVal },
     { label: 'Status', value: statusHtml },
     { label: 'Major', value: majorVal },
@@ -4112,7 +4151,7 @@ function cohortApply() {
   const tbody = document.getElementById('co-tbody');
   cohortVisibleIds = rows.map(r => r.id);
   updateCohortBulkBar();
-  if (!rows.length) { tbody.innerHTML = emptyRow(10, 'No cohort students match the current filters.'); return; }
+  if (!rows.length) { tbody.innerHTML = emptyRow(11, 'No cohort students match the current filters.'); return; }
   const statusChip = s =>
     s === 'Registered'    ? 'chip-green'  :
     s === 'Has Hold'      ? 'chip-red'    :
@@ -4137,8 +4176,9 @@ function cohortApply() {
     <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
     <td class="mobile-secondary col-priority-4">${r.major || dash}</td>
     <td class="mobile-secondary col-priority-4" style="text-align:right;">${hrs}</td>
-    ${expandBtnCell()}
-  </tr>${buildDetailRow(10, [
+    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+  </tr>${buildDetailRow(11, [
+    { label: 'Tags', value: tagsCell(r.id) },
     { label: 'First Name', value: r.firstName || '' },
     { label: 'Status', value: statusHtml },
     { label: 'Class', value: classChip(r.classYear) },
@@ -4236,11 +4276,16 @@ function flagLabels(id) {
   if (!set) return '';
   return Object.entries(FLAG_DEFS).filter(([k]) => set.has(k)).map(([, d]) => d.label).join('; ');
 }
-// '' = no filter, '__none' = students with no flags, else a flag key.
+// '' = no filter; a flag key = has that tag; '__all' = has every tag;
+// '__any' = has at least one tag; '__none' = has no tags.
 function applyFlagFilter(rows, value) {
   if (!value) return rows;
-  if (value === '__none') return rows.filter(r => !(studentFlags.get(r.id) || new Set()).size);
-  return rows.filter(r => (studentFlags.get(r.id) || new Set()).has(value));
+  const tagsOf = r => studentFlags.get(r.id) || new Set();
+  const keys = Object.keys(FLAG_DEFS);
+  if (value === '__none') return rows.filter(r => !tagsOf(r).size);
+  if (value === '__any')  return rows.filter(r => keys.some(k => tagsOf(r).has(k)));
+  if (value === '__all')  return rows.filter(r => keys.every(k => tagsOf(r).has(k)));
+  return rows.filter(r => tagsOf(r).has(value));
 }
 
 async function setStudentFlag(flag, on) {
@@ -4415,12 +4460,14 @@ function holdsFilter(holdType, el) {
   document.querySelectorAll('#hold-cards-container .hold-card').forEach(c=>c.classList.remove('selected'));
   // When called from a hold card click we get the element directly; when called
   // from a Summary donut we need to look up the matching card by hold-type index.
+  // The "All Holds" card is rendered FIRST, so per-hold cards are offset by
+  // one from their HOLD_DISPLAY index.
   let target = el;
   if (!target) {
-    const idx = HOLD_DISPLAY.indexOf(holdType);
-    if (idx >= 0) {
-      target = document.querySelectorAll('#hold-cards-container .hold-card')[idx];
-    }
+    const cards = document.querySelectorAll('#hold-cards-container .hold-card');
+    const idx = holdType === 'All Holds' ? -1 : HOLD_DISPLAY.indexOf(holdType);
+    if (holdType === 'All Holds') target = cards[0];
+    else if (idx >= 0) target = cards[idx + 1];
   }
   if (target) target.classList.add('selected');
   currentHold = holdType;
@@ -4477,6 +4524,7 @@ function holdsApply() {
   if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
   rows = applyFTFTFilter(rows, 'h-ftft');
+  rows = applyFlagFilter(rows, tagFilterValue('h-tags'));
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows = applySort(rows, hSort);
   const holdIdx = HOLD_DISPLAY.indexOf(currentHold);
@@ -4523,6 +4571,11 @@ function holdsApply() {
     const ftftMode = document.getElementById('h-ftft')?.value;
     segments.push(`${n(working.length)} ${ftftMode === 'ftft' ? 'FTFT' : 'Non-FTFT'}`);
   }
+  const tagSel = document.getElementById('h-tags');
+  if (tagSel && tagSel.value) {
+    working = applyFlagFilter(working, tagSel.value);
+    segments.push(`${n(working.length)} ${tagSel.options[tagSel.selectedIndex].text}`);
+  }
   if (q) {
     working = working.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
     segments.push(`${n(working.length)} matching "${q}"`);
@@ -4563,9 +4616,10 @@ function holdsApply() {
           <td class="mobile-secondary col-priority-3">${r.major}</td>
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
-          ${expandBtnCell()}
+          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
           <td class="admin-only override-col" style="white-space:nowrap;">${overrideButtonsCell(r.id)}</td>
-        </tr>${buildDetailRow(10, [
+        </tr>${buildDetailRow(11, [
+    { label: 'Tags', value: tagsCell(r.id) },
           { label: 'First Name', value: r.firstName||r.name||'' },
           { label: 'Hold', value: renderHoldChips(r) },
           { label: 'Class', value: classChip(r.classYear) },
@@ -4574,7 +4628,7 @@ function holdsApply() {
           { label: 'Sport', value: sc(r) },
         ])}`;
       }).join('')
-    : emptyRow(10,'No students match.');
+    : emptyRow(11,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4601,6 +4655,7 @@ function crApply() {
   if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
   rows = applyFTFTFilter(rows, 'cr-ftft');
+  rows = applyFlagFilter(rows, tagFilterValue('cr-tags'));
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,crSort_);
   const retCount = activeCanReg.filter(r=>!nrIds.has(r.id)).length;
@@ -4622,9 +4677,10 @@ function crApply() {
           <td class="mobile-secondary col-priority-3">${r.major}</td>
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
-          ${expandBtnCell()}
+          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
           <td class="admin-only override-col" style="white-space:nowrap;">${overrideButtonsCell(r.id)}</td>
-        </tr>${buildDetailRow(10, [
+        </tr>${buildDetailRow(11, [
+    { label: 'Tags', value: tagsCell(r.id) },
           { label: 'First Name', value: r.firstName||r.name||'' },
           { label: 'Class', value: classChip(r.classYear) },
           { label: 'Enrollment', value: ptFtChip(r.ptFt) },
@@ -4633,7 +4689,7 @@ function crApply() {
           { label: 'Sport', value: sc(r) },
         ])}`;
       }).join('')
-    : emptyRow(10,'No students match.');
+    : emptyRow(11,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4668,6 +4724,7 @@ function regApply() {
   if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
   if (ptft)    rows=rows.filter(r=>(r.ptFt||'').toUpperCase() === ptft);
   rows = applyFTFTFilter(rows, 'reg-ftft');
+  rows = applyFlagFilter(rows, tagFilterValue('reg-tags'));
   if (q) rows=rows.filter(r=>(r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,regSort_);
   document.getElementById('reg-title').textContent = `${n(rows.length)} of ${n(returningRegisteredList().length)} Returning Students Registered`;
@@ -4708,15 +4765,16 @@ function regApply() {
           <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
           <td class="mobile-secondary col-priority-2" style="font-weight:600;text-align:right;">${creditCell}</td>
           <td class="mobile-secondary col-priority-4 admin-only" style="font-weight:600;text-align:right;">${gpaCell}</td>
-          ${expandBtnCell()}
-        </tr>${buildDetailRow(7, [
+          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+        </tr>${buildDetailRow(8, [
+    { label: 'Tags', value: tagsCell(r.id) },
           { label: 'Class', value: classChip(r.classYear) },
           { label: 'Enrollment', value: ptFtChip(r.ptFt) },
           { label: 'Credits', value: creditCell },
           ...gpaDetailField,
         ])}`;
       }).join('')
-    : emptyRow(7,'No students match.');
+    : emptyRow(8,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4743,6 +4801,7 @@ function nsApply() {
   if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
   if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
   rows = applyFTFTFilter(rows, 'ns-ftft');
+  rows = applyFlagFilter(rows, tagFilterValue('ns-tags'));
   if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
   rows=applySort(rows,nsSort_);
   const nsTotal = Object.keys(newStudents).length;
@@ -4765,8 +4824,9 @@ function nsApply() {
           <td class="mobile-secondary col-priority-4">${r.major}</td>
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
-          ${expandBtnCell()}
-        </tr>${buildDetailRow(9, [
+          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+        </tr>${buildDetailRow(10, [
+    { label: 'Tags', value: tagsCell(r.id) },
           { label: 'First Name', value: r.firstName||r.name||'' },
           { label: 'Status', value: statusChip },
           { label: 'Class', value: classChip(r.classYear) },
@@ -4775,7 +4835,7 @@ function nsApply() {
           { label: 'Sport', value: sc(r) },
         ])}`;
       }).join('')
-    : emptyRow(9,'No students match.');
+    : emptyRow(10,'No students match.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -5460,6 +5520,7 @@ function nrRender() {
   }
   if (mf) indexed=indexed.filter(r => (r.major || '') === mf);
   indexed = applyFTFTFilter(indexed, 'nr-filter-ftft');
+  indexed = applyFlagFilter(indexed, tagFilterValue('nr-filter-tags'));
   if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.firstName||'')+(r.lastName||'')+(r.id||'')).toLowerCase().includes(q));
   indexed=applySort(indexed,nrSort_);
   // Visible-vs-total count next to the table title (Tony 2026-05-07 — makes
@@ -5474,7 +5535,7 @@ function nrRender() {
   }
   const tbody=document.getElementById('nr-tbody');
   if (!indexed.length) {
-    tbody.innerHTML = emptyRow(12,
+    tbody.innerHTML = emptyRow(13,
       filtered
         ? 'No rows match the current filters. Try clearing one of the dropdowns above.'
         : 'No students on the Not Returning list yet. Use the form above to add the first entry.');
@@ -6032,8 +6093,9 @@ function nrRenderStaticRow(r) {
     <td class="mobile-secondary col-priority-2">${wChipHtml}</td>
     <td class="mobile-secondary col-priority-4" style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td class="mobile-secondary col-priority-4" style="white-space:nowrap;">${actionsHtml}</td>
-    ${expandBtnCell()}
-  </tr>${buildDetailRow(12, [
+    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+  </tr>${buildDetailRow(13, [
+    { label: 'Tags', value: tagsCell(r.id) },
     { label: 'First Name', value: firstCell || '' },
     { label: 'Class', value: classCell },
     { label: 'Sport(s)', value: sportCell },
@@ -6153,6 +6215,7 @@ function nrRenderEditRow(r) {
       <button onclick="nrSave(${r._idx})"     class="nr-row-btn nr-row-btn-primary" title="Save and close edit row" style="font-weight:600;">Save changes</button>
       <button onclick="nrCancelEdit()"        class="nr-row-btn" title="Cancel">Cancel</button>
     </td>
+    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>
     <td></td>
   </tr>`;
 }
@@ -6517,7 +6580,7 @@ function _wdRenderLegacy_DEAD() {
   const nrSourceSet = new Set(nrList.filter(r => r._sourceWithdrawalId).map(r => r._sourceWithdrawalId));
   const tbody = document.getElementById('wd-tbody');
   if (!rows.length) {
-    tbody.innerHTML = emptyRow(10, termFilter === 'current'
+    tbody.innerHTML = emptyRow(11, termFilter === 'current'
       ? 'No withdrawals in the current term match the filters. Try switching the term selector to "All terms".'
       : 'No withdrawals match the filters.');
     return;
@@ -6685,10 +6748,12 @@ function goToRegisteredPage() {
 // user happened to last click. After the filter is set, the tab's
 // apply/render function is called so the table reflects it immediately.
 function goToFilteredTab(tab, ftftValue, useAllHolds) {
-  if (tab === 'holds' && useAllHolds) currentHold = 'All Holds';
   const navTab = [...document.querySelectorAll('.nav-tab')]
     .find(t => (t.getAttribute('onclick') || '').includes(`'${tab}'`));
   showPage(tab, navTab);
+  // holdsFilter also highlights the All Holds card and clears stale
+  // search/major/advisor/sport filters from an earlier visit.
+  if (tab === 'holds' && useAllHolds) holdsFilter('All Holds');
   const filterIdMap = {
     'registered':   'reg-ftft',
     'holds':        'h-ftft',
@@ -6698,6 +6763,10 @@ function goToFilteredTab(tab, ftftValue, useAllHolds) {
   };
   const sel = document.getElementById(filterIdMap[tab]);
   if (sel) sel.value = ftftValue || '';
+  // Donut counts ignore tags, so drop any tag filter left from a prior visit.
+  const tagIdMap = { registered: 'reg-tags', holds: 'h-tags', canreg: 'cr-tags', new: 'ns-tags', notreturning: 'nr-filter-tags' };
+  const tagSel = document.getElementById(tagIdMap[tab]);
+  if (tagSel) tagSel.value = '';
   const applyMap = {
     'registered':   'regApply',
     'holds':        'holdsApply',
@@ -8605,6 +8674,7 @@ loadTermSettings();
 loadFTFTIds();
 nrPopulateAddReason();
 nrPopulateReasonFilter();
+populateTagFilters();
 nrUpdateKpis();
 nrRender();
 
