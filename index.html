@@ -23,7 +23,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .upload-panel.open { display: block; }
 .upload-panel-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
 .upload-panel-note { font-size: 12px; color: #555; margin-bottom: 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 7px; padding: 9px 13px; display: flex; align-items: flex-start; gap: 8px; }
-.upload-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.upload-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .term-settings { background: #f8f9fb; border: 1px solid #e0e4ec; border-radius: 8px; padding: 12px 14px; margin-top: 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .term-settings .ts-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #888; }
 .term-settings .ts-field { display: flex; flex-direction: column; gap: 3px; }
@@ -993,6 +993,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="drop-hint">FTFT roster — only the ID column is required<br>Tags students wherever they appear</div>
       <div class="drop-status" id="dz-ftft-status">No file loaded</div>
     </div>
+    <div class="drop-zone" id="dz-cohort" ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,'cohort',this)">
+      <input type="file" accept=".csv" onchange="fileInput(event,'cohort','dz-cohort')" />
+      <div class="drop-label">Term Cohort (Student Listing)</div>
+      <div class="drop-hint">Student listing for the CURRENT term, pulled once (e.g. at census)<br>Becomes the Eligible to Return population</div>
+      <div class="drop-status" id="dz-cohort-status">No file loaded</div>
+    </div>
   </div>
   <div class="term-settings">
     <span class="ts-label">Term window:</span>
@@ -1015,7 +1021,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <button class="nr-row-btn nr-row-btn-primary" onclick="saveTermSettings()" style="height:28px;">Save term window</button>
     <span id="ts-save-status" style="font-size:11px;color:#888;min-width:140px;"></span>
     <button class="nr-row-btn nr-row-btn-danger admin-only" onclick="startNewCycle()" style="height:28px;margin-left:auto;" title="Archive the previous cycle's Not Returning list and clear manual Reg/NR overrides. Run once when the new term starts.">Start new cycle…</button>
-    <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are auto-fed into Not Returning. If "Next term starts" is blank, the window runs through today. At each term change: save the new term window, click <strong>Start new cycle</strong>, then upload all five CSVs together (including the new FTFT roster).</span>
+    <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are auto-fed into Not Returning. If "Next term starts" is blank, the window runs through today. At each term change: save the new term window, click <strong>Start new cycle</strong>, then upload all six CSVs together (including the new FTFT roster and the current term's student listing).</span>
   </div>
   <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
     <button class="nr-btn" style="width:auto;padding:8px 20px;" onclick="processAllCSVs()">Apply &amp; Refresh Dashboard</button>
@@ -1035,6 +1041,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="nav-tab gated-only" onclick="showPage('new',this)">New Students</div>
     <div class="nav-tab gated-only" onclick="showPage('ftft',this)">FTFT</div>
     <div class="nav-tab gated-only" onclick="showPage('notreturning',this)">Not Returning</div>
+    <div class="nav-tab gated-only" onclick="showPage('cohort',this)">Cohort</div>
   </div>
 </div>
 
@@ -1047,7 +1054,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     <div class="section-label">Headline Totals</div>
     <div class="kpi-row kpi-row-4">
       <div class="kpi-card blue kpi-clickable" onclick="goToRegisteredPage()" title="Open the Registered tab"><div class="kpi-label">Total Registered</div><div class="kpi-value" id="s-all-reg">—</div><div class="kpi-sub">All registered students (returning + new)</div></div>
-      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub">Returning + current-term Not Returning</div></div>
+      <div class="kpi-card indigo"><div class="kpi-label">Eligible to Return</div><div class="kpi-value" id="s-eligible">—</div><div class="kpi-sub" id="s-eligible-sub">Returning + current-term Not Returning</div></div>
       <div class="kpi-card red kpi-clickable" onclick="goToNRPage()" title="Open the Not Returning tab"><div class="kpi-label">Total Not Returning</div><div class="kpi-value" id="s-not-ret">—</div><div class="kpi-sub">All NR entries incl. prior-term (ex-Graduating)</div></div>
       <div class="kpi-card sky kpi-clickable" onclick="goToNewPage()" title="Open the New Students tab"><div class="kpi-label">Total New</div><div class="kpi-value" id="s-new-total">—</div><div class="kpi-sub">All registered new students</div></div>
     </div>
@@ -1309,6 +1316,55 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
 </div>
 
+<!-- ══════════════════════════ COHORT ══════════════════════════ -->
+<div class="page" id="page-cohort">
+  <div id="cohort-empty" class="empty-state"><p>No term cohort loaded for the current term.<br>Upload the current term's student listing report in the <a onclick="toggleUploadPanel()">upload panel</a> (Term Cohort slot). Until then, Eligible to Return is derived from the daily rosters.</p></div>
+  <div id="cohort-content" style="display:none;">
+    <div class="kpi-row kpi-row-6">
+      <div class="kpi-card indigo kpi-clickable" onclick="cohortFilterByStatus('')" title="Clear the status filter"><div class="kpi-label">Eligible (Cohort)</div><div class="kpi-value" id="co-total">0</div><div class="kpi-sub" id="co-total-sub">Listing minus Graduating</div></div>
+      <div class="kpi-card green kpi-clickable" onclick="cohortFilterByStatus('Registered')"><div class="kpi-label">Registered</div><div class="kpi-value" id="co-reg">0</div><div class="kpi-sub">Registered for next term</div></div>
+      <div class="kpi-card red kpi-clickable" onclick="cohortFilterByStatus('Has Hold')"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="co-hold">0</div><div class="kpi-sub">On unregistered report, blocking hold</div></div>
+      <div class="kpi-card teal kpi-clickable" onclick="cohortFilterByStatus('Can Register')"><div class="kpi-label">Can Register</div><div class="kpi-value" id="co-canreg">0</div><div class="kpi-sub">On unregistered report, no hold</div></div>
+      <div class="kpi-card amber kpi-clickable" onclick="cohortFilterByStatus('Not Returning')"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="co-nr">0</div><div class="kpi-sub">On NR list or withdrew this term</div></div>
+      <div class="kpi-card purple kpi-clickable" onclick="cohortFilterByStatus('Unaccounted')"><div class="kpi-label">Unaccounted</div><div class="kpi-value" id="co-unacc">0</div><div class="kpi-sub">Not on any report or list</div></div>
+    </div>
+    <div class="section-label" id="co-section-label">Term Cohort</div>
+    <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="co-status" onchange="cohortApply()">
+        <option value="">All Statuses</option>
+        <option>Registered</option>
+        <option>Has Hold</option>
+        <option>Can Register</option>
+        <option>Not Returning</option>
+        <option>Unaccounted</option>
+        <option>Graduating</option>
+      </select>
+      <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
+    </div>
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="co-title">Cohort Students</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('cohort','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('cohort','all')" title="Download every cohort student">Download all (.csv)</button>
+        </div>
+      </div>
+      <table><thead><tr>
+        <th class="sortable" onclick="cohortSort('id')">Student ID</th>
+        <th class="sortable" onclick="cohortSort('lastName')">Last Name</th>
+        <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="cohortSort('firstName')">First Name</th>
+        <th class="sortable mobile-secondary col-priority-2" onclick="cohortSort('__status')">Status</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="cohortSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('major')">Major</th>
+        <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('hrsEnrolled')">Term Hrs</th>
+        <th class="exp-th"></th>
+      </tr></thead>
+      <tbody id="co-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════ NOT RETURNING ══════════════════════════ -->
 <div class="page" id="page-notreturning">
   <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
@@ -1533,7 +1589,11 @@ function normalizeSportList(commaJoined) {
 }
 
 let rawUnreg = [], rawReg = [], rawNew = [], rawWithdrawals = [], rawFTFT = [];
-let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false, ftft: false };
+let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false, ftft: false, cohort: false };
+// Base cohort for the CURRENT term (student listing report): id -> row.
+// Empty Map = no cohort loaded; every eligible computation then falls back
+// to deriving the population from the daily rosters (computeRetentionStats).
+let termCohort = new Map();
 let pendingFiles = {};
 
 // First-Time Full-Time roster — Set of student IDs from the FTFT CSV upload.
@@ -1796,6 +1856,18 @@ const EXPORT_COLUMNS = {
     { header: 'Source',         getter: r => r._sourceWithdrawalId ? 'CSV import' : 'Human entry' },
     { header: 'Withdrawal LDA', getter: r => r._withdrawalLDA || '' },
   ],
+  cohort: [
+    { header: 'Student ID', getter: r => r.id },
+    { header: 'Last Name',  getter: r => r.lastName },
+    { header: 'First Name', getter: r => r.firstName },
+    { header: 'Email',      getter: r => r.email },
+    { header: 'Phone',      getter: r => phoneNumbers.get(r.id) || '' },
+    { header: 'Status',     getter: r => r.__status },
+    { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Major',      getter: r => r.major },
+    { header: 'Advisor',    getter: r => r.advisor },
+    { header: 'Term Hours', getter: r => r.hrsEnrolled || '' },
+  ],
   ftft: [
     { header: 'Student ID', getter: r => r.id },
     { header: 'Last Name',  getter: r => r.lastName },
@@ -1968,6 +2040,7 @@ function exportTabCSV(tab, scope /* 'visible' | 'all' */) {
     case 'withdrawals':  data = getWithdrawalsExportData(); break;
     case 'notreturning': data = getNRExportData(); break;
     case 'ftft':         data = getFTFTExportData(); break;
+    case 'cohort':       data = getCohortExportData(); break;
     default: return;
   }
   const rows = scope === 'all' ? data.all : data.visible;
@@ -2026,6 +2099,10 @@ function processAllCSVs() {
     saveFTFTIds();
     ftftUploadedThisSession = true; // guard: prevent Supabase reload from overwriting this roster
   }
+  if (pendingFiles.cohort) {
+    termCohort = parseCohortListing(parseCSV(pendingFiles.cohort));
+    csvLoaded.cohort = true;
+  }
 
   buildData();
   // Run the auto-sync after buildData so registeredIds + students maps are populated
@@ -2040,6 +2117,68 @@ function processAllCSVs() {
   purgeGraduatedFromNR();
   renderAll();
   toggleUploadPanel();
+}
+
+// Parse the registrar's student listing report (same report as the
+// registered CSV: id_num, last_name, first_name, class_cde, major_1,
+// hrs_enrolled, pt_ft_sts, div_cde, yr_cde, trm_cde, ...) into the term
+// cohort. Every row with an ID is kept — including withdrawn students, who
+// were enrolled this term and so were eligible to return. If the listing
+// spans several divisions (e.g. undergrad + graduate), the admin picks which
+// to include so the cohort matches the population the other reports cover.
+function parseCohortListing(rows) {
+  const parsed = [];
+  const terms = new Set();
+  const divCounts = {};
+  rows.forEach(r => {
+    const s = normalizeStudent(r);
+    if (!s.id) return;
+    const divCde = (findField(r, ['div_cde']) || '').trim().toUpperCase();
+    const termCode = [findField(r, ['yr_cde']), findField(r, ['trm_cde'])].map(v => (v || '').trim()).filter(Boolean).join(' ');
+    if (termCode) terms.add(termCode);
+    divCounts[divCde || '(blank)'] = (divCounts[divCde || '(blank)'] || 0) + 1;
+    parsed.push({
+      id: s.id,
+      firstName: s.firstName,
+      lastName: s.lastName,
+      name: s.name,
+      classYear: normalizeClassYear(s.classYear),
+      major: s.major,
+      divCde,
+      hrsEnrolled: s.creditHours,
+      ptFt: s.ptFt,
+    });
+  });
+
+  let keepDivs = null;
+  const divs = Object.keys(divCounts);
+  if (divs.length > 1) {
+    const summary = divs.map(d => `${d}: ${divCounts[d]}`).join(', ');
+    const answer = prompt(
+      `This listing includes several divisions (${summary}).\n\n` +
+      `Which divisions belong in the cohort? Enter codes separated by commas. ` +
+      `Leave as-is to include all.`, divs.join(','));
+    if (answer != null && answer.trim()) {
+      keepDivs = new Set(answer.split(',').map(d => d.trim().toUpperCase()).filter(Boolean));
+    }
+  }
+  if (terms.size > 1) {
+    alert(`Warning: the cohort listing contains more than one term (${[...terms].join(', ')}). ` +
+      `It should be the student listing for the current term only.`);
+  }
+
+  const cohort = new Map();
+  parsed.forEach(p => {
+    if (keepDivs && !keepDivs.has(p.divCde || '(BLANK)')) return;
+    if (!cohort.has(p.id)) cohort.set(p.id, p);
+  });
+  const statusEl = document.getElementById('dz-cohort-status');
+  if (statusEl) {
+    statusEl.textContent = `Parsed ${n(cohort.size)} students` +
+      (terms.size ? ` · term ${[...terms].join(', ')}` : '') +
+      (keepDivs ? ` · divisions ${[...keepDivs].join(', ')}` : '');
+  }
+  return cohort;
 }
 
 // Remove NR rows for students who graduated. A student is considered graduated
@@ -2610,102 +2749,34 @@ function renderSummary() {
   //   Semester Persistence Rate = effectiveReturningReg / Eligible to Return
   //   Total Registered         = all registered students (ex-Graduating)
   // ──────────────────────────────────────────────────────────────────────
-  // Tony 2026-05-11: Graduating students should not count toward any number
-  // on the dashboard. Build a set of their IDs first and use it to filter
-  // every Total, every numerator, every denominator below.
-  const gradIds               = getGraduatingIdSet();
-  const isActive              = id => !gradIds.has(id);
+  // Every count below comes from computeRetentionStats() — see its header
+  // for the cohort-vs-roster definitions. Graduating students are excluded
+  // from every number (Tony 2026-05-11). "Total New" counts only new
+  // students registered for the upcoming term (Tony 2026-05-13).
+  const stats                 = computeRetentionStats();
+  const newTotal              = stats.newReg;
+  const totalRegistered       = stats.allRegistered;
+  const notReturning          = stats.totalNR;
+  const eligibleReturn        = stats.eligible;
+  const effectiveReturningReg = stats.effReg;
+  const totalReturning        = stats.totalReturning;
+  const retRate               = pct1(effectiveReturningReg, eligibleReturn);
 
-  // Tony 2026-05-13: "Total New" on the Summary tab counts only NEW students
-  // who are currently registered for the upcoming term. Not-yet-registered
-  // new admits stay visible on the New Students tab (with their separate
-  // Registered / Not Yet Registered counters) but don't inflate the headline.
-  // status is set by buildData based on registeredIds, so this filter follows
-  // the authoritative source even when only one CSV is re-uploaded.
-  const newTotal              = Object.values(newStudents)
-                                  .filter(s => isActive(s.id) && s.status === 'Registered').length;
-  const newReg                = newTotal;  // by definition now: Total New === registered new
-  const allRegistered         = [...registeredIds].filter(isActive).length;
-  const returningRegistered   = allRegistered - newReg;          // raw R_returning
-  const returningUnregistered = Object.keys(returningStudents).filter(isActive).length;
-  // Tony 2026-05-05: Graduating students aren't "returning" or "not returning" —
-  // they're completing their degree. Exclude them from the Total Not Returning
-  // count and from the Eligible to Return denominator.
-  // Tony 2026-05-07: count uses the deduped list (one row per student) so
-  // students with both a manual entry and a CSV-auto-imported row aren't
-  // double-counted.
-  const dedupedNR = getDedupedNRList();
-
-  // Dedupe: students who are both returning-registered AND on NR list count
-  // once (in the NR bucket, not in the registered bucket). Graduating IDs are
-  // already excluded above (gradIds filter), so we don't need to subtract
-  // them again here.
-  const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
-  const overlapRegNR = [...registeredIds]
-    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
-  const effectiveReturningReg = returningRegistered - overlapRegNR;
-
-  // Total Returning: unique returning IDs (unreg ∪ registered_returning) NOT on NR.
-  // Graduating IDs are filtered out at source so they never enter this set.
-  const returningIdSet = new Set([
-    ...Object.keys(returningStudents).filter(isActive),
-    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
-  ]);
-  const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
-  // All non-graduating NR entries — shown as "Total Not Returning" on the dashboard.
-  // Includes prior-term auto-imports whose IDs are no longer in the current snapshot.
-  const notReturning = dedupedNR.filter(r =>
-    (r.reason || '').toLowerCase() !== 'graduating'
-  ).length;
-  // For Eligible to Return, only count NR entries whose student is actually in
-  // the current cohort: present in a current roster OR withdrawn during the
-  // current term (the registrar's daily exports drop processed withdrawals
-  // from both rosters, but those students were enrolled this term and were
-  // eligible to return — Tony 2026-07-15). Entries that match neither are
-  // prior-term leavers with no possible numerator presence; they'd inflate
-  // the denominator without a compensating decrease in totalReturning.
-  const ctwIds = getCurrentTermWithdrawalIdSet();
-  const notReturningInCohort = dedupedNR.filter(r =>
-    (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && (returningIdSet.has(r.id) || ctwIds.has(r.id))
-  ).length;
-  const eligibleReturn = totalReturning + notReturningInCohort;
-  const totalRegistered = allRegistered;
-  const retRate = eligibleReturn
-    ? Math.round(effectiveReturningReg / eligibleReturn * 1000) / 10
-    : 0;
-  // Can Register count excludes graduating students per the rule above.
-  const canReg = canRegisterStudents.filter(s => isActive(s.id)).length;
-
-  // Grand Total = students who are still returning + students declared NR + new students.
-  // These three categories are conceptually disjoint in Tony's framing
-  // (totalReturning already excludes anyone on NR list).
-  const grandTotal = totalReturning + notReturning + newTotal;
-
-  // ── Verification of the five "Total" calculations Tony asked about ────
-  // Grand Total          = totalReturning + notReturning + newTotal
-  // Total Returning      = unique returning IDs (unreg ∪ registered_returning) NOT on NR
-  // Total Not Returning  = nrList.length (every row, pending + withdrawn, with or without ID)
-  // Total New            = count of new students with status==='Registered' only
-  // Eligible to Return   = totalReturning + notReturning
-  //                        (everyone counted minus new students)
-  // ──────────────────────────────────────────────────────────────────────
-
-  // Headline row only — Returning Detail row was removed (its info is now
-  // conveyed by the Returning Student Status donut chart instead).
   document.getElementById('s-all-reg').textContent  = n(totalRegistered);
   document.getElementById('s-eligible').textContent = n(eligibleReturn);
   document.getElementById('s-not-ret').textContent  = n(notReturning);
   document.getElementById('s-new-total').textContent = n(newTotal);
   document.getElementById('s-ret-rate').textContent = retRate + '%';
+  const eligSubEl = document.getElementById('s-eligible-sub');
+  if (eligSubEl) eligSubEl.textContent = stats.mode === 'cohort'
+    ? `${termSettings.currentName || 'Current term'} cohort (student listing), ex-Graduating`
+    : 'Returning + current-term Not Returning';
 
-  // "Potential" Semester Persistence Rate — if every returning student who isn't on
-  // the NR list ended up registered. Numerator: Registered + Has Hold +
-  // Can Register (= totalReturning). Denominator: Eligible to Return.
-  // Tony 2026-05-11.
-  const potentialRet = eligibleReturn
-    ? Math.round(totalReturning / eligibleReturn * 1000) / 10
-    : 0;
+  // "Potential" Semester Persistence Rate — if every returning student who
+  // isn't on the NR list ended up registered: (Registered + Has Hold + Can
+  // Register) ÷ Eligible. Unaccounted cohort members aren't on any report,
+  // so they're not counted as recoverable. Tony 2026-05-11.
+  const potentialRet = pct1(totalReturning, eligibleReturn);
   const retPotEl = document.getElementById('s-ret-potential');
   if (retPotEl) retPotEl.textContent = 'Potential: ' + potentialRet + '%';
 
@@ -2737,41 +2808,19 @@ function renderSummary() {
     : 'Returning Reg ÷ (Eligible + N) — set N in Settings';
   if (f2fPotEl)  f2fPotEl.textContent  = 'Potential: ' + f2fPotential + '%';
 
-  // Variables the donuts and existing computation expect; alias to current
-  // values so existing render code keeps working.
-  const totalRet = totalReturning;
-  const retRegisteredCount = effectiveReturningReg;
-
   // Show/hide
   document.getElementById('summary-empty').style.display   = 'none';
   document.getElementById('summary-content').style.display = 'block';
 
-  // Returning Student Status: three donuts at a glance — Registered, Has Blocking
-  // Hold, Can Register. Each shows its count in the center, % of total returning
-  // below, with the donut ring filled to the percentage in its segment color.
-  //
-  // Tony 2026-05-11: count each student ONCE in "Has Blocking Hold" (dedupe by
-  // ID so multi-hold students contribute one). Also apply the same exclusions
-  // the Registered donut uses — graduating AND NR — to the other two donuts,
-  // so the three counts are mutually exclusive and exhaustive of totalReturning.
-  // They should sum to ~totalReturning (and the percentages to ~100%) because:
-  //   Registered      = registered.csv ∩ returning ∩ !NR ∩ !grad
-  //   Has Blocking    = unreg.csv ∩ has-hold     ∩ !NR ∩ !grad
-  //   Can Register    = unreg.csv ∩ no-hold      ∩ !NR ∩ !grad
-  // registered.csv and unreg.csv are disjoint by definition, and has-hold /
-  // no-hold partition unreg.csv.
-  const nrIdsActive = new Set(dedupedNR.map(s => s.id).filter(Boolean));
-  const uniqueWithHold = new Set();
-  Object.values(holdGroups).forEach(g => g.forEach(s => {
-    if (isActive(s.id) && !nrIdsActive.has(s.id)) uniqueWithHold.add(s.id || s);
-  }));
-  const canRegActive = canRegisterStudents
-    .filter(s => isActive(s.id) && !nrIdsActive.has(s.id)).length;
-  renderReturningDonuts(retRegisteredCount, uniqueWithHold.size, canRegActive, totalRet);
+  // Returning Student Status donuts — mutually exclusive buckets, each
+  // student counted once (multi-hold students included), graduating and NR
+  // excluded. They sum to Eligible − NR: Registered + Has Hold + Can Register
+  // (+ Unaccounted in cohort mode, shown as a fourth donut).
+  renderReturningDonuts(stats);
 
   // First-Time Full-Time donuts — mirror Returning Student Status but
   // restricted to ftftIds. Tony 2026-05-11.
-  renderFTFTDonuts(nrIdsActive);
+  renderFTFTDonuts(stats.ctx.nrIdSet);
 
   // Per-hold donuts: one circle graph per hold type. Center number = students
   // with this hold who are still likely returning (i.e. NOT on the NR list).
@@ -2783,13 +2832,21 @@ function renderSummary() {
   // toward each of their reasons. Sorted desc.
   renderReasonsChart();
 
+  // Cohort tab statuses depend on the NR list too, and every NR edit
+  // re-runs renderSummary — refresh it here so the tab never goes stale.
+  renderCohort();
+
   // Registration rate trend chart (hosted mode only — reads term_history table)
   renderTrendChart();
 }
 
-function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
+function renderReturningDonuts(stats) {
   const container = document.getElementById('returning-donuts-grid');
   if (!container) return;
+  const registered  = stats.effReg;
+  const hasHold     = stats.holdCount;
+  const canRegister = stats.canRegCount;
+  const totalRet    = stats.totalReturning + stats.unaccounted; // = Eligible − NR
   // Click handlers route to the corresponding gated tab. Tab order: Summary=0,
   // Registered=1, Holds=2, CanReg=3, NewStudents=4, NotReturning=5.
   // Subtitles spell out the percentage formula. Denominator for all three
@@ -2798,17 +2855,28 @@ function renderReturningDonuts(registered, hasHold, canRegister, totalRet) {
   // FTFT and non-FTFT alike. Clicking clears the FTFT filter on the
   // destination tab so the user sees everyone, not just whichever
   // cohort was last filtered. Tony 2026-05-14.
+  // In cohort mode every donut opens the Cohort tab filtered to that status,
+  // so the list matches the count (the Registered/Holds/Can Register tabs
+  // also include students outside the cohort, e.g. readmits).
+  const isCohort = stats.mode === 'cohort';
+  const go = (status, fallback) => isCohort ? `goToCohortPage('${status}')` : fallback;
   const segments = [
     { label:'Registered',        count: registered,  color:'#16a34a',
       subtitle:'Returning + Registered ÷ (Eligible − NR)',
-      onclick: "goToFilteredTab('registered', '')" },
+      onclick: go('Registered', "goToFilteredTab('registered', '')") },
     { label:'Has Blocking Hold', count: hasHold,     color:'#dc2626',
       subtitle:'Returning + Hold ÷ (Eligible − NR)',
-      onclick: "goToFilteredTab('holds', '', true)" },
+      onclick: go('Has Hold', "goToFilteredTab('holds', '', true)") },
     { label:'Can Register',      count: canRegister, color:'#0d9488',
       subtitle:'Returning + Can Reg ÷ (Eligible − NR)',
-      onclick: "goToFilteredTab('canreg', '')" },
+      onclick: go('Can Register', "goToFilteredTab('canreg', '')") },
   ];
+  if (isCohort) {
+    segments.push({ label:'Unaccounted', count: stats.unaccounted, color:'#7c3aed',
+      subtitle:'In cohort, on no report or list',
+      onclick: "goToCohortPage('Unaccounted')" });
+  }
+  container.style.gridTemplateColumns = `repeat(${segments.length}, 1fr)`;
   container.innerHTML = segments.map(seg => svgSegmentDonut({
     label: seg.label,
     count: seg.count,
@@ -3028,30 +3096,12 @@ async function backfillRecentHistoryToToday() {
   if (!sb)          { console.error('Supabase client not initialized — open the dashboard in hosted mode.'); return; }
   if (!isAdmin())   { console.error('Must be signed in as an admin (RLS blocks term_history updates otherwise).'); return; }
 
-  // Recompute today's snapshot values using the graduating-aware formulas.
-  const gradIds = getGraduatingIdSet();
-  const isActive = id => !gradIds.has(id);
+  // Recompute today's snapshot values with the shared definitions.
+  const stats = computeRetentionStats();
+  const isActive = stats.ctx.isActive;
   const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.filter(s => isActive(s.id)).length, 0);
-  const allRegistered = [...registeredIds].filter(isActive).length;
-  const newRegCount = Object.values(newStudents).filter(s => s.status === 'Registered' && isActive(s.id)).length;
-  const returningRegistered = allRegistered - newRegCount;
-  const dedupedNR = getDedupedNRList();
-  const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
-  const overlap = [...registeredIds]
-    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
-  const effReg = returningRegistered - overlap;
-  const returningIdSet = new Set([
-    ...Object.keys(returningStudents).filter(isActive),
-    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
-  ]);
-  const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
-  const ctwIdsBackfill = getCurrentTermWithdrawalIdSet();
-  const notReturningCount = dedupedNR.filter(r =>
-    (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && (returningIdSet.has(r.id) || ctwIdsBackfill.has(r.id))
-  ).length;
-  const eligibleReturn = totalReturning + notReturningCount;
-  const rate = eligibleReturn ? Math.round(effReg / eligibleReturn * 1000) / 10 : 0;
+  const returningRegistered = stats.returningRegistered;
+  const rate = pct1(stats.effReg, stats.eligible);
 
   console.log('Backfill values:', { registered_count: returningRegistered, holds_count: totalHolds, registration_rate: rate });
 
@@ -3190,27 +3240,12 @@ async function renderTrendChart() {
   const currentLabel = getNextTermLabel();
   const currentRate = parseFloat(document.getElementById('s-ret-rate')?.textContent) || null;
 
-  // Live NR rate for the inverted red volume. Mirrors renderSummary's
-  // eligibleReturn computation so the two metrics share a denominator on
-  // the chart: chart Y of 100 is the top, chart Y of 0 is the bottom,
-  // persistence area grows up from 0, NR area grows down from 100. Tony
+  // Live NR rate for the inverted red volume — same denominator (Eligible)
+  // as the persistence rate, so the two areas share the 0–100 axis. Tony
   // 2026-05-13.
-  const gradIdsTrend = getGraduatingIdSet();
-  const isActiveTrend = id => !gradIdsTrend.has(id);
-  const dedupedNRTrend = getDedupedNRList();
-  const nrIdSetTrend = new Set(dedupedNRTrend.map(s => s.id).filter(Boolean));
-  const returningIdSetTrend = new Set([
-    ...Object.keys(returningStudents).filter(isActiveTrend),
-    ...[...registeredIds].filter(id => isActiveTrend(id) && !newStudents[id]),
-  ]);
-  const totalReturningTrend = [...returningIdSetTrend].filter(id => !nrIdSetTrend.has(id)).length;
-  const ctwIdsTrend = getCurrentTermWithdrawalIdSet();
-  const notReturningTrend = dedupedNRTrend.filter(r =>
-    (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && (returningIdSetTrend.has(r.id) || ctwIdsTrend.has(r.id))
-  ).length;
-  const eligibleTrend = totalReturningTrend + notReturningTrend;
-  const currentNrRate = eligibleTrend ? Math.round(notReturningTrend / eligibleTrend * 1000) / 10 : null;
+  const statsTrend = computeRetentionStats();
+  const isActiveTrend = statsTrend.ctx.isActive;
+  const currentNrRate = statsTrend.eligible ? pct1(statsTrend.nrInCohort, statsTrend.eligible) : null;
 
   // Build current-term data so the curve and subtitle always reflect the
   // LIVE Semester Persistence Rate, even if today's row in term_history was
@@ -3225,10 +3260,7 @@ async function renderTrendChart() {
     // unfiltered counts that disagreed with what gets persisted on upload.
     const totalHolds = Object.values(holdGroups)
       .reduce((a, g) => a + g.filter(s => isActiveTrend(s.id)).length, 0);
-    const allReg = [...registeredIds].filter(isActiveTrend).length;
-    const newRegCount = Object.values(newStudents)
-      .filter(s => s.status === 'Registered' && isActiveTrend(s.id)).length;
-    const retReg = allReg - newRegCount;
+    const retReg = statsTrend.returningRegistered;
     if (todayIdx >= 0) {
       currentPts = currentPts.map((d, i) => i === todayIdx
         ? { ...d, registration_rate: currentRate, registered_count: retReg, holds_count: totalHolds, nr_rate: currentNrRate }
@@ -3888,6 +3920,136 @@ function ftftApply() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  COHORT TAB — every member of the current term's student listing with
+//  their status (cohortStatusOf). KPI counts match computeRetentionStats.
+// ══════════════════════════════════════════════════════════════
+let cohortSort_ = { col: null, dir: 1 };
+function cohortSort(col) {
+  if (cohortSort_.col === col) cohortSort_.dir *= -1;
+  else { cohortSort_.col = col; cohortSort_.dir = 1; }
+  cohortApply();
+}
+
+function buildCohortRows() {
+  const ctx = retentionContext();
+  return [...termCohort.values()].map(c => {
+    // Prefer the live record for major/advisor; fall back to the listing.
+    const live = registeredStudents[c.id] || returningStudents[c.id] || {};
+    return {
+      id: c.id,
+      lastName: c.lastName || live.lastName || '',
+      firstName: c.firstName || live.firstName || '',
+      name: c.name || live.name || '',
+      classYear: c.classYear || live.classYear || '',
+      major: c.major || live.major || '',
+      advisor: live.advisor || '',
+      email: live.email || '',
+      hrsEnrolled: c.hrsEnrolled || 0,
+      __status: cohortStatusOf(c.id, ctx),
+    };
+  });
+}
+
+function renderCohort() {
+  const emptyEl = document.getElementById('cohort-empty');
+  const contentEl = document.getElementById('cohort-content');
+  if (!emptyEl || !contentEl) return;
+  if (!termCohort.size) {
+    emptyEl.style.display = 'block';
+    contentEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  contentEl.style.display = 'block';
+  const stats = computeRetentionStats();
+  document.getElementById('co-total').textContent  = n(stats.eligible);
+  document.getElementById('co-reg').textContent    = n(stats.effReg);
+  document.getElementById('co-hold').textContent   = n(stats.holdCount);
+  document.getElementById('co-canreg').textContent = n(stats.canRegCount);
+  document.getElementById('co-nr').textContent     = n(stats.nrInCohort);
+  document.getElementById('co-unacc').textContent  = n(stats.unaccounted);
+  const grads = termCohort.size - stats.eligible;
+  document.getElementById('co-total-sub').textContent =
+    `${n(termCohort.size)} on listing − ${n(grads)} Graduating`;
+  document.getElementById('co-section-label').textContent =
+    `${termSettings.currentName || 'Current term'} cohort — student listing`;
+  cohortApply();
+}
+
+function cohortApply() {
+  if (!termCohort.size) return;
+  const statusFilter = document.getElementById('co-status')?.value || '';
+  const q = (document.getElementById('co-search')?.value || '').toLowerCase();
+  const all = buildCohortRows();
+  let rows = all;
+  if (statusFilter) rows = rows.filter(r => r.__status === statusFilter);
+  if (q) rows = rows.filter(r =>
+    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
+  rows = applySort(rows, cohortSort_);
+
+  const titleEl = document.getElementById('co-title');
+  if (titleEl) {
+    titleEl.innerHTML = rows.length !== all.length
+      ? `Cohort Students <span style="color:#666;font-weight:500;font-size:13px;">— showing ${n(rows.length)} of ${n(all.length)}</span>`
+      : `Cohort Students <span style="color:#666;font-weight:500;font-size:13px;">— ${n(all.length)} on listing</span>`;
+  }
+  const tbody = document.getElementById('co-tbody');
+  if (!rows.length) { tbody.innerHTML = emptyRow(8, 'No cohort students match the current filters.'); return; }
+  const statusChip = s =>
+    s === 'Registered'    ? 'chip-green'  :
+    s === 'Has Hold'      ? 'chip-red'    :
+    s === 'Can Register'  ? 'chip-teal'   :
+    s === 'Not Returning' ? 'chip-amber'  :
+    s === 'Unaccounted'   ? 'chip-purple' : 'chip-gray';
+  const dash = '<span style="color:#bbb;font-size:11px;">—</span>';
+  tbody.innerHTML = rows.map(r => {
+    const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>`;
+    const hrs = r.hrsEnrolled ? (Number.isInteger(r.hrsEnrolled) ? r.hrsEnrolled : r.hrsEnrolled.toFixed(1)) : dash;
+    return `<tr>
+    <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
+    <td style="font-weight:600;">${r.lastName || r.name || ''}${ftftBadge(r.id)}</td>
+    <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName || ''}</td>
+    <td class="mobile-secondary col-priority-2">${statusHtml}</td>
+    <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
+    <td class="mobile-secondary col-priority-4">${r.major || dash}</td>
+    <td class="mobile-secondary col-priority-4" style="text-align:right;">${hrs}</td>
+    ${expandBtnCell()}
+  </tr>${buildDetailRow(8, [
+    { label: 'First Name', value: r.firstName || '' },
+    { label: 'Status', value: statusHtml },
+    { label: 'Class', value: classChip(r.classYear) },
+    { label: 'Major', value: r.major || '' },
+    { label: 'Term Hrs', value: hrs },
+  ])}`;
+  }).join('');
+}
+
+function cohortFilterByStatus(status) {
+  const sel = document.getElementById('co-status');
+  if (sel) sel.value = status || '';
+  cohortApply();
+}
+
+function goToCohortPage(status) {
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes("'cohort'"));
+  showPage('cohort', navTab);
+  cohortFilterByStatus(status || '');
+}
+
+function getCohortExportData() {
+  const all = buildCohortRows();
+  const statusFilter = document.getElementById('co-status')?.value || '';
+  const q = (document.getElementById('co-search')?.value || '').toLowerCase();
+  let visible = [...all];
+  if (statusFilter) visible = visible.filter(r => r.__status === statusFilter);
+  if (q) visible = visible.filter(r =>
+    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
+  visible = applySort(visible, cohortSort_);
+  return { visible, all };
+}
+
+// ══════════════════════════════════════════════════════════════
 //  DROPDOWN POPULATION
 // ══════════════════════════════════════════════════════════════
 function populateDropdowns() {
@@ -4458,8 +4620,7 @@ function getGraduatingIdSet() {
 // exports DROP a student as soon as their withdrawal is processed, so a
 // current-term withdrawer appears in NO roster — but they were enrolled this
 // term and eligible to return, so the persistence denominator must treat
-// them as in-cohort. Used alongside returningIdSet in every eligible-to-
-// return computation.
+// them as in-cohort. Used by computeRetentionStats.
 function getCurrentTermWithdrawalIdSet() {
   return new Set(
     withdrawalsList
@@ -4467,6 +4628,122 @@ function getCurrentTermWithdrawalIdSet() {
       .map(w => w.id)
       .filter(Boolean)
   );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Retention stats — the SINGLE source for Eligible to Return and its
+// buckets (2026-10-22). Summary KPIs + donuts, the trend chart's live point,
+// the daily term_history snapshot, the console backfill, and snapshot_metrics
+// all call this, so the definition can't drift between them again.
+//
+// Two modes:
+//   • cohort — a student listing for the current term has been uploaded
+//     (termCohort). Eligible = cohort minus Graduating. Every member gets
+//     exactly one status (cohortStatusOf), including "Unaccounted": on the
+//     listing but on no report or list now — e.g. dropped off the daily
+//     unregistered report without a formal withdrawal.
+//   • roster — no cohort yet. Eligible is reconstructed from the daily
+//     rosters + in-cohort NR rows (the pre-2026-10-22 definition, unchanged).
+// ══════════════════════════════════════════════════════════════════════
+function retentionContext() {
+  const gradIds = getGraduatingIdSet();
+  const dedupedNR = getDedupedNRList();
+  const holdIdSet = new Set();
+  Object.values(holdGroups).forEach(g => g.forEach(s => holdIdSet.add(s.id)));
+  return {
+    gradIds,
+    isActive: id => !gradIds.has(id),
+    dedupedNR,
+    nrIdSet: new Set(dedupedNR.map(s => s.id).filter(Boolean)),
+    ctwIds: getCurrentTermWithdrawalIdSet(),
+    holdIdSet,
+    canRegIdSet: new Set(canRegisterStudents.map(s => s.id)),
+  };
+}
+
+// Status of one cohort member. Order matters: Graduating is excluded from
+// every number; the NR list wins over Registered (same rule as roster mode,
+// where a registered student on the NR list counts in the NR bucket); a
+// current-term withdrawal is a loss even if its NR row was removed.
+function cohortStatusOf(id, ctx) {
+  if (!ctx.isActive(id))       return 'Graduating';
+  if (ctx.nrIdSet.has(id))     return 'Not Returning';
+  if (registeredIds.has(id))   return 'Registered';
+  if (ctx.ctwIds.has(id))      return 'Not Returning';
+  if (ctx.holdIdSet.has(id))   return 'Has Hold';
+  if (ctx.canRegIdSet.has(id)) return 'Can Register';
+  return 'Unaccounted';
+}
+
+function computeRetentionStats() {
+  const ctx = retentionContext();
+  const { isActive, dedupedNR, nrIdSet, ctwIds } = ctx;
+  const newReg = Object.values(newStudents)
+    .filter(s => isActive(s.id) && s.status === 'Registered').length;
+  const newTotalActive = Object.values(newStudents).filter(s => isActive(s.id)).length;
+  const allRegistered = [...registeredIds].filter(isActive).length;
+  const returningRegistered = allRegistered - newReg;
+  // Total Not Returning card: every non-graduating NR entry, in or out of the cohort.
+  const totalNR = dedupedNR.filter(r => (r.reason || '').toLowerCase() !== 'graduating').length;
+  const base = { ctx, newReg, newTotalActive, allRegistered, returningRegistered, totalNR };
+
+  if (termCohort.size) {
+    const counts = { 'Registered': 0, 'Has Hold': 0, 'Can Register': 0, 'Not Returning': 0, 'Unaccounted': 0 };
+    termCohort.forEach((_, id) => {
+      const st = cohortStatusOf(id, ctx);
+      if (st !== 'Graduating') counts[st]++;
+    });
+    const inPlay = counts['Registered'] + counts['Has Hold'] + counts['Can Register'];
+    const nrInCohort = counts['Not Returning'];
+    return {
+      ...base, mode: 'cohort',
+      effReg: counts['Registered'],
+      holdCount: counts['Has Hold'],
+      canRegCount: counts['Can Register'],
+      unaccounted: counts['Unaccounted'],
+      nrInCohort,
+      totalReturning: inPlay,
+      eligible: inPlay + counts['Unaccounted'] + nrInCohort,
+    };
+  }
+
+  // Roster mode — students who are both returning-registered AND on the NR
+  // list count once, in the NR bucket.
+  const overlapRegNR = [...registeredIds]
+    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
+  const effReg = returningRegistered - overlapRegNR;
+  const returningIdSet = new Set([
+    ...Object.keys(returningStudents).filter(isActive),
+    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
+  ]);
+  const totalReturning = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
+  // In-cohort NR: student is in a current roster OR withdrew this term (the
+  // daily exports drop processed withdrawals from both rosters). Entries
+  // matching neither are prior-term leavers and stay out of the denominator.
+  const nrInCohort = dedupedNR.filter(r =>
+    (r.reason || '').toLowerCase() !== 'graduating' &&
+    r.id && (returningIdSet.has(r.id) || ctwIds.has(r.id))
+  ).length;
+  const uniqueWithHold = new Set();
+  Object.values(holdGroups).forEach(g => g.forEach(s => {
+    if (isActive(s.id) && !nrIdSet.has(s.id)) uniqueWithHold.add(s.id || s);
+  }));
+  const canRegCount = canRegisterStudents.filter(s => isActive(s.id) && !nrIdSet.has(s.id)).length;
+  return {
+    ...base, mode: 'roster',
+    effReg,
+    holdCount: uniqueWithHold.size,
+    canRegCount,
+    unaccounted: 0,
+    nrInCohort,
+    totalReturning,
+    eligible: totalReturning + nrInCohort,
+  };
+}
+
+// Rate helper: one-decimal percent, 0 when the denominator is empty.
+function pct1(num, den) {
+  return den ? Math.round(num / den * 1000) / 10 : 0;
 }
 
 function dedupeNRForDisplay(rows) {
@@ -5004,7 +5281,8 @@ async function startNewCycle() {
     `  • Clear ${ovCount} manual Reg/NR overrides\n` +
     `  • Reset this browser's memory of removed withdrawals\n\n` +
     `Current-term withdrawals return to the list on the next withdrawals upload. ` +
-    `Next, upload all five CSVs together, including the new FTFT roster.`;
+    `Next, upload all six CSVs together, including the new FTFT roster and ` +
+    `the current term's student listing (Term Cohort).`;
   if (!confirm(msg)) return;
 
   const stamp = new Date().toISOString();
@@ -6506,15 +6784,19 @@ async function fetchLatestMetrics() {
 // Surface specific errors so RLS misconfig / network issues are visible.
 async function fetchDashboardData() {
   if (!sb || !isCommittee()) return null;
+  // Large tables are paged (fetchAllRows): PostgREST returns at most 1,000
+  // rows per request no matter what .limit() asks for, so a plain select
+  // silently truncated students once the table passed 1,000 rows. Each
+  // paged query has a unique final sort key so pages don't overlap.
   const [students, withdrawals, nrReports, terms, snapshots, ftft] = await Promise.all([
-    sb.from('students').select('*').limit(10000),
-    sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }).limit(10000),
-    sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('updated_at', { ascending: false }).limit(10000),
+    fetchAllRows(() => sb.from('students').select('*').order('id')),
+    fetchAllRows(() => sb.from('withdrawals').select('*').order('last_active_date', { ascending: false }).order('id')),
+    fetchAllRows(() => sb.from('not_returning_reports').select('*').eq('is_hidden', false).order('updated_at', { ascending: false }).order('id')),
     sb.from('terms').select('*').order('start_date', { ascending: true }),
     sb.from('csv_snapshots').select('id, source_files, uploaded_at').order('uploaded_at', { ascending: false }).limit(50),
     // FTFT roster — separate table, just IDs. Missing table is non-fatal
     // (the dashboard still renders, just without FTFT badges/donuts).
-    sb.from('ftft_students').select('id').limit(10000),
+    fetchAllRows(() => sb.from('ftft_students').select('id').order('id')),
   ]);
   const errs = [];
   if (students.error)    errs.push(`students: ${students.error.message}`);
@@ -6860,6 +7142,7 @@ async function loadHostedDashboardData() {
     }
   });
   // Term settings — pick "current" + "next"
+  let currentTermIdForCohort = null;
   if (data.terms.length) {
     const today = todayLocalISO(); // local date — UTC would advance the term a day early in US evenings
     const past = data.terms.filter(t => t.start_date <= today);
@@ -6867,6 +7150,7 @@ async function loadHostedDashboardData() {
     const cur = past[past.length - 1];
     const nxt = future[0];
     if (cur) {
+      currentTermIdForCohort = cur.id;
       termSettings.currentName = cur.name;
       termSettings.currentStart = cur.start_date;
       // N (prior-term leavers) lives on the current term's row, so the DB is
@@ -6886,6 +7170,35 @@ async function loadHostedDashboardData() {
     termSettings.nextStart = nxt ? nxt.start_date : '';
     try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
     reflectTermSettingsIntoForm();
+  }
+  // Term cohort (student listing) for the CURRENT term. A cohort uploaded in
+  // this session stays authoritative over the DB copy (same guard as FTFT),
+  // and a missing/blocked table falls back to roster mode rather than failing.
+  if (!fileProvided('cohort')) {
+    termCohort = new Map();
+    if (currentTermIdForCohort) {
+      const coRes = await fetchAllRows(() => sb.from('term_cohort')
+        .select('student_id, first_name, last_name, class_cde, major, div_cde, hrs_enrolled, pt_ft_sts')
+        .eq('term_id', currentTermIdForCohort)
+        .order('student_id'));
+      if (coRes.error) {
+        console.warn('term_cohort fetch failed (non-fatal, using roster mode):', coRes.error.message);
+      } else {
+        coRes.data.forEach(r => {
+          const firstName = r.first_name || '', lastName = r.last_name || '';
+          termCohort.set(r.student_id, {
+            id: r.student_id, firstName, lastName,
+            name: [firstName, lastName].filter(Boolean).join(' '),
+            classYear: normalizeClassYear(r.class_cde || ''),
+            major: r.major || '',
+            divCde: r.div_cde || '',
+            hrsEnrolled: r.hrs_enrolled != null ? Number(r.hrs_enrolled) : 0,
+            ptFt: r.pt_ft_sts || '',
+          });
+        });
+      }
+    }
+    csvLoaded.cohort = termCohort.size > 0;
   }
   // FTFT roster: replace local set with whatever Supabase has — but only
   // when the fetch actually succeeded AND the result isn't suspiciously
@@ -7041,10 +7354,11 @@ async function pushDataToSupabase() {
     //     Skips students with a manual_status override so admin pins are preserved.
     if (csvLoaded.reg) {
       status('Step 2b/6: clearing stale registration flags…');
-      const dbReg = await sb.from('students')
+      const dbReg = await fetchAllRows(() => sb.from('students')
         .select('id')
         .eq('is_registered', true)
-        .is('manual_status', null);
+        .is('manual_status', null)
+        .order('id'));
       if (!dbReg.error && dbReg.data) {
         const toReset = dbReg.data.map(r => r.id).filter(id => !registeredIds.has(id));
         if (toReset.length) {
@@ -7126,43 +7440,16 @@ async function pushDataToSupabase() {
     status('Step 5b/6: writing daily snapshot to history…');
     const termLabel = getNextTermLabel();
     if (termLabel) {
-      // Tony 2026-05-11: graduating students don't count toward any number.
-      // Same filter the Summary page applies — keep this in sync so the
-      // historical snapshot matches what the user sees live.
-      const gradIdsSnap = getGraduatingIdSet();
-      const isActiveSnap = id => !gradIdsSnap.has(id);
-
+      // Same shared definitions as the live Summary, so the stored history
+      // matches what the user sees.
+      const statsSnap = computeRetentionStats();
+      const isActiveSnap = statsSnap.ctx.isActive;
       const totalHolds = Object.values(holdGroups).reduce((a, g) => a + g.filter(s => isActiveSnap(s.id)).length, 0);
-      const allRegistered = [...registeredIds].filter(isActiveSnap).length;
-      const newRegCount = Object.values(newStudents).filter(s=>s.status==='Registered' && isActiveSnap(s.id)).length;
-      const returningRegistered = allRegistered - newRegCount;
-      // Use the deduped list so duplicates don't inflate the daily snapshot.
-      const dedupedSnap = getDedupedNRList();
-      const nrIdSetSnap = new Set(dedupedSnap.map(s => s.id).filter(Boolean));
-      const overlapSnap = [...registeredIds]
-        .filter(id => isActiveSnap(id) && !newStudents[id] && nrIdSetSnap.has(id)).length;
-      const effRegSnap = returningRegistered - overlapSnap;
-      // Eligible to Return uses the Summary's new "everything counted minus
-      // new students" definition. Build the same returning ID set Summary
-      // builds, then dedupe against NR.
-      const returningIdSetSnap = new Set([
-        ...Object.keys(returningStudents).filter(isActiveSnap),
-        ...[...registeredIds].filter(id => isActiveSnap(id) && !newStudents[id]),
-      ]);
-      const totalReturningSnap = [...returningIdSetSnap].filter(id => !nrIdSetSnap.has(id)).length;
-      const ctwIdsSnap = getCurrentTermWithdrawalIdSet();
-      const notReturningCount = dedupedSnap.filter(r =>
-        (r.reason || '').toLowerCase() !== 'graduating' &&
-        r.id && (returningIdSetSnap.has(r.id) || ctwIdsSnap.has(r.id))
-      ).length;
-      const eligibleSnap = totalReturningSnap + notReturningCount;
-      const rateSnap = eligibleSnap ? Math.round(effRegSnap / eligibleSnap * 1000) / 10 : 0;
-      // Tony 2026-05-13: NR rate snapshot for the inverted red volume on
-      // the trend chart. Same denominator (eligibleSnap) as the persistence
-      // rate so the two stack cleanly on a 0–100 axis. Stored as percent
-      // with one decimal — chart math reads y(100 - nr_rate) for the
-      // bottom of the red area.
-      const nrRateSnap = eligibleSnap ? Math.round(notReturningCount / eligibleSnap * 1000) / 10 : 0;
+      const returningRegistered = statsSnap.returningRegistered;
+      const rateSnap = pct1(statsSnap.effReg, statsSnap.eligible);
+      // NR rate for the trend chart's inverted red volume — same denominator
+      // as the persistence rate. Tony 2026-05-13.
+      const nrRateSnap = pct1(statsSnap.nrInCohort, statsSnap.eligible);
       const today = todayLocalISO();
       const histRes = await sb.from('term_history').upsert({
         snapshot_date: today,
@@ -7207,7 +7494,7 @@ async function pushDataToSupabase() {
       }
       // Remove any old IDs that aren't in the new roster (cohort replacement).
       if (!upErr) {
-        const existing = await sb.from('ftft_students').select('id');
+        const existing = await fetchAllRows(() => sb.from('ftft_students').select('id').order('id'));
         if (!existing.error) {
           const stale = (existing.data || []).map(r => r.id).filter(id => !ftftIds.has(id));
           if (stale.length) {
@@ -7225,6 +7512,52 @@ async function pushDataToSupabase() {
           'Your local browser still has the roster — committee viewers won\'t see it until this is fixed.');
       } else {
         console.log(`FTFT push OK: ${newIds.length} IDs persisted`);
+      }
+    }
+
+    // 5d) Term cohort (student listing) for the current term, if uploaded.
+    //     Upsert then delete stale ids (never delete-all-then-insert, which
+    //     would leave the cohort empty if the insert failed).
+    if (fileProvided('cohort')) {
+      status('Step 5d/6: writing term cohort…');
+      let coErr = null;
+      if (!currentTermId) {
+        coErr = { message: 'No current term is set — save the term window first.' };
+      } else {
+        const coRows = [...termCohort.values()].map(c => ({
+          term_id: currentTermId,
+          student_id: c.id,
+          first_name: c.firstName || null,
+          last_name: c.lastName || null,
+          class_cde: c.classYear || null,
+          major: c.major || null,
+          div_cde: c.divCde || null,
+          hrs_enrolled: c.hrsEnrolled || null,
+          pt_ft_sts: c.ptFt || null,
+          uploaded_at: new Date().toISOString(),
+        }));
+        for (const part of chunk(coRows, 500)) {
+          const r = await sb.from('term_cohort').upsert(part, { onConflict: 'term_id,student_id' });
+          if (r.error) { coErr = r.error; break; }
+        }
+        if (!coErr) {
+          const ex = await fetchAllRows(() => sb.from('term_cohort')
+            .select('student_id').eq('term_id', currentTermId).order('student_id'));
+          if (ex.error) { coErr = ex.error; }
+          else {
+            const stale = ex.data.map(r => r.student_id).filter(id => !termCohort.has(id));
+            for (const part of chunk(stale, 500)) {
+              const d = await sb.from('term_cohort').delete().eq('term_id', currentTermId).in('student_id', part);
+              if (d.error) { coErr = d.error; break; }
+            }
+          }
+        }
+      }
+      if (coErr) {
+        console.warn('term_cohort save failed:', coErr);
+        alert('Warning: main upload succeeded, but the term cohort failed to save.\n\n' +
+          `Error: ${coErr.message}\n\n` +
+          'This browser still uses the cohort; committee viewers will see roster-based numbers until it is saved.');
       }
     }
 
@@ -7401,32 +7734,14 @@ async function pushDataToSupabase() {
 // graduating IDs, and registration_rate was registered ÷ total rather than
 // the Semester Persistence Rate (effective registered ÷ eligible to return).
 function computeSnapshotMetrics() {
-  const gradIds = getGraduatingIdSet();
-  const isActive = id => !gradIds.has(id);
-  const dedupedNR = getDedupedNRList();
-  const nrIdSet = new Set(dedupedNR.map(s => s.id).filter(Boolean));
-
-  const totalNew = Object.values(newStudents).filter(s => isActive(s.id)).length;
-  const newReg = Object.values(newStudents)
-    .filter(s => s.status === 'Registered' && isActive(s.id)).length;
-  const allRegistered = [...registeredIds].filter(isActive).length;
-  const returningRegistered = allRegistered - newReg;
-  const overlapRegNR = [...registeredIds]
-    .filter(id => isActive(id) && !newStudents[id] && nrIdSet.has(id)).length;
-  const effReg = returningRegistered - overlapRegNR;
-
-  const returningIdSet = new Set([
-    ...Object.keys(returningStudents).filter(isActive),
-    ...[...registeredIds].filter(id => isActive(id) && !newStudents[id]),
-  ]);
-  const totalRet = [...returningIdSet].filter(id => !nrIdSet.has(id)).length;
-  const ctwIds = getCurrentTermWithdrawalIdSet();
-  const notReturningInCohort = dedupedNR.filter(r =>
-    (r.reason || '').toLowerCase() !== 'graduating' &&
-    r.id && (returningIdSet.has(r.id) || ctwIds.has(r.id))
-  ).length;
-  const eligible = totalRet + notReturningInCohort;
-  const persistenceRate = eligible ? Math.round(effReg / eligible * 1000) / 10 : 0;
+  const stats = computeRetentionStats();
+  const isActive = stats.ctx.isActive;
+  const totalNew = stats.newTotalActive;
+  const newReg = stats.newReg;
+  const effReg = stats.effReg;
+  const totalRet = stats.totalReturning;
+  const eligible = stats.eligible;
+  const persistenceRate = pct1(effReg, eligible);
 
   const totalHolds = Object.values(holdGroups)
     .reduce((a, g) => a + g.filter(s => isActive(s.id)).length, 0);
@@ -7441,7 +7756,7 @@ function computeSnapshotMetrics() {
   // the denominator adds back the prior semester's leavers.
   const priorLeavers = Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0);
   const f2fDenom = eligible + priorLeavers;
-  const fallToFall = f2fDenom ? Math.round(effReg / f2fDenom * 1000) / 10 : 0;
+  const fallToFall = pct1(effReg, f2fDenom);
   // Slice breakdowns (unregistered returning students, ex-graduating)
   function tally(getter) {
     const t = {};
@@ -7468,8 +7783,7 @@ function computeSnapshotMetrics() {
     holds_immunization: holdsBy[4] || 0,
     can_register: canRegisterStudents.filter(s => isActive(s.id)).length,
     // Matches the Summary's "Total Not Returning" card: deduped, ex-graduating.
-    not_returning_count: dedupedNR.filter(r =>
-      (r.reason || '').toLowerCase() !== 'graduating').length,
+    not_returning_count: stats.totalNR,
     withdrawals_this_term: wdThisTerm,
     high_risk_count: 0,
     critical_risk_count: 0,
@@ -7492,6 +7806,21 @@ function computeSnapshotMetrics() {
       return t;
     })(),
   };
+}
+
+// Read every row of a query. PostgREST caps each response at 1,000 rows
+// (Supabase default max_rows) regardless of .limit(), so page with .range().
+// `build` must return a fresh query builder each call.
+async function fetchAllRows(build) {
+  const PAGE = 1000;
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: out, error: null };
 }
 
 // Tiny chunker so big upserts don't exceed Postgres / API limits.
