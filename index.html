@@ -1014,7 +1014,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     </div>
     <button class="nr-row-btn nr-row-btn-primary" onclick="saveTermSettings()" style="height:28px;">Save term window</button>
     <span id="ts-save-status" style="font-size:11px;color:#888;min-width:140px;"></span>
-    <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are surfaced in the Withdrawals tab and auto-fed into Not Returning. If "Next term starts" is blank, the upper bound is today.</span>
+    <button class="nr-row-btn nr-row-btn-danger admin-only" onclick="startNewCycle()" style="height:28px;margin-left:auto;" title="Archive the previous cycle's Not Returning list and clear manual Reg/NR overrides. Run once when the new term starts.">Start new cycle…</button>
+    <span class="ts-hint">Withdrawals with Last Active Date in <code id="ts-window-display">[set dates]</code> are auto-fed into Not Returning. If "Next term starts" is blank, the window runs through today. At each term change: save the new term window, click <strong>Start new cycle</strong>, then upload all five CSVs together (including the new FTFT roster).</span>
   </div>
   <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
     <button class="nr-btn" style="width:auto;padding:8px 20px;" onclick="processAllCSVs()">Apply &amp; Refresh Dashboard</button>
@@ -2300,6 +2301,15 @@ function shouldExcludeWithdrawal(w) {
   return false;
 }
 
+// True when the admin uploaded this CSV in the current session. A provided
+// file is authoritative even when it parses to zero rows — e.g. no new
+// admits yet for the upcoming term. Without this, an empty new-students
+// file left the PRIOR cycle's new students in place, so last term's
+// freshmen stayed "new" and were excluded from the returning cohort.
+function fileProvided(key) {
+  return pendingFiles[key] != null;
+}
+
 function buildData() {
   // ── Registered IDs + full registered student records (deduped by ID) ──
   // The registered CSV has one row per enrollment, so the same student appears
@@ -2307,7 +2317,7 @@ function buildData() {
   // when an ID isn't found in the unregistered CSV.
   // Per Tony 2026-05-05: only rebuild from rawReg if it has data — otherwise
   // preserve the registeredStudents already loaded (e.g. from Supabase).
-  if (rawReg.length > 0) {
+  if (rawReg.length > 0 || fileProvided('reg')) {
     // Tony 2026-05-14: accept BOTH the legacy registered CSV (one row per
     // enrollment with per-course credit hours) and the newer
     // one-row-per-student CSV (with hrs_enrolled as the pre-totaled value).
@@ -2429,7 +2439,7 @@ function buildData() {
     if (regData.creditHours) s.creditHours = regData.creditHours;
     if (regData.ptFt)        s.ptFt        = regData.ptFt;
   }
-  if (rawNew.length > 0) {
+  if (rawNew.length > 0 || fileProvided('new')) {
     newStudents = {};
     rawNew.forEach(r => {
       const s = normalizeStudent(r);
@@ -2452,7 +2462,7 @@ function buildData() {
   // loaded returningStudents (e.g. from Supabase load on a fresh page).
   // Per Tony 2026-05-05: partial uploads should preserve the data that
   // wasn't part of the upload.
-  if (rawUnreg.length > 0) {
+  if (rawUnreg.length > 0 || fileProvided('unreg')) {
     const unregById = {};
     rawUnreg.forEach(r => {
       const s = normalizeStudent(r);
@@ -2513,7 +2523,7 @@ function buildData() {
 
   // ── Withdrawals ──
   // Same partial-upload preservation: only rebuild if rawWithdrawals has data.
-  if (rawWithdrawals.length > 0) {
+  if (rawWithdrawals.length > 0 || fileProvided('withdrawals')) {
   const seenWd = new Set();
   withdrawalsList = [];
   withdrawnNewIds = new Set();
@@ -4578,6 +4588,10 @@ function loadIgnoredWithdrawals() {
     if (raw) nrIgnoredWithdrawalIds = new Set(JSON.parse(raw));
   } catch(e) { nrIgnoredWithdrawalIds = new Set(); }
 }
+// Student-keyed ignore entry, scoped to the current term window.
+function nrTermIgnoreKey(studentId) {
+  return `sid-${termSettings.currentStart || ''}-${studentId}`;
+}
 function saveIgnoredWithdrawals() {
   try { localStorage.setItem('nr_ignored_withdrawals', JSON.stringify([...nrIgnoredWithdrawalIds])); } catch(e) {}
 }
@@ -4692,7 +4706,9 @@ function nrRemove(idx) {
     // builds its keys as 'wd-<studentId>-<LDA>' — the two never match, so
     // without this the ignore list is a no-op after a page reload and the
     // row comes back on the next withdrawal CSV import.
-    if (row.id) nrIgnoredWithdrawalIds.add('sid-' + row.id);
+    // Scoped to the current term so a removal never suppresses the same
+    // student's withdrawal in a later term.
+    if (row.id) nrIgnoredWithdrawalIds.add(nrTermIgnoreKey(row.id));
     saveIgnoredWithdrawals();
   }
   nrList.splice(idx, 1);
@@ -4948,6 +4964,71 @@ async function clearStudentOverride(id) {
   if (u.error) { alert('Could not clear override: ' + u.error.message); return; }
   manualStatusOverrides.delete(cleanId);
   await loadHostedDashboardData();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Start new cycle — admin action run once per term change (2026-10-22).
+// ══════════════════════════════════════════════════════════════════════
+// Everything on the Not Returning list belongs to the cycle that just ended.
+// Left in place it inflates Total Not Returning and the reasons chart, counts
+// returning students as not returning, and drops "Graduating" students from
+// every number. Manual Reg/NR overrides likewise pin a status that no longer
+// applies. This archives the former and clears the latter.
+//
+// Archive = is_hidden plus an archived_at stamp, so (a) it's reversible by
+// stamp (see migration 0016) and (b) archived rows never block the withdrawal
+// sync from importing a current-term withdrawal into the new cycle.
+async function startNewCycle() {
+  if (!HOSTED || !sb) { alert('Start new cycle only works in hosted mode.'); return; }
+  if (!isAdmin()) { alert('Admin role required.'); return; }
+  if (!termSettings.currentStart) {
+    alert('Set and save the current term window first, so the dashboard knows which term the new cycle belongs to.');
+    return;
+  }
+  const [nrRes, ovRes] = await Promise.all([
+    sb.from('not_returning_reports').select('id', { count: 'exact', head: true }).eq('is_hidden', false),
+    sb.from('students').select('id', { count: 'exact', head: true }).not('manual_status', 'is', null),
+  ]);
+  if (nrRes.error || ovRes.error) {
+    alert('Could not read current state: ' + (nrRes.error || ovRes.error).message);
+    return;
+  }
+  const nrCount = nrRes.count || 0;
+  const ovCount = ovRes.count || 0;
+  const msg =
+    `Start the "${getNextTermLabel()}" cycle?\n\n` +
+    `Current term: ${termSettings.currentName || '(unnamed)'}, starts ${termSettings.currentStart}\n` +
+    `Next term starts: ${termSettings.nextStart || '(not set; window runs through today)'}\n\n` +
+    `This will:\n` +
+    `  • Archive all ${nrCount} rows on the Not Returning list (hidden, reversible)\n` +
+    `  • Clear ${ovCount} manual Reg/NR overrides\n` +
+    `  • Reset this browser's memory of removed withdrawals\n\n` +
+    `Current-term withdrawals return to the list on the next withdrawals upload. ` +
+    `Next, upload all five CSVs together, including the new FTFT roster.`;
+  if (!confirm(msg)) return;
+
+  const stamp = new Date().toISOString();
+  const arch = await sb.from('not_returning_reports')
+    .update({ is_hidden: true, archived_at: stamp })
+    .eq('is_hidden', false)
+    .select('id');
+  if (arch.error) { alert('Archive failed, nothing was changed: ' + arch.error.message); return; }
+  const clr = await sb.from('students')
+    .update({ manual_status: null })
+    .not('manual_status', 'is', null)
+    .select('id');
+  if (clr.error) {
+    alert(`Archived ${arch.data.length} Not Returning rows, but clearing overrides failed: ${clr.error.message}\n\nClear them individually from the Holds / Can Register tabs.`);
+  }
+  nrIgnoredWithdrawalIds = new Set();
+  saveIgnoredWithdrawals();
+  Object.keys(nrOtherMode).forEach(k => delete nrOtherMode[k]);
+  console.log(`startNewCycle: archived ${arch.data.length} NR rows (archived_at=${stamp}), cleared ${clr.data?.length || 0} overrides`);
+  await loadHostedDashboardData();
+  if (!clr.error) {
+    alert(`New cycle started.\n\nArchived ${arch.data.length} Not Returning rows and cleared ${clr.data.length} overrides.\n\n` +
+      `Archive timestamp (needed only to undo): ${stamp}`);
+  }
 }
 
 // Render the override-button cluster for a student row. Visible to
@@ -5471,7 +5552,13 @@ function loadTermSettings() {
   // Coerce priorTermLeavers to a non-negative integer so a malformed
   // localStorage value can't poison the Fall-to-Fall denominator.
   termSettings.priorTermLeavers = Math.max(0, parseInt(termSettings.priorTermLeavers, 10) || 0);
-  // Reflect into the form
+  reflectTermSettingsIntoForm();
+}
+
+// Push termSettings into the Settings inputs. Called after localStorage load
+// AND after the Supabase terms load — if the inputs kept stale localStorage
+// values, the next "Save term window" click would write them back to the DB.
+function reflectTermSettingsIntoForm() {
   const cn = document.getElementById('ts-current-name');
   const cs = document.getElementById('ts-current-start');
   const ns = document.getElementById('ts-next-start');
@@ -5604,10 +5691,10 @@ function syncWithdrawalsToNR() {
   inTerm.forEach(w => {
     const sourceId = `wd-${w.id}-${w.lastActiveDate}`;
     // Two key formats: 'wd-<id>-<LDA>' (rows created locally) and
-    // 'sid-<studentId>' (recorded by nrRemove — covers hosted-mode rows whose
+    // 'sid-<termStart>-<studentId>' (recorded by nrRemove — covers hosted-mode rows whose
     // _sourceWithdrawalId is a Supabase uuid we can't reconstruct here).
     if (nrIgnoredWithdrawalIds.has(sourceId)) return; // user removed this earlier — don't bring it back
-    if (w.id && nrIgnoredWithdrawalIds.has('sid-' + w.id)) return;
+    if (w.id && nrIgnoredWithdrawalIds.has(nrTermIgnoreKey(w.id))) return;
     if (newStudents && w.id && newStudents[w.id]) return; // new-student withdrawals stay only on the new student list
     const mappedReason = mapWithdrawalReason(w.reason);
     const csvNotes = w.processedDate
@@ -6782,30 +6869,23 @@ async function loadHostedDashboardData() {
     if (cur) {
       termSettings.currentName = cur.name;
       termSettings.currentStart = cur.start_date;
-      // Restore Fall→Fall N from Supabase so every committee viewer renders
-      // the same Fall-to-Fall denominator the admin set. CRITICAL: only
-      // overwrite the local value when the DB has an authoritative non-zero
-      // value. Three failure modes this guards against:
-      //   1) Migration 0010 not applied → cur.prior_term_leavers is undefined
-      //   2) Migration applied but save silently failed → column defaults to 0
-      //   3) Admin reduced 74 → 0 cross-device → other device's local stays
-      //      at the prior value; trade-off accepted because the dominant use
-      //      case is a single admin setting a single non-zero number per term.
-      // Treating DB 0 as "not yet synced" means the admin's localStorage 74
-      // survives reloads even when the round-trip to Supabase is broken,
-      // and the Fall-to-Fall card keeps working locally while Tony sorts
-      // out the migration / connectivity issue.
-      const dbVal = parseInt(cur.prior_term_leavers, 10);
-      if (cur.prior_term_leavers != null && dbVal > 0) {
-        termSettings.priorTermLeavers = dbVal;
+      // N (prior-term leavers) lives on the current term's row, so the DB is
+      // authoritative whenever the column exists — including 0. The old
+      // "only trust non-zero DB values" rule carried the previous term's N
+      // from localStorage into a new term (whose row defaults to 0), and the
+      // next upload then stamped that stale N onto the new term for everyone.
+      // localStorage is used only when the column is missing (pre-0010).
+      if (cur.prior_term_leavers != null) {
+        termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
       }
     }
-    if (nxt) termSettings.nextStart = nxt.start_date;
-    // Keep the Settings input in sync with whatever value we ended up with
-    // (DB if present, localStorage fallback otherwise) so an admin opening
-    // the panel sees the canonical value.
-    const pl = document.getElementById('ts-prior-leavers');
-    if (pl) pl.value = termSettings.priorTermLeavers ? String(termSettings.priorTermLeavers) : '';
+    // Always overwrite — when no future term exists the window must be
+    // open-ended. Previously a stale nextStart from localStorage survived,
+    // which after a term rollover produced an EMPTY window (start = end) so
+    // no current-term withdrawal counted or synced.
+    termSettings.nextStart = nxt ? nxt.start_date : '';
+    try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
+    reflectTermSettingsIntoForm();
   }
   // FTFT roster: replace local set with whatever Supabase has — but only
   // when the fetch actually succeeded AND the result isn't suspiciously
@@ -7178,12 +7258,11 @@ async function pushDataToSupabase() {
       // silently overwritten on every withdrawal re-upload. Same risk
       // applied to major, sport, reason, withdrawal_status, notes — pull
       // them all so the guards have real values to compare against.
-      // Fetch hidden rows too. A student whose ONLY NR rows are hidden was
-      // explicitly removed by a committee member (nrRemove soft-deletes via
-      // is_hidden=true) — re-inserting a fresh row on every withdrawal CSV
-      // re-upload resurrected rows the user had moderated away.
+      // Fetch hidden rows too, so a withdrawal whose NR row a committee
+      // member removed isn't re-inserted on every re-upload (see the skip
+      // rule below).
       const exRes = await sb.from('not_returning_reports')
-        .select('id, student_id, source_withdrawal_id, updated_at, is_hidden, class_year, major, sport, reason, withdrawal_status, notes')
+        .select('id, student_id, source_withdrawal_id, updated_at, is_hidden, archived_at, class_year, major, sport, reason, withdrawal_status, notes')
         .in('student_id', studentIds);
       expect('NR existing-by-student select', exRes);
       const byStudent = new Map();
@@ -7215,10 +7294,16 @@ async function pushDataToSupabase() {
         };
         const allRows = byStudent.get(w.student_id) || [];
         const existing = allRows.filter(r => !r.is_hidden);
-        // Rows exist but every one is hidden → the committee removed this
-        // student from the NR list on purpose. Leave them removed; the admin
-        // can re-add via the NR form or the manual NR override if needed.
-        if (allRows.length > 0 && existing.length === 0) continue;
+        // Skip only when a committee member removed the NR row for THIS
+        // withdrawal record (same source_withdrawal_id; withdrawal ids are
+        // stable across re-uploads via the student_id+LDA upsert). Scoping
+        // matters: a student removed in an earlier cycle who withdraws again
+        // later has a new withdrawal id and must get a fresh row, and rows
+        // hidden by the "Start new cycle" archive (archived_at set) never
+        // block re-import.
+        const removedByCommittee = allRows.some(r =>
+          r.is_hidden && !r.archived_at && r.source_withdrawal_id === w.id);
+        if (existing.length === 0 && removedByCommittee) continue;
         if (existing.length === 0) {
           // No NR row for this student yet — fresh insert. Look up sport
           // in the in-memory students map; if the student appears in any
