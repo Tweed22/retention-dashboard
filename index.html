@@ -259,6 +259,14 @@ body.dark .hs-badge { background:#33280f; color:#d9a54a; border-color:#4a3a14; }
    as annotations, not statuses. */
 .flag-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; vertical-align:middle; }
 body.dark .flag-badge { background:#26303c; color:#b4c2d3; border-color:#3a4656; }
+/* Tags filter checklist popover */
+.tag-filter { position: relative; display: inline-block; }
+.tag-filter-btn { cursor: pointer; text-align: left; }
+.tag-filter-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; min-width: 190px; background: white; border: 1px solid #dde1ea; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); padding: 8px 10px; }
+.tag-filter-pop .tf-row { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; white-space: nowrap; }
+.tag-filter-pop .tf-sep { border-top: 1px solid #eef0f4; margin: 5px 0; }
+body.dark .tag-filter-pop { background: #262626; border-color: #353535; }
+body.dark .tag-filter-pop .tf-sep { border-top-color: #353535; }
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 40px 20px; color: #888; }
@@ -1113,7 +1121,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
       <select class="filter-select" id="reg-ptft" onchange="regApply()" title="Filter by Part-Time vs Full-Time enrollment status"><option value="">All Enrollment</option><option value="F">Full-Time</option><option value="P">Part-Time</option></select>
       <select class="filter-select" id="reg-ftft" onchange="regApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
-      <select class="filter-select tag-filter" id="reg-tags" onchange="regApply()" title="Filter by tag"></select>
+      <span class="tag-filter" id="reg-tags" data-apply="regApply"></span>
       <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
     </div>
     <div class="table-wrap">
@@ -1156,7 +1164,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="h-sport" onchange="holdsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="h-team" onchange="holdsApply()"><option value="">All Teams</option></select>
       <select class="filter-select" id="h-ftft" onchange="holdsApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
-      <select class="filter-select tag-filter" id="h-tags" onchange="holdsApply()" title="Filter by tag"></select>
+      <span class="tag-filter" id="h-tags" data-apply="holdsApply"></span>
       <input class="table-search" type="text" id="h-search" placeholder="Search name, email, ID…" oninput="holdsApply()" />
     </div>
     <div class="table-wrap">
@@ -1201,7 +1209,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="cr-sport" onchange="crApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="cr-team" onchange="crApply()"><option value="">All Teams</option></select>
       <select class="filter-select" id="cr-ftft" onchange="crApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
-      <select class="filter-select tag-filter" id="cr-tags" onchange="crApply()" title="Filter by tag"></select>
+      <span class="tag-filter" id="cr-tags" data-apply="crApply"></span>
       <input class="table-search" type="text" id="cr-search" placeholder="Search name, email, ID…" oninput="crApply()" />
     </div>
     <div class="table-wrap">
@@ -1253,7 +1261,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <select class="filter-select" id="ns-sport" onchange="nsApply()"><option value="">All Students</option><option>Athletes Only</option><option>Non-Athletes Only</option></select>
       <select class="filter-select" id="ns-team" onchange="nsApply()"><option value="">All Teams</option></select>
       <select class="filter-select" id="ns-ftft" onchange="nsApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
-      <select class="filter-select tag-filter" id="ns-tags" onchange="nsApply()" title="Filter by tag"></select>
+      <span class="tag-filter" id="ns-tags" data-apply="nsApply"></span>
       <input class="table-search" type="text" id="ns-search" placeholder="Search name, email, ID…" oninput="nsApply()" />
     </div>
     <div class="table-wrap">
@@ -1303,7 +1311,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Not Returning</option>
         <option>Not Returning from Fall</option>
       </select>
-      <select class="filter-select tag-filter" id="ftft-tags" onchange="ftftApply()" title="Filter by tag"></select>
+      <span class="tag-filter" id="ftft-tags" data-apply="ftftApply"></span>
       <input class="table-search" type="text" id="ftft-search" placeholder="Search name or ID…" oninput="ftftApply()" />
     </div>
     <div class="table-wrap">
@@ -1364,15 +1372,14 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option value="F">Full-Time</option>
         <option value="P">Part-Time</option>
       </select>
-      <select class="filter-select tag-filter" id="co-flag" onchange="cohortApply()" title="Filter by tag"></select>
+      <span class="tag-filter" id="co-flag" data-apply="cohortApply"></span>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
     <div id="co-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#555;">
       <span id="co-bulk-count">0 selected</span>
-      <span>— flag:</span>
-      <button class="nr-row-btn" onclick="setStudentFlag('midterm_meeting', true)" title="Met at the midterm meeting (this term)">Midterm Meeting</button>
-      <button class="nr-row-btn" onclick="setStudentFlag('provisional', true)" title="Provisional admit (stays with the student across terms)">Provisional</button>
-      <button class="nr-row-btn" onclick="clearStudentFlags()" title="Remove Midterm Meeting and Provisional flags from the selected students">Remove flags</button>
+      <span>— tag:</span>
+      <span id="co-flag-buttons" style="display:inline-flex;gap:8px;flex-wrap:wrap;"></span>
+      <button class="nr-row-btn" onclick="clearStudentFlags()" title="Remove every tag from the selected students">Remove tags</button>
       <span class="admin-only" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span>· mark as:</span>
         <button class="nr-row-btn" onclick="setCohortOverride('graduating')" title="Exclude from every number, like a Graduating tag">Graduating</button>
@@ -1454,7 +1461,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <option value="">All Majors</option>
     </select>
     <select class="filter-select" id="nr-filter-ftft" onchange="nrRender()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
-      <select class="filter-select tag-filter" id="nr-filter-tags" onchange="nrRender()" title="Filter by tag"></select>
+      <span class="tag-filter" id="nr-filter-tags" data-apply="nrRender"></span>
     <input class="table-search" type="text" id="nr-search" placeholder="Search name or ID…" oninput="nrRender()" style="width:180px;" />
   </div>
   <div class="table-wrap">
@@ -1642,9 +1649,13 @@ let currentTermDbId = null;
 // Informational student flags (student_flags table, migration 0021). They
 // never change a count. perTerm flags are scoped to the current term and
 // reset each term; the others stick with the student.
+// Flags sharing an `exclusive` group can't coexist: setting one clears the others.
 const FLAG_DEFS = {
   midterm_meeting: { label: 'Midterm Meeting', short: 'MTM',  perTerm: true  },
   provisional:     { label: 'Provisional',     short: 'PROV', perTerm: false },
+  // Academic probation levels — a student is on one level at a time.
+  p1:              { label: 'Probation 1',     short: 'P1',   perTerm: true, exclusive: 'probation' },
+  p2:              { label: 'Probation 2',     short: 'P2',   perTerm: true, exclusive: 'probation' },
 };
 let studentFlags = new Map(); // student id -> Set of flag keys
 let pendingFiles = {};
@@ -1714,24 +1725,81 @@ function tagsCell(id, compact) {
   return chips || '<span style="color:#bbb;font-size:11px;">—</span>';
 }
 
-// Every tab's Tags filter is a <select class="tag-filter">; options are
-// generated from FLAG_DEFS so a new tag shows up everywhere automatically.
+// ── Tags filter: a checklist popover on every tab ──
+// Markup per tab: <span class="tag-filter" id="X" data-apply="fnName">.
+// Tick tags, choose whether a student must have ALL or ANY of them, or tick
+// "No tags". Built from FLAG_DEFS, so new tags appear everywhere. Also fills
+// the Cohort tab's tag buttons.
 function populateTagFilters() {
-  const opts = ['<option value="">All Tags</option>']
-    .concat(Object.entries(FLAG_DEFS).map(([key, def]) => `<option value="${key}">${def.label}</option>`))
-    .concat(['<option value="__all">Has all tags</option>',
-             '<option value="__any">Has any tag</option>',
-             '<option value="__none">No tags</option>'])
-    .join('');
-  document.querySelectorAll('select.tag-filter').forEach(sel => {
-    const cur = sel.value;
-    sel.innerHTML = opts;
-    sel.value = cur;
+  const tagBoxes = Object.entries(FLAG_DEFS).map(([key, def]) =>
+    `<label class="tf-row"><input type="checkbox" data-tag="${key}" onchange="tagFilterChanged(this)" /> ${def.label}</label>`).join('');
+  document.querySelectorAll('span.tag-filter').forEach(wrap => {
+    const id = wrap.id;
+    wrap.innerHTML =
+      `<button type="button" class="filter-select tag-filter-btn" onclick="toggleTagFilter('${id}', event)">All Tags ▾</button>
+       <div class="tag-filter-pop" style="display:none;">
+         ${tagBoxes}
+         <div class="tf-sep"></div>
+         <label class="tf-row"><input type="radio" name="${id}-mode" value="all" checked onchange="tagFilterChanged(this)" /> Has all ticked</label>
+         <label class="tf-row"><input type="radio" name="${id}-mode" value="any" onchange="tagFilterChanged(this)" /> Has any ticked</label>
+         <div class="tf-sep"></div>
+         <label class="tf-row"><input type="checkbox" data-none="1" onchange="tagFilterChanged(this)" /> No tags</label>
+         <button type="button" class="nr-row-btn" style="margin-top:6px;" onclick="clearTagFilter('${id}', true)">Clear</button>
+       </div>`;
   });
+  const btns = document.getElementById('co-flag-buttons');
+  if (btns) {
+    btns.innerHTML = Object.entries(FLAG_DEFS).map(([key, def]) =>
+      `<button class="nr-row-btn" onclick="setStudentFlag('${key}', true)" title="${def.perTerm ? 'This term only' : 'Stays with the student across terms'}${def.exclusive ? '; replaces the other ' + def.exclusive + ' tag' : ''}">${def.label}</button>`).join('');
+  }
 }
-function tagFilterValue(selectId) {
-  return document.getElementById(selectId)?.value || '';
+
+// Current filter for a tab: '' (no filter) or { tags: [...], mode, none }.
+function tagFilterValue(id) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return '';
+  const none = !!wrap.querySelector('input[data-none]:checked');
+  const tags = [...wrap.querySelectorAll('input[data-tag]:checked')].map(i => i.dataset.tag);
+  const mode = wrap.querySelector(`input[name="${id}-mode"]:checked`)?.value || 'all';
+  if (!none && !tags.length) return '';
+  return { tags, mode, none };
 }
+function tagFilterLabel(f) {
+  if (!f) return 'All Tags';
+  if (f.none) return 'No tags';
+  return f.tags.map(t => FLAG_DEFS[t].short).join(f.mode === 'any' ? ' or ' : ' + ');
+}
+function tagFilterChanged(input) {
+  const wrap = input.closest('span.tag-filter');
+  // "No tags" and specific tags are mutually exclusive choices.
+  if (input.dataset.none && input.checked) wrap.querySelectorAll('input[data-tag]').forEach(i => { i.checked = false; });
+  if (input.dataset.tag && input.checked) { const nb = wrap.querySelector('input[data-none]'); if (nb) nb.checked = false; }
+  wrap.querySelector('.tag-filter-btn').textContent = tagFilterLabel(tagFilterValue(wrap.id)) + ' ▾';
+  const fn = window[wrap.dataset.apply];
+  if (typeof fn === 'function') fn();
+}
+function clearTagFilter(id, reapply) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  wrap.querySelectorAll('input[data-tag], input[data-none]').forEach(i => { i.checked = false; });
+  const allRadio = wrap.querySelector(`input[name="${id}-mode"][value="all"]`);
+  if (allRadio) allRadio.checked = true;
+  const btn = wrap.querySelector('.tag-filter-btn');
+  if (btn) btn.textContent = 'All Tags ▾';
+  if (reapply) { const fn = window[wrap.dataset.apply]; if (typeof fn === 'function') fn(); }
+}
+function toggleTagFilter(id, ev) {
+  ev.stopPropagation();
+  const pop = document.querySelector(`#${id} .tag-filter-pop`);
+  const open = pop.style.display === 'none';
+  document.querySelectorAll('.tag-filter-pop').forEach(p => { p.style.display = 'none'; });
+  pop.style.display = open ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('span.tag-filter')) {
+    document.querySelectorAll('.tag-filter-pop').forEach(p => { p.style.display = 'none'; });
+  }
+});
 
 // Processed data
 let returningStudents   = {}; // id -> student obj
@@ -4140,7 +4208,7 @@ function cohortApply() {
   const statusSet = statusFilter ? new Set(statusFilter.split('|')) : null;
   if (statusSet) rows = rows.filter(r => statusSet.has(r.__status));
   if (ptftFilter)   rows = rows.filter(r => r.ptFt === ptftFilter);
-  rows = applyFlagFilter(rows, document.getElementById('co-flag')?.value || '');
+  rows = applyFlagFilter(rows, tagFilterValue('co-flag'));
   if (q) rows = rows.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
   rows = applySort(rows, cohortSort_);
@@ -4279,25 +4347,21 @@ function flagLabels(id) {
   if (!set) return '';
   return Object.entries(FLAG_DEFS).filter(([k]) => set.has(k)).map(([, d]) => d.label).join('; ');
 }
-// '' = no filter; a flag key = has that tag; '__all' = has every tag;
-// '__any' = has at least one tag; '__none' = has no tags.
-function applyFlagFilter(rows, value) {
-  if (!value) return rows;
+// f = '' (no filter) or { tags, mode: 'all'|'any', none } from tagFilterValue.
+function applyFlagFilter(rows, f) {
+  if (!f) return rows;
   const tagsOf = r => studentFlags.get(r.id) || new Set();
-  const keys = Object.keys(FLAG_DEFS);
-  if (value === '__none') return rows.filter(r => !tagsOf(r).size);
-  if (value === '__any')  return rows.filter(r => keys.some(k => tagsOf(r).has(k)));
-  if (value === '__all')  return rows.filter(r => keys.every(k => tagsOf(r).has(k)));
-  return rows.filter(r => tagsOf(r).has(value));
+  if (f.none) return rows.filter(r => !tagsOf(r).size);
+  return f.mode === 'any'
+    ? rows.filter(r => f.tags.some(t => tagsOf(r).has(t)))
+    : rows.filter(r => f.tags.every(t => tagsOf(r).has(t)));
 }
 
-async function setStudentFlag(flag, on) {
-  if (!isCommittee()) return;
+// Write one flag for many students (DB + local map). Returns false on error.
+async function writeStudentFlag(ids, flag, on) {
   const def = FLAG_DEFS[flag];
-  const ids = [...cohortSelected];
-  if (!ids.length) { alert('Tick one or more students first.'); return; }
   if (HOSTED && sb) {
-    if (def.perTerm && !currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return; }
+    if (def.perTerm && !currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return false; }
     const termId = def.perTerm ? currentTermDbId : null;
     for (const part of chunk(ids, 500)) {
       const res = on
@@ -4307,25 +4371,44 @@ async function setStudentFlag(flag, on) {
         : await (termId
             ? sb.from('student_flags').delete().eq('flag', flag).eq('term_id', termId).in('student_id', part)
             : sb.from('student_flags').delete().eq('flag', flag).is('term_id', null).in('student_id', part));
-      if (res.error) { alert(`Could not save the ${def.label} flag: ` + res.error.message); return; }
+      if (res.error) { alert(`Could not save the ${def.label} tag: ` + res.error.message); return false; }
     }
   }
   ids.forEach(id => {
     if (!studentFlags.has(id)) studentFlags.set(id, new Set());
     on ? studentFlags.get(id).add(flag) : studentFlags.get(id).delete(flag);
   });
+  return true;
+}
+
+async function setStudentFlag(flag, on) {
+  if (!isCommittee()) return;
+  const ids = [...cohortSelected];
+  if (!ids.length) { alert('Tick one or more students first.'); return; }
+  if (!(await writeStudentFlag(ids, flag, on))) return;
+  // Exclusive groups (Probation 1 / 2): setting one removes the others.
+  const group = FLAG_DEFS[flag].exclusive;
+  if (on && group) {
+    for (const other of Object.keys(FLAG_DEFS)) {
+      if (other !== flag && FLAG_DEFS[other].exclusive === group) {
+        if (!(await writeStudentFlag(ids, other, false))) break;
+      }
+    }
+  }
   cohortSelected.clear();
-  renderAll(); // badges appear on every tab
+  renderAll(); // the Tags column appears on every tab
 }
 
 async function clearStudentFlags() {
+  if (!isCommittee()) return;
   const ids = [...cohortSelected];
   if (!ids.length) { alert('Tick one or more students first.'); return; }
-  if (!confirm(`Remove the Midterm Meeting and Provisional flags from ${ids.length} student${ids.length === 1 ? '' : 's'}?`)) return;
+  if (!confirm(`Remove all tags from ${ids.length} student${ids.length === 1 ? '' : 's'}?`)) return;
   for (const flag of Object.keys(FLAG_DEFS)) {
-    ids.forEach(id => cohortSelected.add(id)); // setStudentFlag clears the selection
-    await setStudentFlag(flag, false);
+    if (!(await writeStudentFlag(ids, flag, false))) break;
   }
+  cohortSelected.clear();
+  renderAll();
 }
 
 function cohortFilterByStatus(status) {
@@ -4350,7 +4433,7 @@ function getCohortExportData() {
   const statusSet = statusFilter ? new Set(statusFilter.split('|')) : null;
   if (statusSet) visible = visible.filter(r => statusSet.has(r.__status));
   if (ptftFilter)   visible = visible.filter(r => r.ptFt === ptftFilter);
-  visible = applyFlagFilter(visible, document.getElementById('co-flag')?.value || '');
+  visible = applyFlagFilter(visible, tagFilterValue('co-flag'));
   if (q) visible = visible.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
   visible = applySort(visible, cohortSort_);
@@ -4574,10 +4657,10 @@ function holdsApply() {
     const ftftMode = document.getElementById('h-ftft')?.value;
     segments.push(`${n(working.length)} ${ftftMode === 'ftft' ? 'FTFT' : 'Non-FTFT'}`);
   }
-  const tagSel = document.getElementById('h-tags');
-  if (tagSel && tagSel.value) {
-    working = applyFlagFilter(working, tagSel.value);
-    segments.push(`${n(working.length)} ${tagSel.options[tagSel.selectedIndex].text}`);
+  const tagState = tagFilterValue('h-tags');
+  if (tagState) {
+    working = applyFlagFilter(working, tagState);
+    segments.push(`${n(working.length)} tagged ${tagFilterLabel(tagState)}`);
   }
   if (q) {
     working = working.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
@@ -6768,8 +6851,7 @@ function goToFilteredTab(tab, ftftValue, useAllHolds) {
   if (sel) sel.value = ftftValue || '';
   // Donut counts ignore tags, so drop any tag filter left from a prior visit.
   const tagIdMap = { registered: 'reg-tags', holds: 'h-tags', canreg: 'cr-tags', new: 'ns-tags', notreturning: 'nr-filter-tags' };
-  const tagSel = document.getElementById(tagIdMap[tab]);
-  if (tagSel) tagSel.value = '';
+  clearTagFilter(tagIdMap[tab], false);
   const applyMap = {
     'registered':   'regApply',
     'holds':        'holdsApply',
