@@ -1344,6 +1344,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Unaccounted</option>
         <option>Graduating</option>
         <option>High School (excluded)</option>
+        <option>Part-Time (excluded)</option>
+      </select>
+      <select class="filter-select" id="co-ptft" onchange="cohortApply()">
+        <option value="">All Enrollment</option>
+        <option value="F">Full-Time</option>
+        <option value="P">Part-Time</option>
       </select>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
@@ -1369,6 +1375,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="cohortSort('firstName')">First Name</th>
         <th class="sortable mobile-secondary col-priority-2" onclick="cohortSort('__status')">Status</th>
         <th class="sortable mobile-secondary col-priority-3" onclick="cohortSort('classYear')">Class</th>
+        <th class="sortable mobile-secondary col-priority-3" onclick="cohortSort('ptFt')">PT/FT</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('hrsEnrolled')">Term Hrs</th>
         <th class="exp-th"></th>
@@ -1685,9 +1692,10 @@ let nrList = [];
 // Term settings: persisted to localStorage. Drives the current-term filter on
 // Withdrawals + the auto-NR-sync. Window is [currentStart, nextStart); if
 // nextStart is blank, upper bound is today.
-// includeHS: whether high-school dual-enrollment students on the term
-// cohort count toward Eligible to Return (per-term admin switch, terms.include_hs).
-let termSettings = { currentName: '', currentStart: '', nextStart: '', priorTermLeavers: 0, includeHS: false };
+// includeHS / includePT: whether high-school dual-enrollment / part-time
+// students on the term cohort count toward Eligible to Return (per-term
+// admin switches, terms.include_hs and terms.include_pt).
+let termSettings = { currentName: '', currentStart: '', nextStart: '', priorTermLeavers: 0, includeHS: false, includePT: true };
 
 // (No external chart library needed — all charts are SVG)
 
@@ -1897,6 +1905,7 @@ const EXPORT_COLUMNS = {
     { header: 'Phone',      getter: r => phoneNumbers.get(r.id) || '' },
     { header: 'Status',     getter: r => r.__status },
     { header: 'Class Year', getter: r => r.classYear },
+    { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Term Hours', getter: r => r.hrsEnrolled || '' },
@@ -2810,7 +2819,9 @@ function renderSummary() {
   document.getElementById('s-ret-rate').textContent = retRate + '%';
   const eligSubEl = document.getElementById('s-eligible-sub');
   if (eligSubEl) eligSubEl.textContent = stats.mode === 'cohort'
-    ? `${termSettings.currentName || 'Current term'} cohort, ex-Graduating` + (termSettings.includeHS ? ', HS included' : ', HS excluded')
+    ? `${termSettings.currentName || 'Current term'} cohort, ex-Graduating` +
+      (termSettings.includeHS ? ', HS included' : ', HS excluded') +
+      (termSettings.includePT ? '' : ', part-time excluded')
     : 'Returning + current-term Not Returning';
 
   // "Potential" Semester Persistence Rate — if every returning student who
@@ -3987,6 +3998,7 @@ function buildCohortRows() {
       email: live.email || '',
       hrsEnrolled: c.hrsEnrolled || 0,
       isHS: cohortIsHS(c),
+      ptFt: c.ptFt || '',
       override: c.statusOverride || null,
       __status: cohortStatusOf(c.id, ctx),
     };
@@ -4018,11 +4030,12 @@ function renderCohort() {
   });
   const exParts = [
     excluded['High School (excluded)'] ? `${n(excluded['High School (excluded)'])} HS` : '',
+    excluded['Part-Time (excluded)']   ? `${n(excluded['Part-Time (excluded)'])} PT` : '',
     excluded['Graduating']             ? `${n(excluded['Graduating'])} Graduating` : '',
   ].filter(Boolean);
   document.getElementById('co-total-sub').textContent =
     `${n(rows.length)} students` + (exParts.length ? ` − ${exParts.join(', ')}` : '');
-  renderHSToggle(rows.filter(r => r.isHS).length);
+  renderCohortToggles(rows);
   document.getElementById('co-section-label').textContent =
     `${termSettings.currentName || 'Current term'} cohort — student listing`;
   cohortApply();
@@ -4032,9 +4045,11 @@ function cohortApply() {
   if (!termCohort.size) return;
   const statusFilter = document.getElementById('co-status')?.value || '';
   const q = (document.getElementById('co-search')?.value || '').toLowerCase();
+  const ptftFilter = document.getElementById('co-ptft')?.value || '';
   const all = buildCohortRows();
   let rows = all;
   if (statusFilter) rows = rows.filter(r => r.__status === statusFilter);
+  if (ptftFilter)   rows = rows.filter(r => r.ptFt === ptftFilter);
   if (q) rows = rows.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
   rows = applySort(rows, cohortSort_);
@@ -4048,7 +4063,7 @@ function cohortApply() {
   const tbody = document.getElementById('co-tbody');
   cohortVisibleIds = rows.map(r => r.id);
   updateCohortBulkBar();
-  if (!rows.length) { tbody.innerHTML = emptyRow(9, 'No cohort students match the current filters.'); return; }
+  if (!rows.length) { tbody.innerHTML = emptyRow(10, 'No cohort students match the current filters.'); return; }
   const statusChip = s =>
     s === 'Registered'    ? 'chip-green'  :
     s === 'Has Hold'      ? 'chip-red'    :
@@ -4068,46 +4083,59 @@ function cohortApply() {
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName || ''}</td>
     <td class="mobile-secondary col-priority-2">${statusHtml}</td>
     <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
+    <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
     <td class="mobile-secondary col-priority-4">${r.major || dash}</td>
     <td class="mobile-secondary col-priority-4" style="text-align:right;">${hrs}</td>
     ${expandBtnCell()}
-  </tr>${buildDetailRow(9, [
+  </tr>${buildDetailRow(10, [
     { label: 'First Name', value: r.firstName || '' },
     { label: 'Status', value: statusHtml },
     { label: 'Class', value: classChip(r.classYear) },
+    { label: 'Enrollment', value: ptFtChip(r.ptFt) },
     { label: 'Major', value: r.major || '' },
     { label: 'Term Hrs', value: hrs },
   ])}`;
   }).join('');
 }
 
-// HS dual-enrollment switch. Admins get a checkbox; everyone else sees the
-// current setting, since it changes the shared Eligible to Return number.
-function renderHSToggle(hsCount) {
+// Cohort population switches (HS dual enrollment, part-time). Admins get
+// checkboxes; everyone else sees the current setting, since each changes the
+// shared Eligible to Return number.
+function renderCohortToggles(rows) {
   const el = document.getElementById('co-hs-toggle');
   if (!el) return;
-  if (!hsCount) { el.style.display = 'none'; return; }
-  el.style.display = 'block';
-  const state = termSettings.includeHS ? 'included in' : 'excluded from';
-  el.innerHTML = isAdmin()
-    ? `<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-         <input type="checkbox" ${termSettings.includeHS ? 'checked' : ''} onchange="setIncludeHS(this.checked)" />
-         Count the ${n(hsCount)} high-school dual-enrollment students (<span class="hs-badge">HS</span>) toward Eligible to Return
-       </label>`
-    : `${n(hsCount)} high-school dual-enrollment students (<span class="hs-badge">HS</span>) are ${state} Eligible to Return (set by an admin).`;
+  const hsCount = rows.filter(r => r.isHS).length;
+  const ptCount = rows.filter(r => r.ptFt === 'P' && !r.isHS).length;
+  const lines = [];
+  const line = (count, label, flag, setter) => {
+    if (!count) return;
+    lines.push(isAdmin()
+      ? `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:4px;">
+           <input type="checkbox" ${flag ? 'checked' : ''} onchange="${setter}(this.checked)" />
+           Count the ${n(count)} ${label} toward Eligible to Return
+         </label>`
+      : `<div style="margin-bottom:4px;">${n(count)} ${label} are ${flag ? 'included in' : 'excluded from'} Eligible to Return (set by an admin).</div>`);
+  };
+  line(hsCount, 'high-school dual-enrollment students (<span class="hs-badge">HS</span>)', termSettings.includeHS, 'setIncludeHS');
+  line(ptCount, 'part-time students (<span class="chip chip-amber">PT</span>, not counting HS)', termSettings.includePT, 'setIncludePT');
+  el.style.display = lines.length ? 'block' : 'none';
+  el.innerHTML = lines.join('');
 }
 
-async function setIncludeHS(checked) {
+// Save a per-term cohort switch to the current term row, then recompute.
+async function saveCohortSwitch(column, key, checked, label) {
   if (!isAdmin()) return;
   if (HOSTED && sb) {
     if (!termSettings.currentStart) { alert('Save the current term window first.'); renderCohort(); return; }
-    const { error } = await sb.from('terms').update({ include_hs: !!checked }).eq('start_date', termSettings.currentStart);
-    if (error) { alert('Could not save the HS setting: ' + error.message); renderCohort(); return; }
+    const { error } = await sb.from('terms').update({ [column]: !!checked }).eq('start_date', termSettings.currentStart);
+    if (error) { alert(`Could not save the ${label} setting: ` + error.message); renderCohort(); return; }
   }
-  termSettings.includeHS = !!checked;
+  termSettings[key] = !!checked;
   try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
   renderSummary(); // recomputes every number and re-renders the Cohort tab
 }
+function setIncludeHS(checked) { return saveCohortSwitch('include_hs', 'includeHS', checked, 'HS'); }
+function setIncludePT(checked) { return saveCohortSwitch('include_pt', 'includePT', checked, 'part-time'); }
 
 // ── Admin status overrides on cohort rows (Graduating / High School) ──
 // Selection persists across filter changes so an admin can filter to
@@ -4168,8 +4196,10 @@ function getCohortExportData() {
   const all = buildCohortRows();
   const statusFilter = document.getElementById('co-status')?.value || '';
   const q = (document.getElementById('co-search')?.value || '').toLowerCase();
+  const ptftFilter = document.getElementById('co-ptft')?.value || '';
   let visible = [...all];
   if (statusFilter) visible = visible.filter(r => r.__status === statusFilter);
+  if (ptftFilter)   visible = visible.filter(r => r.ptFt === ptftFilter);
   if (q) visible = visible.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
   visible = applySort(visible, cohortSort_);
@@ -4864,7 +4894,7 @@ function retentionContext() {
 
 // Statuses that keep a listing row out of every number but stay visible on
 // the Cohort tab so they can be audited. ZERO_HOURS is excluded AND hidden.
-const COHORT_EXCLUDED = new Set(['High School (excluded)', 'Graduating']);
+const COHORT_EXCLUDED = new Set(['High School (excluded)', 'Graduating', 'Part-Time (excluded)']);
 const ZERO_HOURS = 'Zero Hours';
 
 function isHSClass(classYear) {
@@ -4890,6 +4920,9 @@ function cohortStatusOf(id, ctx) {
   if (c && !(Number(c.hrsEnrolled) > 0) && !ctx.ctwIds.has(id)) return ZERO_HOURS;
   if (cohortIsHS(c) && !termSettings.includeHS)                return 'High School (excluded)';
   if (!ctx.isActive(id))       return 'Graduating';
+  // Part-time (listing pt_ft_sts 'P'), when the admin excludes them. HS
+  // students are governed by the HS switch alone.
+  if (c && c.ptFt === 'P' && !cohortIsHS(c) && !termSettings.includePT) return 'Part-Time (excluded)';
   if (ctx.nrIdSet.has(id))     return 'Not Returning';
   if (registeredIds.has(id))   return 'Registered';
   if (ctx.ctwIds.has(id))      return 'Not Returning';
@@ -6052,7 +6085,7 @@ function nrSave(idx) {
 function loadTermSettings() {
   try {
     const raw = localStorage.getItem('term_settings');
-    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:'',priorTermLeavers:0,includeHS:false}, JSON.parse(raw));
+    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:'',priorTermLeavers:0,includeHS:false,includePT:true}, JSON.parse(raw));
   } catch(e) {}
   // Coerce priorTermLeavers to a non-negative integer so a malformed
   // localStorage value can't poison the Fall-to-Fall denominator.
@@ -7392,6 +7425,7 @@ async function loadHostedDashboardData() {
         termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
       }
       termSettings.includeHS = !!cur.include_hs;
+      termSettings.includePT = cur.include_pt == null ? true : !!cur.include_pt;
     }
     // Always overwrite — when no future term exists the window must be
     // open-ended. Previously a stale nextStart from localStorage survived,
