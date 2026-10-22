@@ -2129,6 +2129,7 @@ function processAllCSVs() {
   // Run the auto-sync after buildData so registeredIds + students maps are populated
   // and the NR rows we create can reconcile against them.
   if (csvLoaded.withdrawals) syncWithdrawalsToNR();
+  if (!HOSTED) syncHoldBasedNR();
   // Tony 2026-05-11: a student who graduated will not appear on ANY of the
   // four source CSVs (registered, unregistered, new, withdrawals). When that
   // happens, drop them from the NR list and headline count so the dashboard
@@ -4671,6 +4672,66 @@ function getDedupedNRList() {
 // Graduating automatically — no manual NR tag needed. Tony 2026-10-22.
 const GRADUATION_HOLD_PATTERN = /affect\s+graduation/i;
 
+// The registrar's "Unofficial WD (word of mouth)" hold means the student has
+// said they're leaving but hasn't formally withdrawn. Each upload adds such
+// students to the Not Returning list as Pending (Tony 2026-10-22). Rows are
+// tagged by submitter_name so a committee member's removal is respected.
+const UNOFFICIAL_WD_HOLD_PATTERN = /unofficial\s*wd/i;
+const HOLD_IMPORT_SUBMITTER = '[Hold import]';
+const HOLD_IMPORT_NOTE = 'Auto-added: "Unofficial WD (word of mouth)" hold on the registrar report.';
+
+function studentsWithUnofficialWDHold() {
+  const byId = new Map();
+  [returningStudents, registeredStudents, newStudents].forEach(map => {
+    Object.values(map || {}).forEach(s => {
+      if (s.id && !byId.has(s.id) && (s.holds || []).some(h => UNOFFICIAL_WD_HOLD_PATTERN.test(h || ''))) {
+        byId.set(s.id, s);
+      }
+    });
+  });
+  return [...byId.values()];
+}
+
+// Client-side NR row for a hold-sourced student (local mode, and to show
+// server-inserted rows without a reload).
+function holdImportNRRow(s, supabaseRow) {
+  const row = {
+    id: s.id,
+    name: s.name || '',
+    firstName: s.firstName || '',
+    lastName: s.lastName || '',
+    email: s.email || '',
+    major: s.major || '',
+    advisor: s.advisor || '',
+    sport: (s.sports || []).join(', '),
+    classYear: normalizeClassYear(s.classYear || ''),
+    isRegistered: registeredIds.has(s.id),
+    reason: '',
+    notes: HOLD_IMPORT_NOTE,
+    withdrawal: 'Pending',
+    dateAdded: todayLocalISO(),
+    _fromHold: true,
+    _supabaseId: supabaseRow ? supabaseRow.id : undefined,
+    _updatedAt: (supabaseRow && supabaseRow.updated_at) || new Date().toISOString(),
+  };
+  ensureNRNameFields(row);
+  return row;
+}
+
+// Local-file mode only (hosted mode does this server-side in
+// pushDataToSupabase). Skips students already on the list, and students
+// whose hold row was removed this term.
+function syncHoldBasedNR() {
+  let added = 0;
+  studentsWithUnofficialWDHold().forEach(s => {
+    if (nrList.some(r => r.id === s.id)) return;
+    if (nrIgnoredWithdrawalIds.has(`hold-${termSettings.currentStart || ''}-${s.id}`)) return;
+    nrList.unshift(holdImportNRRow(s));
+    added++;
+  });
+  if (added) saveNRList();
+}
+
 function getGraduatingIdSet() {
   const ids = new Set(
     nrList
@@ -5075,6 +5136,10 @@ function nrRemove(idx) {
     // Scoped to the current term so a removal never suppresses the same
     // student's withdrawal in a later term.
     if (row.id) nrIgnoredWithdrawalIds.add(nrTermIgnoreKey(row.id));
+    saveIgnoredWithdrawals();
+  }
+  if (row && row._fromHold && row.id) {
+    nrIgnoredWithdrawalIds.add(`hold-${termSettings.currentStart || ''}-${row.id}`);
     saveIgnoredWithdrawals();
   }
   nrList.splice(idx, 1);
@@ -7200,6 +7265,7 @@ async function loadHostedDashboardData() {
       _sourceWithdrawalId: r.source_withdrawal_id ? `wd-${r.id}` : null,
       _withdrawalLDA: null,
       _isFromCSV: !!r.source_withdrawal_id,
+      _fromHold: r.submitter_name === HOLD_IMPORT_SUBMITTER,
       // updated_at drives the render-time dedupe — when two NR rows exist
       // for the same student, the most-recently-updated wins so manual
       // edits aren't masked by stale auto-imported duplicates.
@@ -7791,6 +7857,57 @@ async function pushDataToSupabase() {
       }
     }
 
+    // 6b) Students with an "Unofficial WD (word of mouth)" hold → Not
+    //     Returning list as Pending. Skip students already on the list, and
+    //     students whose hold row a committee member removed (hidden, not
+    //     archived). Archived rows from a previous cycle don't block.
+    let holdInserts = 0;
+    const holdStudents = studentsWithUnofficialWDHold();
+    if (holdStudents.length) {
+      status('Step 6b/6: adding Unofficial WD holds to Not Returning…');
+      const hr = await sb.from('not_returning_reports')
+        .select('student_id, is_hidden, archived_at, submitter_name')
+        .in('student_id', holdStudents.map(s => s.id));
+      if (hr.error) {
+        console.warn('Unofficial WD hold lookup failed (non-fatal):', hr.error.message);
+      } else {
+        const rowsFor = id => (hr.data || []).filter(r => r.student_id === id);
+        const toAdd = holdStudents.filter(s => {
+          const rows = rowsFor(s.id);
+          if (rows.some(r => !r.is_hidden)) return false;
+          if (rows.some(r => r.is_hidden && !r.archived_at && r.submitter_name === HOLD_IMPORT_SUBMITTER)) return false;
+          return true;
+        });
+        if (toAdd.length) {
+          const ins = await sb.from('not_returning_reports').insert(toAdd.map(s => ({
+            student_id: s.id,
+            student_name: s.name || [s.firstName, s.lastName].filter(Boolean).join(' '),
+            reason: '',
+            withdrawal_status: 'Pending',
+            notes: HOLD_IMPORT_NOTE,
+            sport: (s.sports || []).join(', ') || null,
+            major: s.major || null,
+            class_year: s.classYear || null,
+            submitter_name: HOLD_IMPORT_SUBMITTER,
+            submitter_uid: currentUser?.id,
+          }))).select('id, student_id, updated_at');
+          if (ins.error) {
+            console.warn('Unofficial WD hold insert failed:', ins.error);
+            alert('Warning: could not add Unofficial WD hold students to Not Returning: ' + ins.error.message);
+          } else {
+            // Show them now — the upload flow doesn't reload from Supabase.
+            (ins.data || []).forEach(db => {
+              const s = toAdd.find(x => x.id === db.student_id);
+              if (s && !nrList.some(r => r.id === s.id)) nrList.unshift(holdImportNRRow(s, db));
+            });
+            holdInserts = (ins.data || []).length;
+            saveNRList();
+            nrUpdateKpis(); nrRender(); renderSummary();
+          }
+        }
+      }
+    }
+
     // Cleanup: delete students from old snapshots so the DB never grows past
     // Supabase's 1000-row default limit. Students with manual overrides are kept
     // (they have snapshot_id = snapshotId from the upsert above, so this is safe).
@@ -7801,7 +7918,7 @@ async function pushDataToSupabase() {
       .is('manual_status', null);
     if (cleanupErr) console.warn('Old snapshot cleanup failed (non-fatal):', cleanupErr.message);
 
-    status(`Upload complete: ${studentRows.length} students, ${withdrawalsList.length} withdrawals, NR sync: +${syncInserts} new, ${syncUpdates} updated, ${syncHidden} duplicates hidden. Refreshing…`);
+    status(`Upload complete: ${studentRows.length} students, ${withdrawalsList.length} withdrawals, NR sync: +${syncInserts} new, ${syncUpdates} updated, ${syncHidden} duplicates hidden, +${holdInserts} from Unofficial WD holds. Refreshing…`);
     return true;
   } catch (e) {
     console.error('pushDataToSupabase failed:', e);
