@@ -252,6 +252,9 @@ tbody td { padding: 8px 12px; color: #2d3142; }
    colors (class year, hold type, withdrawal status). */
 .ftft-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; vertical-align:middle; }
 body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a; }
+/* High-school dual-enrollment badge — amber so it reads differently from FTFT. */
+.hs-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#fef3c7; color:#92400e; border:1px solid #fcd34d; vertical-align:middle; }
+body.dark .hs-badge { background:#33280f; color:#d9a54a; border-color:#4a3a14; }
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 40px 20px; color: #888; }
@@ -1328,6 +1331,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card amber kpi-clickable" onclick="cohortFilterByStatus('Not Returning')"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="co-nr">0</div><div class="kpi-sub">On NR list or withdrew this term</div></div>
       <div class="kpi-card purple kpi-clickable" onclick="cohortFilterByStatus('Unaccounted')"><div class="kpi-label">Unaccounted</div><div class="kpi-value" id="co-unacc">0</div><div class="kpi-sub">Not on any report or list</div></div>
     </div>
+    <div id="co-hs-toggle" style="display:none;margin-bottom:12px;font-size:12px;color:#555;"></div>
     <div class="section-label" id="co-section-label">Term Cohort</div>
     <div class="filter-row">
       <span class="filter-label">Filter:</span>
@@ -1340,7 +1344,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Unaccounted</option>
         <option>Graduating</option>
         <option>High School (excluded)</option>
-        <option>Zero Hours (excluded)</option>
       </select>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
@@ -1633,6 +1636,20 @@ function isFTFT(id) { return id && ftftIds.has(id); }
 function ftftBadge(id) {
   return isFTFT(id) ? ' <span class="ftft-badge" title="First-Time Full-Time">FTFT</span>' : '';
 }
+// High-school dual-enrollment student: class HS on the term cohort listing
+// or on any daily report.
+function isHSStudent(id) {
+  if (!id) return false;
+  const rec = termCohort.get(id) || registeredStudents[id] || returningStudents[id] || newStudents[id];
+  return !!rec && isHSClass(rec.classYear);
+}
+function hsBadge(id) {
+  return isHSStudent(id) ? ' <span class="hs-badge" title="High-school dual enrollment">HS</span>' : '';
+}
+// All name-cell badges. Use this (not ftftBadge) in table cells.
+function studentBadges(id) {
+  return ftftBadge(id) + hsBadge(id);
+}
 
 // Processed data
 let returningStudents   = {}; // id -> student obj
@@ -1656,7 +1673,9 @@ let nrList = [];
 // Term settings: persisted to localStorage. Drives the current-term filter on
 // Withdrawals + the auto-NR-sync. Window is [currentStart, nextStart); if
 // nextStart is blank, upper bound is today.
-let termSettings = { currentName: '', currentStart: '', nextStart: '', priorTermLeavers: 0 };
+// includeHS: whether high-school dual-enrollment students on the term
+// cohort count toward Eligible to Return (per-term admin switch, terms.include_hs).
+let termSettings = { currentName: '', currentStart: '', nextStart: '', priorTermLeavers: 0, includeHS: false };
 
 // (No external chart library needed — all charts are SVG)
 
@@ -2771,7 +2790,7 @@ function renderSummary() {
   document.getElementById('s-ret-rate').textContent = retRate + '%';
   const eligSubEl = document.getElementById('s-eligible-sub');
   if (eligSubEl) eligSubEl.textContent = stats.mode === 'cohort'
-    ? `${termSettings.currentName || 'Current term'} cohort, ex-Graduating, HS, 0-hour`
+    ? `${termSettings.currentName || 'Current term'} cohort, ex-Graduating` + (termSettings.includeHS ? ', HS included' : ', HS excluded')
     : 'Returning + current-term Not Returning';
 
   // "Potential" Semester Persistence Rate — if every returning student who
@@ -3906,7 +3925,7 @@ function ftftApply() {
     const rowTitle   = noName ? ' title="Not Returning from Fall"' : '';
     return `<tr${rowTitle}>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
-    <td style="font-weight:600;">${r.lastName||''}${ftftBadge(r.id)}</td>
+    <td style="font-weight:600;">${r.lastName||''}${studentBadges(r.id)}</td>
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${firstVal}</td>
     <td class="mobile-secondary col-priority-2">${statusHtml}</td>
     <td class="mobile-secondary col-priority-3">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
@@ -3947,9 +3966,10 @@ function buildCohortRows() {
       advisor: live.advisor || '',
       email: live.email || '',
       hrsEnrolled: c.hrsEnrolled || 0,
+      isHS: isHSClass(c.classYear),
       __status: cohortStatusOf(c.id, ctx),
     };
-  });
+  }).filter(r => r.__status !== ZERO_HOURS); // never attended — hidden entirely
 }
 
 function renderCohort() {
@@ -3970,17 +3990,18 @@ function renderCohort() {
   document.getElementById('co-canreg').textContent = n(stats.canRegCount);
   document.getElementById('co-nr').textContent     = n(stats.nrInCohort);
   document.getElementById('co-unacc').textContent  = n(stats.unaccounted);
+  const rows = buildCohortRows();
   const excluded = {};
-  buildCohortRows().forEach(r => {
+  rows.forEach(r => {
     if (COHORT_EXCLUDED.has(r.__status)) excluded[r.__status] = (excluded[r.__status] || 0) + 1;
   });
   const exParts = [
     excluded['High School (excluded)'] ? `${n(excluded['High School (excluded)'])} HS` : '',
-    excluded['Zero Hours (excluded)']  ? `${n(excluded['Zero Hours (excluded)'])} 0-hr` : '',
-    excluded['Graduating']             ? `${n(excluded['Graduating'])} Grad` : '',
+    excluded['Graduating']             ? `${n(excluded['Graduating'])} Graduating` : '',
   ].filter(Boolean);
   document.getElementById('co-total-sub').textContent =
-    `${n(termCohort.size)} on listing` + (exParts.length ? ` − ${exParts.join(', ')}` : '');
+    `${n(rows.length)} students` + (exParts.length ? ` − ${exParts.join(', ')}` : '');
+  renderHSToggle(rows.filter(r => r.isHS).length);
   document.getElementById('co-section-label').textContent =
     `${termSettings.currentName || 'Current term'} cohort — student listing`;
   cohortApply();
@@ -4017,7 +4038,7 @@ function cohortApply() {
     const hrs = r.hrsEnrolled ? (Number.isInteger(r.hrsEnrolled) ? r.hrsEnrolled : r.hrsEnrolled.toFixed(1)) : dash;
     return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-    <td style="font-weight:600;">${r.lastName || r.name || ''}${ftftBadge(r.id)}</td>
+    <td style="font-weight:600;">${r.lastName || r.name || ''}${studentBadges(r.id)}</td>
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName || ''}</td>
     <td class="mobile-secondary col-priority-2">${statusHtml}</td>
     <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
@@ -4032,6 +4053,34 @@ function cohortApply() {
     { label: 'Term Hrs', value: hrs },
   ])}`;
   }).join('');
+}
+
+// HS dual-enrollment switch. Admins get a checkbox; everyone else sees the
+// current setting, since it changes the shared Eligible to Return number.
+function renderHSToggle(hsCount) {
+  const el = document.getElementById('co-hs-toggle');
+  if (!el) return;
+  if (!hsCount) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const state = termSettings.includeHS ? 'included in' : 'excluded from';
+  el.innerHTML = isAdmin()
+    ? `<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+         <input type="checkbox" ${termSettings.includeHS ? 'checked' : ''} onchange="setIncludeHS(this.checked)" />
+         Count the ${n(hsCount)} high-school dual-enrollment students (<span class="hs-badge">HS</span>) toward Eligible to Return
+       </label>`
+    : `${n(hsCount)} high-school dual-enrollment students (<span class="hs-badge">HS</span>) are ${state} Eligible to Return (set by an admin).`;
+}
+
+async function setIncludeHS(checked) {
+  if (!isAdmin()) return;
+  if (HOSTED && sb) {
+    if (!termSettings.currentStart) { alert('Save the current term window first.'); renderCohort(); return; }
+    const { error } = await sb.from('terms').update({ include_hs: !!checked }).eq('start_date', termSettings.currentStart);
+    if (error) { alert('Could not save the HS setting: ' + error.message); renderCohort(); return; }
+  }
+  termSettings.includeHS = !!checked;
+  try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
+  renderSummary(); // recomputes every number and re-renders the Cohort tab
 }
 
 function cohortFilterByStatus(status) {
@@ -4306,7 +4355,7 @@ function holdsApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${studentBadges(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${renderHoldChips(r)}</td>
           <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
@@ -4365,7 +4414,7 @@ function crApply() {
         const nrBadge  = isNR ? ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(Not Returning)</span>' : '';
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${studentBadges(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${classChip(r.classYear)}</td>
           <td class="mobile-secondary col-priority-2">${ptFtChip(r.ptFt)}</td>
@@ -4453,7 +4502,7 @@ function regApply() {
         const gpaDetailField = isAdmin() ? [{ label: 'GPA', value: gpaCell }] : [];
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${displayName}${nrBadge}${ftftBadge(r.id)}</td>
+          <td style="font-weight:600;">${displayName}${nrBadge}${studentBadges(r.id)}</td>
           <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
           <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
           <td class="mobile-secondary col-priority-2" style="font-weight:600;text-align:right;">${creditCell}</td>
@@ -4508,7 +4557,7 @@ function nsApply() {
         const statusChip = `<span class="chip ${r.status==='Registered'?'chip-green':r.status==='Withdrawn'?'chip-red':'chip-amber'}">${r.status}</span>`;
         return `<tr${rowStyle}>
           <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
-          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${ftftBadge(r.id)}</td>
+          <td style="font-weight:600;">${r.lastName||''}${nrBadge}${studentBadges(r.id)}</td>
           <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName||r.name||''}</td>
           <td class="mobile-secondary col-priority-2">${statusChip}</td>
           <td class="mobile-secondary col-priority-3">${classChip(r.classYear)}</td>
@@ -4609,20 +4658,32 @@ function getDedupedNRList() {
   return dedupeNRForDisplay(nrList).filter(r => !r.id || !newIds.has(r.id));
 }
 
-// Set of student IDs whose NR row is tagged "Graduating." Graduating students
+// Set of student IDs who are graduating: NR row tagged "Graduating" OR a
+// graduation hold (see GRADUATION_HOLD_PATTERN). Graduating students
 // are completing their degree, not attrition — Tony 2026-05-11: they should
 // not contribute to any count or percentage on the dashboard. Anywhere a
 // total or ratio is computed, filter with `!gradIds.has(id)` so graduating
 // students drop out of every numerator and every denominator. Their rows
 // still appear on the Not Returning tab so the committee can see them, but
 // they don't move any number.
+// The registrar places a "changes can affect graduation" hold on students
+// finishing this term (e.g. December graduates), so the hold marks them as
+// Graduating automatically — no manual NR tag needed. Tony 2026-10-22.
+const GRADUATION_HOLD_PATTERN = /affect\s+graduation/i;
+
 function getGraduatingIdSet() {
-  return new Set(
+  const ids = new Set(
     nrList
       .filter(r => (r.reason || '').toLowerCase() === 'graduating')
       .map(r => r.id)
       .filter(Boolean)
   );
+  [returningStudents, registeredStudents, newStudents].forEach(map => {
+    Object.values(map || {}).forEach(s => {
+      if (s.id && (s.holds || []).some(h => GRADUATION_HOLD_PATTERN.test(h || ''))) ids.add(s.id);
+    });
+  });
+  return ids;
 }
 
 // Student IDs with a withdrawal whose last-active date falls in the current
@@ -4671,24 +4732,29 @@ function retentionContext() {
   };
 }
 
-// Statuses that keep a listing row OUT of every number (still shown on the
-// Cohort tab so they can be audited).
-const COHORT_EXCLUDED = new Set(['High School (excluded)', 'Zero Hours (excluded)', 'Graduating']);
+// Statuses that keep a listing row out of every number but stay visible on
+// the Cohort tab so they can be audited. ZERO_HOURS is excluded AND hidden.
+const COHORT_EXCLUDED = new Set(['High School (excluded)', 'Graduating']);
+const ZERO_HOURS = 'Zero Hours';
+
+function isHSClass(classYear) {
+  return String(classYear || '').trim().toUpperCase() === 'HS';
+}
 
 // Status of one cohort member. Order matters:
-//   • class HS = high-school dual enrollment — not degree-seeking, and absent
-//     from every daily report, so never eligible to return.
 //   • 0 enrolled hours with no current-term withdrawal = never attended the
 //     term (registered, then dropped everything; no-show withdrawals are
-//     coded NW and deliberately not stored). A 0-hour student WITH a
-//     current-term withdrawal attended and left, so stays in the cohort.
-//   • Graduating is excluded from every number.
+//     coded NW and deliberately not stored). Excluded and hidden. A 0-hour
+//     student WITH a current-term withdrawal attended and left, so stays.
+//   • class HS = high-school dual enrollment. Counted only when the admin
+//     turns on termSettings.includeHS; either way they carry an HS badge.
+//   • Graduating (NR reason or graduation hold) is excluded from every number.
 //   • the NR list wins over Registered (same rule as roster mode); a
 //     current-term withdrawal is a loss even if its NR row was removed.
 function cohortStatusOf(id, ctx) {
   const c = termCohort.get(id);
-  if (c && String(c.classYear || '').trim().toUpperCase() === 'HS') return 'High School (excluded)';
-  if (c && !(Number(c.hrsEnrolled) > 0) && !ctx.ctwIds.has(id))    return 'Zero Hours (excluded)';
+  if (c && !(Number(c.hrsEnrolled) > 0) && !ctx.ctwIds.has(id)) return ZERO_HOURS;
+  if (c && isHSClass(c.classYear) && !termSettings.includeHS)   return 'High School (excluded)';
   if (!ctx.isActive(id))       return 'Graduating';
   if (ctx.nrIdSet.has(id))     return 'Not Returning';
   if (registeredIds.has(id))   return 'Registered';
@@ -5669,7 +5735,7 @@ function nrRenderStaticRow(r) {
       <button onclick="nrRemove(${r._idx})" class="nr-row-btn nr-row-btn-danger" title="Remove">Remove</button>`;
   return `<tr>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id||'—'}</td>
-    <td style="font-weight:600;">${lastCell}${ftftBadge(r.id)}</td>
+    <td style="font-weight:600;">${lastCell}${studentBadges(r.id)}</td>
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${firstCell || '<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td class="mobile-secondary col-priority-3">${classCell}</td>
     <td class="mobile-secondary col-priority-3" style="font-size:11px;">${sportCell}</td>
@@ -5848,7 +5914,7 @@ function nrSave(idx) {
 function loadTermSettings() {
   try {
     const raw = localStorage.getItem('term_settings');
-    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:'',priorTermLeavers:0}, JSON.parse(raw));
+    if (raw) termSettings = Object.assign({currentName:'',currentStart:'',nextStart:'',priorTermLeavers:0,includeHS:false}, JSON.parse(raw));
   } catch(e) {}
   // Coerce priorTermLeavers to a non-negative integer so a malformed
   // localStorage value can't poison the Fall-to-Fall denominator.
@@ -6180,7 +6246,7 @@ function _wdRenderLegacy_DEAD() {
     else                            nrCell = '<span style="color:#bbb;font-size:11px;">—</span>';
     return `<tr>
       <td style="font-family:monospace;font-size:11px;color:#555;">${w.id||'—'}</td>
-      <td style="font-weight:600;">${w.name||'—'}${ftftBadge(w.id)}</td>
+      <td style="font-weight:600;">${w.name||'—'}${studentBadges(w.id)}</td>
       <td style="font-family:monospace;font-size:11px;">${w.lastActiveDate||'—'}</td>
       <td style="font-family:monospace;font-size:11px;color:#888;">${w.processedDate||'—'}</td>
       <td>${w.reason||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
@@ -7185,6 +7251,7 @@ async function loadHostedDashboardData() {
       if (cur.prior_term_leavers != null) {
         termSettings.priorTermLeavers = Math.max(0, parseInt(cur.prior_term_leavers, 10) || 0);
       }
+      termSettings.includeHS = !!cur.include_hs;
     }
     // Always overwrite — when no future term exists the window must be
     // open-ended. Previously a stale nextStart from localStorage survived,
