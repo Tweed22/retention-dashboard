@@ -255,6 +255,10 @@ body.dark .ftft-badge { background:#2c2236; color:#9d7ec9; border-color:#3a2e4a;
 /* High-school dual-enrollment badge — amber so it reads differently from FTFT. */
 .hs-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#fef3c7; color:#92400e; border:1px solid #fcd34d; vertical-align:middle; }
 body.dark .hs-badge { background:#33280f; color:#d9a54a; border-color:#4a3a14; }
+/* Student flags (Midterm Meeting, Provisional) — neutral slate so they read
+   as annotations, not statuses. */
+.flag-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; vertical-align:middle; }
+body.dark .flag-badge { background:#26303c; color:#b4c2d3; border-color:#3a4656; }
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 40px 20px; color: #888; }
@@ -1323,12 +1327,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="page" id="page-cohort">
   <div id="cohort-empty" class="empty-state"><p>No term cohort loaded for the current term.<br>Upload the current term's student listing report in the <a onclick="toggleUploadPanel()">upload panel</a> (Term Cohort slot). Until then, Eligible to Return is derived from the daily rosters.</p></div>
   <div id="cohort-content" style="display:none;">
-    <div class="kpi-row kpi-row-6">
+    <div class="kpi-row kpi-row-7">
       <div class="kpi-card indigo kpi-clickable" onclick="cohortFilterByStatus('')" title="Clear the status filter"><div class="kpi-label">Eligible (Cohort)</div><div class="kpi-value" id="co-total">0</div><div class="kpi-sub" id="co-total-sub">Listing minus Graduating</div></div>
       <div class="kpi-card green kpi-clickable" onclick="cohortFilterByStatus('Registered')"><div class="kpi-label">Registered</div><div class="kpi-value" id="co-reg">0</div><div class="kpi-sub">Registered for next term</div></div>
       <div class="kpi-card red kpi-clickable" onclick="cohortFilterByStatus('Has Hold')"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="co-hold">0</div><div class="kpi-sub">On unregistered report, blocking hold</div></div>
       <div class="kpi-card teal kpi-clickable" onclick="cohortFilterByStatus('Can Register')"><div class="kpi-label">Can Register</div><div class="kpi-value" id="co-canreg">0</div><div class="kpi-sub">On unregistered report, no hold</div></div>
       <div class="kpi-card amber kpi-clickable" onclick="cohortFilterByStatus('Not Returning')"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="co-nr">0</div><div class="kpi-sub">On NR list or withdrew this term</div></div>
+      <div class="kpi-card blue kpi-clickable" onclick="cohortFilterByStatus('Part-Time|Dual Credit')"><div class="kpi-label">Part-Time / Dual Credit</div><div class="kpi-value" id="co-ptdc">0</div><div class="kpi-sub" id="co-ptdc-sub">On no report or list</div></div>
       <div class="kpi-card purple kpi-clickable" onclick="cohortFilterByStatus('Unaccounted')"><div class="kpi-label">Unaccounted</div><div class="kpi-value" id="co-unacc">0</div><div class="kpi-sub">Not on any report or list</div></div>
     </div>
     <div id="co-hs-toggle" style="display:none;margin-bottom:12px;font-size:12px;color:#555;"></div>
@@ -1341,9 +1346,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Has Hold</option>
         <option>Can Register</option>
         <option>Not Returning</option>
+        <option value="Part-Time|Dual Credit">Part-Time or Dual Credit</option>
+        <option>Part-Time</option>
+        <option>Dual Credit</option>
         <option>Unaccounted</option>
         <option>Graduating</option>
-        <option>High School (excluded)</option>
+        <option>Dual Credit (excluded)</option>
         <option>Part-Time (excluded)</option>
       </select>
       <select class="filter-select" id="co-ptft" onchange="cohortApply()">
@@ -1351,14 +1359,26 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option value="F">Full-Time</option>
         <option value="P">Part-Time</option>
       </select>
+      <select class="filter-select" id="co-flag" onchange="cohortApply()">
+        <option value="">All Flags</option>
+        <option value="midterm_meeting">Midterm Meeting</option>
+        <option value="provisional">Provisional</option>
+        <option value="__none">No flags</option>
+      </select>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
-    <div class="admin-only" id="co-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#555;">
+    <div id="co-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#555;">
       <span id="co-bulk-count">0 selected</span>
-      <span>— mark as:</span>
-      <button class="nr-row-btn" onclick="setCohortOverride('graduating')" title="Exclude from every number, like a Graduating tag">Graduating</button>
-      <button class="nr-row-btn" onclick="setCohortOverride('hs')" title="Treat as high-school dual enrollment (follows the HS setting above)">High School</button>
-      <button class="nr-row-btn" onclick="setCohortOverride(null)" title="Remove the override and use the reports again">Clear override</button>
+      <span>— flag:</span>
+      <button class="nr-row-btn" onclick="setStudentFlag('midterm_meeting', true)" title="Met at the midterm meeting (this term)">Midterm Meeting</button>
+      <button class="nr-row-btn" onclick="setStudentFlag('provisional', true)" title="Provisional admit (stays with the student across terms)">Provisional</button>
+      <button class="nr-row-btn" onclick="clearStudentFlags()" title="Remove Midterm Meeting and Provisional flags from the selected students">Remove flags</button>
+      <span class="admin-only" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>· mark as:</span>
+        <button class="nr-row-btn" onclick="setCohortOverride('graduating')" title="Exclude from every number, like a Graduating tag">Graduating</button>
+        <button class="nr-row-btn" onclick="setCohortOverride('hs')" title="Treat as high-school dual credit (follows the dual credit setting above)">Dual Credit</button>
+        <button class="nr-row-btn" onclick="setCohortOverride(null)" title="Remove the override and use the reports again">Clear override</button>
+      </span>
     </div>
     <div class="table-wrap">
       <div class="table-header-row">
@@ -1369,7 +1389,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         </div>
       </div>
       <table><thead><tr>
-        <th class="admin-only" style="width:28px;"><input type="checkbox" id="co-select-all" onchange="cohortSelectAll(this.checked)" title="Select all shown" /></th>
+        <th style="width:28px;"><input type="checkbox" id="co-select-all" onchange="cohortSelectAll(this.checked)" title="Select all shown" /></th>
         <th class="sortable" onclick="cohortSort('id')">Student ID</th>
         <th class="sortable" onclick="cohortSort('lastName')">Last Name</th>
         <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="cohortSort('firstName')">First Name</th>
@@ -1617,6 +1637,15 @@ let termCohort = new Map();
 // Supabase id of the current term row (set on hosted load); needed to write
 // cohort status overrides.
 let currentTermDbId = null;
+
+// Informational student flags (student_flags table, migration 0021). They
+// never change a count. perTerm flags are scoped to the current term and
+// reset each term; the others stick with the student.
+const FLAG_DEFS = {
+  midterm_meeting: { label: 'Midterm Meeting', short: 'MTM',  perTerm: true  },
+  provisional:     { label: 'Provisional',     short: 'PROV', perTerm: false },
+};
+let studentFlags = new Map(); // student id -> Set of flag keys
 let pendingFiles = {};
 
 // First-Time Full-Time roster — Set of student IDs from the FTFT CSV upload.
@@ -1665,9 +1694,17 @@ function isHSStudent(id) {
 function hsBadge(id) {
   return isHSStudent(id) ? ' <span class="hs-badge" title="High-school dual enrollment">HS</span>' : '';
 }
+function flagBadges(id) {
+  const set = id && studentFlags.get(id);
+  if (!set || !set.size) return '';
+  return Object.entries(FLAG_DEFS)
+    .filter(([key]) => set.has(key))
+    .map(([, def]) => ` <span class="flag-badge" title="${def.label}">${def.short}</span>`)
+    .join('');
+}
 // All name-cell badges. Use this (not ftftBadge) in table cells.
 function studentBadges(id) {
-  return ftftBadge(id) + hsBadge(id);
+  return ftftBadge(id) + hsBadge(id) + flagBadges(id);
 }
 
 // Processed data
@@ -1906,6 +1943,7 @@ const EXPORT_COLUMNS = {
     { header: 'Status',     getter: r => r.__status },
     { header: 'Class Year', getter: r => r.classYear },
     { header: 'Enrollment', getter: r => r.ptFt === 'F' ? 'Full-Time' : (r.ptFt === 'P' ? 'Part-Time' : '') },
+    { header: 'Flags',      getter: r => flagLabels(r.id) },
     { header: 'Major',      getter: r => r.major },
     { header: 'Advisor',    getter: r => r.advisor },
     { header: 'Term Hours', getter: r => r.hrsEnrolled || '' },
@@ -2898,7 +2936,7 @@ function renderReturningDonuts(stats) {
   const registered  = stats.effReg;
   const hasHold     = stats.holdCount;
   const canRegister = stats.canRegCount;
-  const totalRet    = stats.totalReturning + stats.unaccounted; // = Eligible − NR
+  const totalRet    = stats.totalReturning + stats.ptdcCount + stats.unaccounted; // = Eligible − NR
   // Click handlers route to the corresponding gated tab. Tab order: Summary=0,
   // Registered=1, Holds=2, CanReg=3, NewStudents=4, NotReturning=5.
   // Subtitles spell out the percentage formula. Denominator for all three
@@ -2923,6 +2961,11 @@ function renderReturningDonuts(stats) {
       subtitle:'Returning + Can Reg ÷ (Eligible − NR)',
       onclick: go('Can Register', "goToFilteredTab('canreg', '')") },
   ];
+  if (isCohort && stats.ptdcCount) {
+    segments.push({ label:'Part-Time / Dual Credit', count: stats.ptdcCount, color:'#2563eb',
+      subtitle:`${n(stats.partTimeCount)} PT · ${n(stats.dualCreditCount)} dual credit, on no report`,
+      onclick: "goToCohortPage('Part-Time|Dual Credit')" });
+  }
   if (isCohort) {
     segments.push({ label:'Unaccounted', count: stats.unaccounted, color:'#7c3aed',
       subtitle:'In cohort, on no report or list',
@@ -4023,13 +4066,16 @@ function renderCohort() {
   document.getElementById('co-canreg').textContent = n(stats.canRegCount);
   document.getElementById('co-nr').textContent     = n(stats.nrInCohort);
   document.getElementById('co-unacc').textContent  = n(stats.unaccounted);
+  document.getElementById('co-ptdc').textContent   = n(stats.ptdcCount);
+  document.getElementById('co-ptdc-sub').textContent =
+    `${n(stats.partTimeCount)} part-time · ${n(stats.dualCreditCount)} dual credit, on no report`;
   const rows = buildCohortRows();
   const excluded = {};
   rows.forEach(r => {
     if (COHORT_EXCLUDED.has(r.__status)) excluded[r.__status] = (excluded[r.__status] || 0) + 1;
   });
   const exParts = [
-    excluded['High School (excluded)'] ? `${n(excluded['High School (excluded)'])} HS` : '',
+    excluded['Dual Credit (excluded)'] ? `${n(excluded['Dual Credit (excluded)'])} dual credit` : '',
     excluded['Part-Time (excluded)']   ? `${n(excluded['Part-Time (excluded)'])} PT` : '',
     excluded['Graduating']             ? `${n(excluded['Graduating'])} Graduating` : '',
   ].filter(Boolean);
@@ -4048,8 +4094,11 @@ function cohortApply() {
   const ptftFilter = document.getElementById('co-ptft')?.value || '';
   const all = buildCohortRows();
   let rows = all;
-  if (statusFilter) rows = rows.filter(r => r.__status === statusFilter);
+  // A filter value may list several statuses separated by "|".
+  const statusSet = statusFilter ? new Set(statusFilter.split('|')) : null;
+  if (statusSet) rows = rows.filter(r => statusSet.has(r.__status));
   if (ptftFilter)   rows = rows.filter(r => r.ptFt === ptftFilter);
+  rows = applyFlagFilter(rows, document.getElementById('co-flag')?.value || '');
   if (q) rows = rows.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
   rows = applySort(rows, cohortSort_);
@@ -4069,7 +4118,9 @@ function cohortApply() {
     s === 'Has Hold'      ? 'chip-red'    :
     s === 'Can Register'  ? 'chip-teal'   :
     s === 'Not Returning' ? 'chip-amber'  :
-    s === 'Unaccounted'   ? 'chip-purple' : 'chip-gray';
+    s === 'Unaccounted'   ? 'chip-purple' :
+    s === 'Part-Time'     ? 'chip-blue'   :
+    s === 'Dual Credit'   ? 'chip-indigo' : 'chip-gray';
   const dash = '<span style="color:#bbb;font-size:11px;">—</span>';
   tbody.innerHTML = rows.map(r => {
     const overrideNote = r.override
@@ -4077,7 +4128,7 @@ function cohortApply() {
     const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>${overrideNote}`;
     const hrs = r.hrsEnrolled ? (Number.isInteger(r.hrsEnrolled) ? r.hrsEnrolled : r.hrsEnrolled.toFixed(1)) : dash;
     return `<tr>
-    <td class="admin-only"><input type="checkbox" ${cohortSelected.has(r.id) ? 'checked' : ''} onchange="cohortToggleSelect('${r.id}', this.checked)" /></td>
+    <td><input type="checkbox" ${cohortSelected.has(r.id) ? 'checked' : ''} onchange="cohortToggleSelect('${r.id}', this.checked)" /></td>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
     <td style="font-weight:600;">${r.lastName || r.name || ''}${studentBadges(r.id)}</td>
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName || ''}</td>
@@ -4116,7 +4167,7 @@ function renderCohortToggles(rows) {
          </label>`
       : `<div style="margin-bottom:4px;">${n(count)} ${label} are ${flag ? 'included in' : 'excluded from'} Eligible to Return (set by an admin).</div>`);
   };
-  line(hsCount, 'high-school dual-enrollment students (<span class="hs-badge">HS</span>)', termSettings.includeHS, 'setIncludeHS');
+  line(hsCount, 'dual credit (high-school) students (<span class="hs-badge">HS</span>)', termSettings.includeHS, 'setIncludeHS');
   line(ptCount, 'part-time students (<span class="chip chip-amber">PT</span>, not counting HS)', termSettings.includePT, 'setIncludePT');
   el.style.display = lines.length ? 'block' : 'none';
   el.innerHTML = lines.join('');
@@ -4162,7 +4213,7 @@ async function setCohortOverride(value) {
   if (!isAdmin()) return;
   const ids = [...cohortSelected].filter(id => termCohort.has(id));
   if (!ids.length) { alert('Tick one or more students first.'); return; }
-  const label = value === 'graduating' ? 'Graduating' : value === 'hs' ? 'High School' : 'no override (use the reports)';
+  const label = value === 'graduating' ? 'Graduating' : value === 'hs' ? 'Dual Credit' : 'no override (use the reports)';
   if (!confirm(`Mark ${ids.length} student${ids.length === 1 ? '' : 's'} as ${label}?`)) return;
   if (HOSTED && sb) {
     if (!currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return; }
@@ -4177,6 +4228,56 @@ async function setCohortOverride(value) {
   ids.forEach(id => { termCohort.get(id).statusOverride = value; });
   cohortSelected.clear();
   renderAll(); // graduating status affects every tab, not just the Summary
+}
+
+// ── Student flags (Midterm Meeting, Provisional) — committee-settable ──
+function flagLabels(id) {
+  const set = studentFlags.get(id);
+  if (!set) return '';
+  return Object.entries(FLAG_DEFS).filter(([k]) => set.has(k)).map(([, d]) => d.label).join('; ');
+}
+// '' = no filter, '__none' = students with no flags, else a flag key.
+function applyFlagFilter(rows, value) {
+  if (!value) return rows;
+  if (value === '__none') return rows.filter(r => !(studentFlags.get(r.id) || new Set()).size);
+  return rows.filter(r => (studentFlags.get(r.id) || new Set()).has(value));
+}
+
+async function setStudentFlag(flag, on) {
+  if (!isCommittee()) return;
+  const def = FLAG_DEFS[flag];
+  const ids = [...cohortSelected];
+  if (!ids.length) { alert('Tick one or more students first.'); return; }
+  if (HOSTED && sb) {
+    if (def.perTerm && !currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return; }
+    const termId = def.perTerm ? currentTermDbId : null;
+    for (const part of chunk(ids, 500)) {
+      const res = on
+        ? await sb.from('student_flags').upsert(
+            part.map(id => ({ student_id: id, flag, term_id: termId, set_by: userDisplay || null })),
+            { onConflict: 'student_id,flag,term_key', ignoreDuplicates: true })
+        : await (termId
+            ? sb.from('student_flags').delete().eq('flag', flag).eq('term_id', termId).in('student_id', part)
+            : sb.from('student_flags').delete().eq('flag', flag).is('term_id', null).in('student_id', part));
+      if (res.error) { alert(`Could not save the ${def.label} flag: ` + res.error.message); return; }
+    }
+  }
+  ids.forEach(id => {
+    if (!studentFlags.has(id)) studentFlags.set(id, new Set());
+    on ? studentFlags.get(id).add(flag) : studentFlags.get(id).delete(flag);
+  });
+  cohortSelected.clear();
+  renderAll(); // badges appear on every tab
+}
+
+async function clearStudentFlags() {
+  const ids = [...cohortSelected];
+  if (!ids.length) { alert('Tick one or more students first.'); return; }
+  if (!confirm(`Remove the Midterm Meeting and Provisional flags from ${ids.length} student${ids.length === 1 ? '' : 's'}?`)) return;
+  for (const flag of Object.keys(FLAG_DEFS)) {
+    ids.forEach(id => cohortSelected.add(id)); // setStudentFlag clears the selection
+    await setStudentFlag(flag, false);
+  }
 }
 
 function cohortFilterByStatus(status) {
@@ -4198,8 +4299,10 @@ function getCohortExportData() {
   const q = (document.getElementById('co-search')?.value || '').toLowerCase();
   const ptftFilter = document.getElementById('co-ptft')?.value || '';
   let visible = [...all];
-  if (statusFilter) visible = visible.filter(r => r.__status === statusFilter);
+  const statusSet = statusFilter ? new Set(statusFilter.split('|')) : null;
+  if (statusSet) visible = visible.filter(r => statusSet.has(r.__status));
   if (ptftFilter)   visible = visible.filter(r => r.ptFt === ptftFilter);
+  visible = applyFlagFilter(visible, document.getElementById('co-flag')?.value || '');
   if (q) visible = visible.filter(r =>
     ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
   visible = applySort(visible, cohortSort_);
@@ -4894,7 +4997,7 @@ function retentionContext() {
 
 // Statuses that keep a listing row out of every number but stay visible on
 // the Cohort tab so they can be audited. ZERO_HOURS is excluded AND hidden.
-const COHORT_EXCLUDED = new Set(['High School (excluded)', 'Graduating', 'Part-Time (excluded)']);
+const COHORT_EXCLUDED = new Set(['Dual Credit (excluded)', 'Graduating', 'Part-Time (excluded)']);
 const ZERO_HOURS = 'Zero Hours';
 
 function isHSClass(classYear) {
@@ -4918,7 +5021,7 @@ function cohortIsHS(c) {
 function cohortStatusOf(id, ctx) {
   const c = termCohort.get(id);
   if (c && !(Number(c.hrsEnrolled) > 0) && !ctx.ctwIds.has(id)) return ZERO_HOURS;
-  if (cohortIsHS(c) && !termSettings.includeHS)                return 'High School (excluded)';
+  if (cohortIsHS(c) && !termSettings.includeHS)                return 'Dual Credit (excluded)';
   if (!ctx.isActive(id))       return 'Graduating';
   // Part-time (listing pt_ft_sts 'P'), when the admin excludes them. HS
   // students are governed by the HS switch alone.
@@ -4928,6 +5031,11 @@ function cohortStatusOf(id, ctx) {
   if (ctx.ctwIds.has(id))      return 'Not Returning';
   if (ctx.holdIdSet.has(id))   return 'Has Hold';
   if (ctx.canRegIdSet.has(id)) return 'Can Register';
+  // On no report or list. Name the known groups (Tony 2026-10-22) so
+  // Unaccounted means genuinely unexplained; all three still count in
+  // Eligible to Return as not (yet) registered.
+  if (cohortIsHS(c))            return 'Dual Credit';
+  if (c && c.ptFt === 'P')      return 'Part-Time';
   return 'Unaccounted';
 }
 
@@ -4944,22 +5052,27 @@ function computeRetentionStats() {
   const base = { ctx, newReg, newTotalActive, allRegistered, returningRegistered, totalNR };
 
   if (termCohort.size) {
-    const counts = { 'Registered': 0, 'Has Hold': 0, 'Can Register': 0, 'Not Returning': 0, 'Unaccounted': 0 };
+    const counts = { 'Registered': 0, 'Has Hold': 0, 'Can Register': 0, 'Not Returning': 0,
+                     'Unaccounted': 0, 'Part-Time': 0, 'Dual Credit': 0 };
     termCohort.forEach((_, id) => {
       const st = cohortStatusOf(id, ctx);
       if (st in counts) counts[st]++;
     });
     const inPlay = counts['Registered'] + counts['Has Hold'] + counts['Can Register'];
     const nrInCohort = counts['Not Returning'];
+    const ptdcCount = counts['Part-Time'] + counts['Dual Credit'];
     return {
       ...base, mode: 'cohort',
       effReg: counts['Registered'],
       holdCount: counts['Has Hold'],
       canRegCount: counts['Can Register'],
       unaccounted: counts['Unaccounted'],
+      partTimeCount: counts['Part-Time'],
+      dualCreditCount: counts['Dual Credit'],
+      ptdcCount,
       nrInCohort,
       totalReturning: inPlay,
-      eligible: inPlay + counts['Unaccounted'] + nrInCohort,
+      eligible: inPlay + counts['Unaccounted'] + ptdcCount + nrInCohort,
     };
   }
 
@@ -4991,6 +5104,9 @@ function computeRetentionStats() {
     holdCount: uniqueWithHold.size,
     canRegCount,
     unaccounted: 0,
+    partTimeCount: 0,
+    dualCreditCount: 0,
+    ptdcCount: 0,
     nrInCohort,
     totalReturning,
     eligible: totalReturning + nrInCohort,
@@ -7464,6 +7580,25 @@ async function loadHostedDashboardData() {
       }
     }
     csvLoaded.cohort = termCohort.size > 0;
+  }
+  // Student flags: sticky ones (term_id null) plus this term's per-term ones.
+  // A missing table is non-fatal — badges just don't show.
+  {
+    const flRes = await fetchAllRows(() => {
+      let q = sb.from('student_flags').select('id, student_id, flag, term_id').order('id');
+      return currentTermIdForCohort
+        ? q.or(`term_id.is.null,term_id.eq.${currentTermIdForCohort}`)
+        : q.is('term_id', null);
+    });
+    studentFlags = new Map();
+    if (flRes.error) {
+      console.warn('student_flags fetch failed (non-fatal):', flRes.error.message);
+    } else {
+      flRes.data.forEach(r => {
+        if (!studentFlags.has(r.student_id)) studentFlags.set(r.student_id, new Set());
+        studentFlags.get(r.student_id).add(r.flag);
+      });
+    }
   }
   // FTFT roster: replace local set with whatever Supabase has — but only
   // when the fetch actually succeeded AND the result isn't suspiciously
