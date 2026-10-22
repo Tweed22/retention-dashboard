@@ -1339,6 +1339,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Not Returning</option>
         <option>Unaccounted</option>
         <option>Graduating</option>
+        <option>High School (excluded)</option>
+        <option>Zero Hours (excluded)</option>
       </select>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
@@ -2769,7 +2771,7 @@ function renderSummary() {
   document.getElementById('s-ret-rate').textContent = retRate + '%';
   const eligSubEl = document.getElementById('s-eligible-sub');
   if (eligSubEl) eligSubEl.textContent = stats.mode === 'cohort'
-    ? `${termSettings.currentName || 'Current term'} cohort (student listing), ex-Graduating`
+    ? `${termSettings.currentName || 'Current term'} cohort, ex-Graduating, HS, 0-hour`
     : 'Returning + current-term Not Returning';
 
   // "Potential" Semester Persistence Rate — if every returning student who
@@ -3968,9 +3970,17 @@ function renderCohort() {
   document.getElementById('co-canreg').textContent = n(stats.canRegCount);
   document.getElementById('co-nr').textContent     = n(stats.nrInCohort);
   document.getElementById('co-unacc').textContent  = n(stats.unaccounted);
-  const grads = termCohort.size - stats.eligible;
+  const excluded = {};
+  buildCohortRows().forEach(r => {
+    if (COHORT_EXCLUDED.has(r.__status)) excluded[r.__status] = (excluded[r.__status] || 0) + 1;
+  });
+  const exParts = [
+    excluded['High School (excluded)'] ? `${n(excluded['High School (excluded)'])} HS` : '',
+    excluded['Zero Hours (excluded)']  ? `${n(excluded['Zero Hours (excluded)'])} 0-hr` : '',
+    excluded['Graduating']             ? `${n(excluded['Graduating'])} Grad` : '',
+  ].filter(Boolean);
   document.getElementById('co-total-sub').textContent =
-    `${n(termCohort.size)} on listing − ${n(grads)} Graduating`;
+    `${n(termCohort.size)} on listing` + (exParts.length ? ` − ${exParts.join(', ')}` : '');
   document.getElementById('co-section-label').textContent =
     `${termSettings.currentName || 'Current term'} cohort — student listing`;
   cohortApply();
@@ -4661,11 +4671,24 @@ function retentionContext() {
   };
 }
 
-// Status of one cohort member. Order matters: Graduating is excluded from
-// every number; the NR list wins over Registered (same rule as roster mode,
-// where a registered student on the NR list counts in the NR bucket); a
-// current-term withdrawal is a loss even if its NR row was removed.
+// Statuses that keep a listing row OUT of every number (still shown on the
+// Cohort tab so they can be audited).
+const COHORT_EXCLUDED = new Set(['High School (excluded)', 'Zero Hours (excluded)', 'Graduating']);
+
+// Status of one cohort member. Order matters:
+//   • class HS = high-school dual enrollment — not degree-seeking, and absent
+//     from every daily report, so never eligible to return.
+//   • 0 enrolled hours with no current-term withdrawal = never attended the
+//     term (registered, then dropped everything; no-show withdrawals are
+//     coded NW and deliberately not stored). A 0-hour student WITH a
+//     current-term withdrawal attended and left, so stays in the cohort.
+//   • Graduating is excluded from every number.
+//   • the NR list wins over Registered (same rule as roster mode); a
+//     current-term withdrawal is a loss even if its NR row was removed.
 function cohortStatusOf(id, ctx) {
+  const c = termCohort.get(id);
+  if (c && String(c.classYear || '').trim().toUpperCase() === 'HS') return 'High School (excluded)';
+  if (c && !(Number(c.hrsEnrolled) > 0) && !ctx.ctwIds.has(id))    return 'Zero Hours (excluded)';
   if (!ctx.isActive(id))       return 'Graduating';
   if (ctx.nrIdSet.has(id))     return 'Not Returning';
   if (registeredIds.has(id))   return 'Registered';
@@ -4691,7 +4714,7 @@ function computeRetentionStats() {
     const counts = { 'Registered': 0, 'Has Hold': 0, 'Can Register': 0, 'Not Returning': 0, 'Unaccounted': 0 };
     termCohort.forEach((_, id) => {
       const st = cohortStatusOf(id, ctx);
-      if (st !== 'Graduating') counts[st]++;
+      if (st in counts) counts[st]++;
     });
     const inPlay = counts['Registered'] + counts['Has Hold'] + counts['Can Register'];
     const nrInCohort = counts['Not Returning'];
