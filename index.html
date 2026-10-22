@@ -1347,6 +1347,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       </select>
       <input class="table-search" type="text" id="co-search" placeholder="Search name or ID…" oninput="cohortApply()" />
     </div>
+    <div class="admin-only" id="co-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#555;">
+      <span id="co-bulk-count">0 selected</span>
+      <span>— mark as:</span>
+      <button class="nr-row-btn" onclick="setCohortOverride('graduating')" title="Exclude from every number, like a Graduating tag">Graduating</button>
+      <button class="nr-row-btn" onclick="setCohortOverride('hs')" title="Treat as high-school dual enrollment (follows the HS setting above)">High School</button>
+      <button class="nr-row-btn" onclick="setCohortOverride(null)" title="Remove the override and use the reports again">Clear override</button>
+    </div>
     <div class="table-wrap">
       <div class="table-header-row">
         <h3 id="co-title">Cohort Students</h3>
@@ -1356,6 +1363,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         </div>
       </div>
       <table><thead><tr>
+        <th class="admin-only" style="width:28px;"><input type="checkbox" id="co-select-all" onchange="cohortSelectAll(this.checked)" title="Select all shown" /></th>
         <th class="sortable" onclick="cohortSort('id')">Student ID</th>
         <th class="sortable" onclick="cohortSort('lastName')">Last Name</th>
         <th class="sortable mobile-secondary mobile-show-landscape col-priority-3" onclick="cohortSort('firstName')">First Name</th>
@@ -1599,6 +1607,9 @@ let csvLoaded = { unreg: false, reg: false, new: false, withdrawals: false, ftft
 // Empty Map = no cohort loaded; every eligible computation then falls back
 // to deriving the population from the daily rosters (computeRetentionStats).
 let termCohort = new Map();
+// Supabase id of the current term row (set on hosted load); needed to write
+// cohort status overrides.
+let currentTermDbId = null;
 let pendingFiles = {};
 
 // First-Time Full-Time roster — Set of student IDs from the FTFT CSV upload.
@@ -1640,7 +1651,8 @@ function ftftBadge(id) {
 // or on any daily report.
 function isHSStudent(id) {
   if (!id) return false;
-  const rec = termCohort.get(id) || registeredStudents[id] || returningStudents[id] || newStudents[id];
+  if (cohortIsHS(termCohort.get(id))) return true;
+  const rec = registeredStudents[id] || returningStudents[id] || newStudents[id];
   return !!rec && isHSClass(rec.classYear);
 }
 function hsBadge(id) {
@@ -2121,7 +2133,14 @@ function processAllCSVs() {
     ftftUploadedThisSession = true; // guard: prevent Supabase reload from overwriting this roster
   }
   if (pendingFiles.cohort) {
+    const prevCohort = termCohort;
     termCohort = parseCohortListing(parseCSV(pendingFiles.cohort));
+    // Keep admin status overrides across a re-upload (the DB keeps them too,
+    // since the cohort upsert never writes status_override).
+    termCohort.forEach((c, id) => {
+      const prev = prevCohort.get(id);
+      if (prev && prev.statusOverride) c.statusOverride = prev.statusOverride;
+    });
     csvLoaded.cohort = true;
   }
 
@@ -3967,7 +3986,8 @@ function buildCohortRows() {
       advisor: live.advisor || '',
       email: live.email || '',
       hrsEnrolled: c.hrsEnrolled || 0,
-      isHS: isHSClass(c.classYear),
+      isHS: cohortIsHS(c),
+      override: c.statusOverride || null,
       __status: cohortStatusOf(c.id, ctx),
     };
   }).filter(r => r.__status !== ZERO_HOURS); // never attended — hidden entirely
@@ -4026,7 +4046,9 @@ function cohortApply() {
       : `Cohort Students <span style="color:#666;font-weight:500;font-size:13px;">— ${n(all.length)} on listing</span>`;
   }
   const tbody = document.getElementById('co-tbody');
-  if (!rows.length) { tbody.innerHTML = emptyRow(8, 'No cohort students match the current filters.'); return; }
+  cohortVisibleIds = rows.map(r => r.id);
+  updateCohortBulkBar();
+  if (!rows.length) { tbody.innerHTML = emptyRow(9, 'No cohort students match the current filters.'); return; }
   const statusChip = s =>
     s === 'Registered'    ? 'chip-green'  :
     s === 'Has Hold'      ? 'chip-red'    :
@@ -4035,9 +4057,12 @@ function cohortApply() {
     s === 'Unaccounted'   ? 'chip-purple' : 'chip-gray';
   const dash = '<span style="color:#bbb;font-size:11px;">—</span>';
   tbody.innerHTML = rows.map(r => {
-    const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>`;
+    const overrideNote = r.override
+      ? ` <span style="font-size:10px;color:#888;" title="Set by an admin on the Cohort tab">(marked)</span>` : '';
+    const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>${overrideNote}`;
     const hrs = r.hrsEnrolled ? (Number.isInteger(r.hrsEnrolled) ? r.hrsEnrolled : r.hrsEnrolled.toFixed(1)) : dash;
     return `<tr>
+    <td class="admin-only"><input type="checkbox" ${cohortSelected.has(r.id) ? 'checked' : ''} onchange="cohortToggleSelect('${r.id}', this.checked)" /></td>
     <td style="font-family:monospace;font-size:11px;color:#555;">${r.id}</td>
     <td style="font-weight:600;">${r.lastName || r.name || ''}${studentBadges(r.id)}</td>
     <td class="mobile-secondary mobile-show-landscape col-priority-3">${r.firstName || ''}</td>
@@ -4046,7 +4071,7 @@ function cohortApply() {
     <td class="mobile-secondary col-priority-4">${r.major || dash}</td>
     <td class="mobile-secondary col-priority-4" style="text-align:right;">${hrs}</td>
     ${expandBtnCell()}
-  </tr>${buildDetailRow(8, [
+  </tr>${buildDetailRow(9, [
     { label: 'First Name', value: r.firstName || '' },
     { label: 'Status', value: statusHtml },
     { label: 'Class', value: classChip(r.classYear) },
@@ -4082,6 +4107,48 @@ async function setIncludeHS(checked) {
   termSettings.includeHS = !!checked;
   try { localStorage.setItem('term_settings', JSON.stringify(termSettings)); } catch(e) {}
   renderSummary(); // recomputes every number and re-renders the Cohort tab
+}
+
+// ── Admin status overrides on cohort rows (Graduating / High School) ──
+// Selection persists across filter changes so an admin can filter to
+// Unaccounted, tick the rows, and apply one action.
+const cohortSelected = new Set();
+let cohortVisibleIds = [];
+
+function cohortToggleSelect(id, on) {
+  if (on) cohortSelected.add(id); else cohortSelected.delete(id);
+  updateCohortBulkBar();
+}
+function cohortSelectAll(on) {
+  cohortVisibleIds.forEach(id => on ? cohortSelected.add(id) : cohortSelected.delete(id));
+  cohortApply();
+}
+function updateCohortBulkBar() {
+  const countEl = document.getElementById('co-bulk-count');
+  if (countEl) countEl.textContent = `${n(cohortSelected.size)} selected`;
+  const all = document.getElementById('co-select-all');
+  if (all) all.checked = cohortVisibleIds.length > 0 && cohortVisibleIds.every(id => cohortSelected.has(id));
+}
+
+async function setCohortOverride(value) {
+  if (!isAdmin()) return;
+  const ids = [...cohortSelected].filter(id => termCohort.has(id));
+  if (!ids.length) { alert('Tick one or more students first.'); return; }
+  const label = value === 'graduating' ? 'Graduating' : value === 'hs' ? 'High School' : 'no override (use the reports)';
+  if (!confirm(`Mark ${ids.length} student${ids.length === 1 ? '' : 's'} as ${label}?`)) return;
+  if (HOSTED && sb) {
+    if (!currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return; }
+    for (const part of chunk(ids, 500)) {
+      const { error } = await sb.from('term_cohort')
+        .update({ status_override: value })
+        .eq('term_id', currentTermDbId)
+        .in('student_id', part);
+      if (error) { alert('Could not save the change: ' + error.message); return; }
+    }
+  }
+  ids.forEach(id => { termCohort.get(id).statusOverride = value; });
+  cohortSelected.clear();
+  renderAll(); // graduating status affects every tab, not just the Summary
 }
 
 function cohortFilterByStatus(status) {
@@ -4744,6 +4811,8 @@ function getGraduatingIdSet() {
       if (s.id && (s.holds || []).some(h => GRADUATION_HOLD_PATTERN.test(h || ''))) ids.add(s.id);
     });
   });
+  // Admin override on the term cohort (Cohort tab → Mark as Graduating).
+  termCohort.forEach((c, id) => { if (c.statusOverride === 'graduating') ids.add(id); });
   return ids;
 }
 
@@ -4801,6 +4870,10 @@ const ZERO_HOURS = 'Zero Hours';
 function isHSClass(classYear) {
   return String(classYear || '').trim().toUpperCase() === 'HS';
 }
+// HS by class code on the listing, or marked HS by an admin override.
+function cohortIsHS(c) {
+  return !!c && (isHSClass(c.classYear) || c.statusOverride === 'hs');
+}
 
 // Status of one cohort member. Order matters:
 //   • 0 enrolled hours with no current-term withdrawal = never attended the
@@ -4815,7 +4888,7 @@ function isHSClass(classYear) {
 function cohortStatusOf(id, ctx) {
   const c = termCohort.get(id);
   if (c && !(Number(c.hrsEnrolled) > 0) && !ctx.ctwIds.has(id)) return ZERO_HOURS;
-  if (c && isHSClass(c.classYear) && !termSettings.includeHS)   return 'High School (excluded)';
+  if (cohortIsHS(c) && !termSettings.includeHS)                return 'High School (excluded)';
   if (!ctx.isActive(id))       return 'Graduating';
   if (ctx.nrIdSet.has(id))     return 'Not Returning';
   if (registeredIds.has(id))   return 'Registered';
@@ -7306,6 +7379,7 @@ async function loadHostedDashboardData() {
     const nxt = future[0];
     if (cur) {
       currentTermIdForCohort = cur.id;
+      currentTermDbId = cur.id;
       termSettings.currentName = cur.name;
       termSettings.currentStart = cur.start_date;
       // N (prior-term leavers) lives on the current term's row, so the DB is
@@ -7334,7 +7408,7 @@ async function loadHostedDashboardData() {
     termCohort = new Map();
     if (currentTermIdForCohort) {
       const coRes = await fetchAllRows(() => sb.from('term_cohort')
-        .select('student_id, first_name, last_name, class_cde, major, div_cde, hrs_enrolled, pt_ft_sts')
+        .select('student_id, first_name, last_name, class_cde, major, div_cde, hrs_enrolled, pt_ft_sts, status_override')
         .eq('term_id', currentTermIdForCohort)
         .order('student_id'));
       if (coRes.error) {
@@ -7350,6 +7424,7 @@ async function loadHostedDashboardData() {
             divCde: r.div_cde || '',
             hrsEnrolled: r.hrs_enrolled != null ? Number(r.hrs_enrolled) : 0,
             ptFt: r.pt_ft_sts || '',
+            statusOverride: r.status_override || null,
           });
         });
       }
