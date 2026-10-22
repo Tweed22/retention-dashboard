@@ -1131,7 +1131,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="regSort('ptFt')" title="Part-Time / Full-Time enrollment status from the registrar's pt_ft_sts column">Enrollment</th>
         <th class="sortable mobile-secondary col-priority-2" onclick="regSort('creditHours')">Credits</th>
         <th class="sortable mobile-secondary col-priority-4 admin-only" onclick="regSort('careerGpa')" title="Career GPA from the registered CSV (admin-only)">GPA</th>
-        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+        <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="reg-tbody"></tbody></table>
     </div>
@@ -1176,7 +1176,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="holdsSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="holdsSort('sports')">Sport</th>
-        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+        <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
         <th class="admin-only override-col">Override</th>
       </tr></thead>
       <tbody id="holds-tbody"></tbody></table>
@@ -1221,7 +1221,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="crSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="crSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="crSort('sports')">Sport</th>
-        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+        <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
         <th class="admin-only override-col">Override</th>
       </tr></thead>
       <tbody id="cr-tbody"></tbody></table>
@@ -1273,7 +1273,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('advisor')">Advisor</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="nsSort('sports')">Sport</th>
-        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+        <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="ns-tbody"></tbody></table>
     </div>
@@ -1321,7 +1321,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-2" onclick="ftftSort('__status')">Status</th>
         <th class="sortable mobile-secondary col-priority-3" onclick="ftftSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="ftftSort('advisor')">Advisor</th>
-        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+        <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="ftft-tbody"></tbody></table>
     </div>
@@ -1398,7 +1398,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <th class="sortable mobile-secondary col-priority-3" onclick="cohortSort('ptFt')">PT/FT</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('major')">Major</th>
         <th class="sortable mobile-secondary col-priority-4" onclick="cohortSort('hrsEnrolled')">Term Hrs</th>
-        <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+        <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
       </tr></thead>
       <tbody id="co-tbody"></tbody></table>
     </div>
@@ -1477,7 +1477,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <th class="sortable mobile-secondary col-priority-2" onclick="nrSort('withdrawal')">Withdrawal</th>
       <th class="sortable mobile-secondary col-priority-4" onclick="nrSort('dateAdded')">Date Added</th>
       <th class="mobile-secondary col-priority-4"></th>
-      <th class="mobile-secondary col-priority-2">Tags</th><th class="exp-th"></th>
+      <th class="mobile-secondary">Tags</th><th class="exp-th"></th>
     </tr></thead>
     <tbody id="nr-tbody"></tbody></table>
   </div>
@@ -1701,12 +1701,15 @@ function studentBadges(id) {
   return ftftBadge(id) + hsBadge(id);
 }
 
-// Tags column cell: one chip per flag, full label.
-function tagsCell(id) {
+// Tags cell: one chip per flag. `compact` (table column) uses the short
+// label with the full name on hover; the mobile detail row uses full labels.
+// The column deliberately has no col-priority class, so it shows at every
+// desktop/laptop width (it only collapses into the detail row on phones).
+function tagsCell(id, compact) {
   const set = id && studentFlags.get(id);
   const chips = set ? Object.entries(FLAG_DEFS)
     .filter(([key]) => set.has(key))
-    .map(([, def]) => `<span class="flag-badge" style="margin:0 3px 2px 0;" title="${def.label}">${def.label}</span>`)
+    .map(([, def]) => `<span class="flag-badge" style="margin:0 3px 2px 0;" title="${def.label}">${compact ? def.short : def.label}</span>`)
     .join('') : '';
   return chips || '<span style="color:#bbb;font-size:11px;">—</span>';
 }
@@ -4042,7 +4045,7 @@ function ftftApply() {
     <td class="mobile-secondary col-priority-2">${statusHtml}</td>
     <td class="mobile-secondary col-priority-3">${majorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
     <td class="mobile-secondary col-priority-4">${advisorVal||'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
-    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+    <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
   </tr>${buildDetailRow(8, [
     { label: 'Tags', value: tagsCell(r.id) },
     { label: 'First Name', value: firstVal },
@@ -4176,7 +4179,7 @@ function cohortApply() {
     <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
     <td class="mobile-secondary col-priority-4">${r.major || dash}</td>
     <td class="mobile-secondary col-priority-4" style="text-align:right;">${hrs}</td>
-    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+    <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
   </tr>${buildDetailRow(11, [
     { label: 'Tags', value: tagsCell(r.id) },
     { label: 'First Name', value: r.firstName || '' },
@@ -4616,7 +4619,7 @@ function holdsApply() {
           <td class="mobile-secondary col-priority-3">${r.major}</td>
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
-          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+          <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
           <td class="admin-only override-col" style="white-space:nowrap;">${overrideButtonsCell(r.id)}</td>
         </tr>${buildDetailRow(11, [
     { label: 'Tags', value: tagsCell(r.id) },
@@ -4677,7 +4680,7 @@ function crApply() {
           <td class="mobile-secondary col-priority-3">${r.major}</td>
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
-          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+          <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
           <td class="admin-only override-col" style="white-space:nowrap;">${overrideButtonsCell(r.id)}</td>
         </tr>${buildDetailRow(11, [
     { label: 'Tags', value: tagsCell(r.id) },
@@ -4765,7 +4768,7 @@ function regApply() {
           <td class="mobile-secondary col-priority-3">${ptFtChip(r.ptFt)}</td>
           <td class="mobile-secondary col-priority-2" style="font-weight:600;text-align:right;">${creditCell}</td>
           <td class="mobile-secondary col-priority-4 admin-only" style="font-weight:600;text-align:right;">${gpaCell}</td>
-          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+          <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
         </tr>${buildDetailRow(8, [
     { label: 'Tags', value: tagsCell(r.id) },
           { label: 'Class', value: classChip(r.classYear) },
@@ -4824,7 +4827,7 @@ function nsApply() {
           <td class="mobile-secondary col-priority-4">${r.major}</td>
           <td class="mobile-secondary col-priority-4">${r.advisor}</td>
           <td class="mobile-secondary col-priority-4">${sc(r)}</td>
-          <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+          <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
         </tr>${buildDetailRow(10, [
     { label: 'Tags', value: tagsCell(r.id) },
           { label: 'First Name', value: r.firstName||r.name||'' },
@@ -6093,7 +6096,7 @@ function nrRenderStaticRow(r) {
     <td class="mobile-secondary col-priority-2">${wChipHtml}</td>
     <td class="mobile-secondary col-priority-4" style="font-size:11px;color:#888;">${r.dateAdded||'—'}</td>
     <td class="mobile-secondary col-priority-4" style="white-space:nowrap;">${actionsHtml}</td>
-    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>${expandBtnCell()}
+    <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>${expandBtnCell()}
   </tr>${buildDetailRow(13, [
     { label: 'Tags', value: tagsCell(r.id) },
     { label: 'First Name', value: firstCell || '' },
@@ -6215,7 +6218,7 @@ function nrRenderEditRow(r) {
       <button onclick="nrSave(${r._idx})"     class="nr-row-btn nr-row-btn-primary" title="Save and close edit row" style="font-weight:600;">Save changes</button>
       <button onclick="nrCancelEdit()"        class="nr-row-btn" title="Cancel">Cancel</button>
     </td>
-    <td class="mobile-secondary col-priority-2">${tagsCell(r.id)}</td>
+    <td class="mobile-secondary" style="white-space:nowrap;">${tagsCell(r.id, true)}</td>
     <td></td>
   </tr>`;
 }
