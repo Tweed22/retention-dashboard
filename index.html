@@ -2043,6 +2043,7 @@ function setTagFilterTo(id, tags, mode) {
   if (!wrap) return;
   clearTagFilter(id, false);
   tags.forEach(t => { const cb = wrap.querySelector(`input[data-tag="${t}"]`); if (cb) cb.checked = true; });
+  syncScoredTagBoxes(wrap);
   const radio = wrap.querySelector(`input[name="${id}-mode"][value="${mode}"]`);
   if (radio) radio.checked = true;
   const first = wrap.querySelector('input[data-tag]:checked');
@@ -2085,12 +2086,26 @@ function populateTagFilters() {
 }
 
 // Current filter for a tab: '' (no filter) or { tags: [...], mode, none }.
-// A tag entry is a flag key ("provisional") or "key:level" ("midterm_meeting:3").
+// Each entry in `tags` is one requirement: a flag key ("provisional"), or —
+// for a scored tag with only some bands ticked — an ARRAY of "key:band"
+// entries meaning "in any of these bands". Bands always combine with OR (a
+// student has one score), so "Has all ticked" can't demand two bands at once.
+// A scored tag with its parent box (or every band) ticked = the whole tag.
 function tagFilterValue(id) {
   const wrap = document.getElementById(id);
   if (!wrap) return '';
   const none = !!wrap.querySelector('input[data-none]:checked');
-  const tags = [...wrap.querySelectorAll('input[data-tag]:checked')].map(i => i.dataset.tag);
+  const checked = new Set([...wrap.querySelectorAll('input[data-tag]:checked')].map(i => i.dataset.tag));
+  const tags = [];
+  Object.entries(FLAG_DEFS).forEach(([key, def]) => {
+    if (def.scored) {
+      const bands = RISK_BANDS.map(b => `${key}:${b.band}`).filter(t => checked.has(t));
+      if (checked.has(key) || bands.length === RISK_BANDS.length) tags.push(key);
+      else if (bands.length) tags.push(bands);
+    } else if (checked.has(key)) {
+      tags.push(key);
+    }
+  });
   const mode = wrap.querySelector(`input[name="${id}-mode"]:checked`)?.value || 'all';
   if (!none && !tags.length) return '';
   return { tags, mode, none };
@@ -2099,15 +2114,35 @@ function tagFilterLabel(f) {
   if (!f) return 'All Tags';
   if (f.none) return 'No tags';
   return f.tags.map(t => {
-    const [key, lv] = t.split(':');
-    return FLAG_DEFS[key].short + (lv ? ' ' + RISK_BANDS[lv - 1].label : '');
+    if (Array.isArray(t)) {
+      const key = t[0].split(':')[0];
+      return FLAG_DEFS[key].short + ' ' + t.map(x => RISK_BANDS[x.split(':')[1] - 1].label).join('/');
+    }
+    return FLAG_DEFS[t].short;
   }).join(f.mode === 'any' ? ' or ' : ' + ');
+}
+// Parent box ↔ band boxes for scored tags: the parent is ticked when every
+// band is, shows a dash (indeterminate) when only some are.
+function syncScoredTagBoxes(wrap, changed) {
+  Object.entries(FLAG_DEFS).forEach(([key, def]) => {
+    if (!def.scored) return;
+    const parent = wrap.querySelector(`input[data-tag="${key}"]`);
+    const kids = [...wrap.querySelectorAll(`input[data-tag^="${key}:"]`)];
+    if (!parent) return;
+    if (changed === parent || (parent.checked && !changed)) kids.forEach(k => { k.checked = parent.checked; });
+    const on = kids.filter(k => k.checked).length;
+    parent.checked = on === kids.length;
+    parent.indeterminate = on > 0 && on < kids.length;
+  });
 }
 function tagFilterChanged(input) {
   const wrap = input.closest('span.tag-filter');
   // "No tags" and specific tags are mutually exclusive choices.
   if (input.dataset.none && input.checked) wrap.querySelectorAll('input[data-tag]').forEach(i => { i.checked = false; });
   if (input.dataset.tag && input.checked) { const nb = wrap.querySelector('input[data-none]'); if (nb) nb.checked = false; }
+  // Clicking Midterm Meeting ticks/unticks all its score bands; band clicks
+  // update the parent's ticked / partly-ticked state.
+  syncScoredTagBoxes(wrap, input.dataset.tag ? input : null);
   const f = tagFilterValue(wrap.id);
   const btn = wrap.querySelector('.tag-filter-btn');
   btn.innerHTML = msBtnHtml(tagFilterLabel(f));
@@ -2118,7 +2153,7 @@ function tagFilterChanged(input) {
 function clearTagFilter(id, reapply) {
   const wrap = document.getElementById(id);
   if (!wrap) return;
-  wrap.querySelectorAll('input[data-tag], input[data-none]').forEach(i => { i.checked = false; });
+  wrap.querySelectorAll('input[data-tag], input[data-none]').forEach(i => { i.checked = false; i.indeterminate = false; });
   const allRadio = wrap.querySelector(`input[name="${id}-mode"][value="all"]`);
   if (allRadio) allRadio.checked = true;
   const btn = wrap.querySelector('.tag-filter-btn');
@@ -4624,8 +4659,10 @@ function applyFlagFilter(rows, f) {
   if (!f) return rows;
   const tagsOf = r => studentFlags.get(r.id) || new Set();
   if (f.none) return rows.filter(r => !tagsOf(r).size);
-  // "midterm_meeting:3" = has the tag with a score in band 3 (3–3.5).
+  // "midterm_meeting:3" = has the tag with a score in band 3 (3–3.5). An
+  // array requirement = in any of the listed bands.
   const has = (r, t) => {
+    if (Array.isArray(t)) return t.some(x => has(r, x));
     const [key, band] = t.split(':');
     return tagsOf(r).has(key) && (!band || riskBand(flagScore(r.id, key)) === +band);
   };
