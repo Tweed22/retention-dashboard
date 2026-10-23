@@ -259,14 +259,64 @@ body.dark .hs-badge { background:#33280f; color:#d9a54a; border-color:#4a3a14; }
    as annotations, not statuses. */
 .flag-badge { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:700; letter-spacing:0.4px; border-radius:4px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; vertical-align:middle; }
 body.dark .flag-badge { background:#26303c; color:#b4c2d3; border-color:#3a4656; }
-/* Tags filter checklist popover */
-.tag-filter { position: relative; display: inline-block; }
-.tag-filter-btn { cursor: pointer; text-align: left; }
-.tag-filter-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; min-width: 190px; background: white; border: 1px solid #dde1ea; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); padding: 8px 10px; }
-.tag-filter-pop .tf-row { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; white-space: nowrap; }
-.tag-filter-pop .tf-sep { border-top: 1px solid #eef0f4; margin: 5px 0; }
-body.dark .tag-filter-pop { background: #262626; border-color: #353535; }
-body.dark .tag-filter-pop .tf-sep { border-top-color: #353535; }
+/* Midterm Meeting risk-score bands: 1–1.5 plain (the default chip), 2–2.5
+   yellow, 3–3.5 red, 4 purple (Tony 2026-10-22). */
+.flag-badge.flag-band2 { background:#fef08a; color:#713f12; border-color:#facc15; }
+.flag-badge.flag-band3 { background:#dc2626; color:#ffffff; border-color:#b91c1c; }
+.flag-badge.flag-band4 { background:#7c3aed; color:#ffffff; border-color:#6d28d9; }
+.flag-badge.flag-clickable { cursor:pointer; transition: transform 0.1s, filter 0.15s; }
+.flag-badge.flag-clickable:hover { filter: brightness(0.95); transform: translateY(-1px); }
+body.dark .flag-badge.flag-band2 { background:#4a3f0c; color:#f6e27a; border-color:#6b5a12; }
+body.dark .flag-badge.flag-band3 { background:#8f1d1d; color:#fde2e2; border-color:#b42727; }
+body.dark .flag-badge.flag-band4 { background:#4c2a85; color:#e9ddff; border-color:#6a3fb5; }
+body.dark .flag-badge.flag-clickable:hover { filter: brightness(1.15); }
+/* ── Filter dropdowns (multi-select checklists + the Tags filter) ──
+   One component for every filter on the dashboard. The native <select>
+   stays in the DOM (hidden) as the source of truth; .ms-btn opens .ms-pop. */
+.ms-wrap, .tag-filter { position: relative; display: inline-block; }
+.ms-btn { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; height: 28px; padding: 0 9px;
+  border: 1px solid #dde1ea; border-radius: 6px; background: white; color: #1a1d23;
+  font: inherit; font-size: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.ms-btn:hover { border-color: #cbd5e1; }
+.ms-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.ms-btn.ms-active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+.ms-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-caret { font-size: 9px; opacity: 0.55; flex: none; }
+.ms-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; min-width: 200px; max-width: 300px;
+  background: white; border: 1px solid #dde1ea; border-radius: 8px; padding: 6px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.12); }
+.ms-list { max-height: 260px; overflow-y: auto; }
+.ms-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 5px; font-size: 12px;
+  color: #1a1d23; cursor: pointer; white-space: nowrap; user-select: none; }
+.ms-row:hover { background: #f4f6f9; }
+.ms-row input { margin: 0; width: 14px; height: 14px; accent-color: #2563eb; cursor: pointer; flex: none; }
+.ms-group { padding: 7px 8px 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #888; }
+.ms-sep { border-top: 1px solid #eef0f4; margin: 5px 2px; }
+.ms-search { width: 100%; height: 28px; margin-bottom: 4px; padding: 0 8px; border: 1px solid #dde1ea; border-radius: 6px;
+  font: inherit; font-size: 12px; color: #1a1d23; outline: none; }
+.ms-search:focus { border-color: #2563eb; }
+.ms-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; padding: 6px 6px 2px; border-top: 1px solid #eef0f4; }
+.ms-link { background: none; border: none; padding: 0; color: #2563eb; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.ms-link:hover { text-decoration: underline; }
+.ms-empty { padding: 8px; font-size: 12px; color: #888; }
+body.dark .ms-btn { background: #1a1a1a; border-color: #353535; color: #e0e0e0; }
+body.dark .ms-btn:hover { border-color: #4a4a4a; }
+body.dark .ms-btn.ms-active { background: #1d2a3d; border-color: #2e5d99; color: #93c5fd; }
+body.dark .ms-pop { background: #262626; border-color: #353535; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+body.dark .ms-row { color: #e0e0e0; }
+body.dark .ms-row:hover { background: #2e2e2e; }
+body.dark .ms-row input { accent-color: #4a7fc4; }
+body.dark .ms-group { color: #8a8a8a; }
+body.dark .ms-sep, body.dark .ms-foot { border-color: #353535; }
+body.dark .ms-link { color: #93c5fd; }
+/* Row-selection checkboxes (Cohort tab etc.) share the accent. */
+input[type="checkbox"], input[type="radio"] { accent-color: #2563eb; }
+body.dark input[type="checkbox"], body.dark input[type="radio"] { accent-color: #4a7fc4; color-scheme: dark; }
+@media (max-width: 640px), (max-height: 500px) {
+  .ms-wrap, .tag-filter { display: block; width: 100%; }
+  .ms-btn { width: 100%; max-width: none; justify-content: space-between; }
+  .ms-pop { width: 100%; max-width: none; }
+}
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 40px 20px; color: #888; }
@@ -1099,6 +1149,17 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <div id="hold-donuts-grid" class="hold-donuts-grid"></div>
       </div>
     </div>
+    <div class="charts-row" id="tag-rings-row" style="grid-template-columns: 1fr; display:none;">
+      <div class="card">
+        <div class="card-title">Tagged Students — Registration Progress</div>
+        <div class="card-subtitle">Center number = registered · % = of tagged students still eligible (graduating excluded) · Click a ring to see the students</div>
+        <div id="tag-rings-grid" class="hold-donuts-grid" style="grid-template-columns: repeat(3, 1fr);"></div>
+        <div id="tag-level-rings-wrap" style="display:none;margin-top:14px;">
+          <div class="section-label" style="margin-bottom:6px;">Midterm Meeting by risk score</div>
+          <div id="tag-level-rings" class="hold-donuts-grid" style="grid-template-columns: repeat(4, 1fr);"></div>
+        </div>
+      </div>
+    </div>
     <div id="trend-current-container"></div>
     <div class="charts-row" style="grid-template-columns: 1fr;">
       <div class="card">
@@ -1350,6 +1411,13 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card purple kpi-clickable" onclick="cohortFilterByStatus('Unaccounted')"><div class="kpi-label">Unaccounted</div><div class="kpi-value" id="co-unacc">0</div><div class="kpi-sub">Not on any report or list</div></div>
     </div>
     <div id="co-hs-toggle" style="display:none;margin-bottom:12px;font-size:12px;color:#555;"></div>
+    <div class="drop-zone mtm-drop" id="dz-mtm-risk" style="padding:12px 16px;margin-bottom:12px;text-align:left;"
+         ondragover="dzDrag(event,this)" ondragleave="dzLeave(this)" ondrop="mtmRiskDrop(event,this)">
+      <input type="file" accept=".csv" onchange="mtmRiskFileInput(event)" />
+      <div class="drop-label" style="margin-bottom:2px;">Midterm Meeting risk scores</div>
+      <div class="drop-hint">Drop a CSV with a student ID column and a risk score column (0–4, in steps of 0.5), or click to choose. Scores of 1 and up are tagged with that score; 0 and 0.5 are not tagged.</div>
+      <div class="drop-status" id="dz-mtm-risk-status"></div>
+    </div>
     <div class="section-label" id="co-section-label">Term Cohort</div>
     <div class="filter-row">
       <span class="filter-label">Filter:</span>
@@ -1359,7 +1427,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <option>Has Hold</option>
         <option>Can Register</option>
         <option>Not Returning</option>
-        <option value="Part-Time|Dual Credit">Part-Time or Dual Credit</option>
         <option>Part-Time</option>
         <option>Dual Credit</option>
         <option>Unaccounted</option>
@@ -1651,13 +1718,27 @@ let currentTermDbId = null;
 // reset each term; the others stick with the student.
 // Flags sharing an `exclusive` group can't coexist: setting one clears the others.
 const FLAG_DEFS = {
-  midterm_meeting: { label: 'Midterm Meeting', short: 'MTM',  perTerm: true  },
+  // scored: risk score 1–4 in 0.5 steps (0–0.5 = not tagged). Every Midterm
+  // Meeting student is higher risk than a non-Midterm student. The chip shows
+  // the score itself; click it to raise the score by 0.5.
+  midterm_meeting: { label: 'Midterm Meeting', short: 'MTM',  perTerm: true, scored: true },
   provisional:     { label: 'Provisional',     short: 'PROV', perTerm: false },
   // Academic probation levels — a student is on one level at a time.
   p1:              { label: 'Probation 1',     short: 'P1',   perTerm: true, exclusive: 'probation' },
   p2:              { label: 'Probation 2',     short: 'P2',   perTerm: true, exclusive: 'probation' },
 };
 let studentFlags = new Map(); // student id -> Set of flag keys
+let studentFlagScores = new Map(); // `${studentId}|${flag}` -> risk score (scored flags only)
+function flagScore(id, flag) { return Number(studentFlagScores.get(`${id}|${flag}`)) || 1; }
+// Color bands: 1 = 1–1.5, 2 = 2–2.5, 3 = 3–3.5, 4 = 4.
+const RISK_BANDS = [
+  { band: 1, label: '1–1.5', color: '#64748b' },
+  { band: 2, label: '2–2.5', color: '#eab308' },
+  { band: 3, label: '3–3.5', color: '#dc2626' },
+  { band: 4, label: '4',     color: '#7c3aed' },
+];
+function riskBand(score) { return Math.min(4, Math.max(1, Math.floor(Number(score)))); }
+function fmtScore(score) { const v = Number(score); return Number.isInteger(v) ? String(v) : v.toFixed(1); }
 let pendingFiles = {};
 
 // First-Time Full-Time roster — Set of student IDs from the FTFT CSV upload.
@@ -1720,41 +1801,270 @@ function tagsCell(id, compact) {
   const set = id && studentFlags.get(id);
   const chips = set ? Object.entries(FLAG_DEFS)
     .filter(([key]) => set.has(key))
-    .map(([, def]) => `<span class="flag-badge" style="margin:0 3px 2px 0;" title="${def.label}">${compact ? def.short : def.label}</span>`)
+    .map(([key, def]) => def.scored
+      ? scoredChip(id, key)
+      : `<span class="flag-badge" style="margin:0 3px 2px 0;" title="${def.label}">${compact ? def.short : def.label}</span>`)
     .join('') : '';
   return chips || '<span style="color:#bbb;font-size:11px;">—</span>';
 }
 
+// Risk-score chip: shows the score itself, colored by band (plain / yellow /
+// red / purple). Committee members click to raise it by 0.5; past 4 it wraps
+// back to 1, so a mis-click is easy to walk back around.
+function riskBandChip(band) {
+  return `<span class="flag-badge flag-band${band}">${RISK_BANDS[band - 1].label}</span>`;
+}
+function scoredChip(id, flag) {
+  const def = FLAG_DEFS[flag];
+  const score = flagScore(id, flag);
+  const canEdit = isCommittee();
+  const tip = `${def.label} risk score ${fmtScore(score)}` + (canEdit ? ' (click to raise by 0.5)' : '');
+  return `<span class="flag-badge flag-band${riskBand(score)}${canEdit ? ' flag-clickable' : ''}" data-flag-chip="${msEsc(id)}|${flag}"` +
+    ` style="margin:0 3px 2px 0;" title="${tip}"` +
+    (canEdit ? ` onclick="event.stopPropagation(); raiseFlagScore('${msEsc(id)}', '${flag}')"` : '') +
+    `>${fmtScore(score)}</span>`;
+}
+async function raiseFlagScore(id, flag) {
+  if (!isCommittee()) return;
+  const def = FLAG_DEFS[flag];
+  const cur = flagScore(id, flag);
+  const next = cur >= 4 ? 1 : cur + 0.5;
+  if (HOSTED && sb) {
+    if (def.perTerm && !currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return; }
+    let q = sb.from('student_flags').update({ risk_score: next }).eq('student_id', id).eq('flag', flag);
+    q = def.perTerm ? q.eq('term_id', currentTermDbId) : q.is('term_id', null);
+    const { error } = await q;
+    if (error) { alert('Could not change the risk score: ' + error.message); return; }
+  }
+  studentFlagScores.set(`${id}|${flag}`, next);
+  // Swap just this student's chips in place (every tab) — no full re-render.
+  document.querySelectorAll(`[data-flag-chip="${CSS.escape(id + '|' + flag)}"]`).forEach(el => {
+    el.outerHTML = scoredChip(id, flag);
+  });
+  renderTagRings();
+}
+
+// ── Midterm Meeting risk-score CSV (Cohort tab drop box) ──
+// One row per student: an ID column and a risk score 0–4 in 0.5 steps.
+// Scores of 1+ tag the student Midterm Meeting with that score (new tags
+// created, existing scores updated); 0–0.5 means not tagged. Tagged students
+// missing from the file are only untagged if the user confirms.
+function mtmRiskDrop(e, el) {
+  e.preventDefault();
+  el.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) mtmRiskReadFile(file);
+}
+function mtmRiskFileInput(e) {
+  const file = e.target.files[0];
+  if (file) mtmRiskReadFile(file);
+  e.target.value = ''; // allow re-dropping the same file
+}
+function mtmRiskReadFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => importMtmRiskCsv(ev.target.result, file.name);
+  reader.readAsText(file);
+}
+// Pick the ID and score columns by header name. Strict on purpose: a loose
+// "contains id" match would grab headers like "Midterm Risk".
+function mtmRiskColumns(headers) {
+  const idKey = headers.find(h => /^(student[ _]?)?id([ _]?(num|number|no\.?)|#)?$/i.test(h.trim()))
+             || headers.find(h => /\b(id|id#|id_num)\b/i.test(h));
+  const scoreKey = headers.find(h => h !== idKey && /risk|score|level/i.test(h));
+  return { idKey, scoreKey };
+}
+async function importMtmRiskCsv(text, filename) {
+  const statusEl = document.getElementById('dz-mtm-risk-status');
+  const setStatus = msg => { if (statusEl) statusEl.textContent = msg; };
+  if (!isCommittee()) { alert('Committee access required.'); return; }
+  const rows = parseCSV(text);
+  if (!rows.length) { alert('That file has no data rows.'); return; }
+  const headers = Object.keys(rows[0]);
+  const { idKey, scoreKey } = mtmRiskColumns(headers);
+  if (!idKey || !scoreKey) {
+    alert(`Couldn't find ${!idKey ? 'a student ID' : 'a risk score'} column.\n\nColumns in this file: ${headers.join(', ')}\n\n` +
+      'Name them something like "ID Number" and "Risk Score".');
+    return;
+  }
+  // Scores are 0–4 in 0.5 steps. 1 and up are tagged; 0 and 0.5 are not.
+  const scores = new Map();   // tagged: id -> score (1–4)
+  const below = new Set();    // scored 0 or 0.5 → not tagged
+  let skipped = 0;
+  rows.forEach(r => {
+    const id = String(r[idKey] || '').replace(/^#/, '').trim();
+    const raw = String(r[scoreKey] || '').trim();
+    const v = parseFloat(raw);
+    const valid = id && raw !== '' && isFinite(v) && v >= 0 && v <= 4 && Number.isInteger(v * 2);
+    if (!valid) { skipped++; return; }
+    if (v < 1) { below.add(id); scores.delete(id); }
+    else { scores.set(id, v); below.delete(id); }
+  });
+  if (!scores.size && !below.size) { alert('No usable rows — every row was missing an ID or had a score that isn\'t 0–4 in steps of 0.5.'); return; }
+
+  const tagged = new Set([...studentFlags].filter(([, set]) => set.has('midterm_meeting')).map(([id]) => id));
+  let added = 0, changed = 0, same = 0;
+  scores.forEach((v, id) => {
+    if (!tagged.has(id)) added++;
+    else if (flagScore(id, 'midterm_meeting') !== v) changed++;
+    else same++;
+  });
+  // Scored below 1 but currently tagged → untag (the score says not at risk).
+  const untagBelow = [...below].filter(id => tagged.has(id));
+  const notInFile = [...tagged].filter(id => !scores.has(id) && !below.has(id));
+  if (!confirm(`${filename}: ${n(scores.size + below.size)} students\n\n` +
+      `  • ${n(added)} newly tagged\n  • ${n(changed)} score changed\n  • ${n(same)} unchanged\n` +
+      `  • ${n(below.size)} scored 0–0.5 (not tagged)` + (untagBelow.length ? `, ${n(untagBelow.length)} of them currently tagged → tag removed` : '') + '\n' +
+      (skipped ? `\n${n(skipped)} row${skipped === 1 ? '' : 's'} skipped (missing ID, or score not 0–4 in steps of 0.5).\n` : '') +
+      `\nApply?`)) return;
+  const removeMissing = notInFile.length > 0 && confirm(
+    `${n(notInFile.length)} student${notInFile.length === 1 ? ' is' : 's are'} tagged Midterm Meeting but not in this file.\n\n` +
+    `OK = remove their Midterm Meeting tag\nCancel = keep them tagged as they are`);
+  const toUntag = [...untagBelow, ...(removeMissing ? notInFile : [])];
+
+  setStatus('Saving…');
+  if (HOSTED && sb) {
+    if (!currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); setStatus(''); return; }
+    const payload = [...scores].map(([id, v]) => ({ student_id: id, flag: 'midterm_meeting', term_id: currentTermDbId, risk_score: v, set_by: userDisplay || null }));
+    for (const part of chunk(payload, 500)) {
+      const { error } = await sb.from('student_flags').upsert(part, { onConflict: 'student_id,flag,term_key' });
+      if (error) { alert('Could not save risk scores: ' + error.message); setStatus('Save failed.'); return; }
+    }
+    for (const part of chunk(toUntag, 500)) {
+      const { error } = await sb.from('student_flags').delete()
+        .eq('flag', 'midterm_meeting').eq('term_id', currentTermDbId).in('student_id', part);
+      if (error) { alert('Scores saved, but removing tags failed: ' + error.message); break; }
+    }
+  }
+  scores.forEach((v, id) => {
+    if (!studentFlags.has(id)) studentFlags.set(id, new Set());
+    studentFlags.get(id).add('midterm_meeting');
+    studentFlagScores.set(`${id}|midterm_meeting`, v);
+  });
+  toUntag.forEach(id => {
+    studentFlags.get(id)?.delete('midterm_meeting');
+    studentFlagScores.delete(`${id}|midterm_meeting`);
+  });
+  setStatus(`Applied ${filename}: ${n(scores.size)} tagged` + (toUntag.length ? `, ${n(toUntag.length)} untagged` : '') +
+    ` · ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
+  renderAll();
+}
+
+// ── Tag tracking rings (Summary, under the hold rings) ──
+// Registration progress for tagged groups. Each tagged student's status comes
+// from cohortStatusOf — the same status the Cohort tab shows — so a ring's
+// count matches the list it opens. Excluded statuses (graduating, hidden
+// zero-hour, excluded HS / part-time) drop out of the denominator.
+const TAG_RING_GROUPS = [
+  { label: 'Midterm Meeting', tags: ['midterm_meeting'], color: '#ea580c' },
+  { label: 'Provisional',     tags: ['provisional'],     color: '#7c3aed' },
+  { label: 'Probation (P1 + P2)', tags: ['p1', 'p2'],    color: '#0891b2' },
+];
+
+function tagRingStats(match) {
+  const ctx = retentionContext();
+  const counts = { total: 0, reg: 0, hold: 0, canReg: 0, nr: 0, other: 0 };
+  studentFlags.forEach((set, id) => {
+    if (!match(id, set)) return;
+    const st = cohortStatusOf(id, ctx);
+    if (st === ZERO_HOURS || COHORT_EXCLUDED.has(st)) return;
+    counts.total++;
+    if (st === 'Registered') counts.reg++;
+    else if (st === 'Has Hold') counts.hold++;
+    else if (st === 'Can Register') counts.canReg++;
+    else if (st === 'Not Returning') counts.nr++;
+    else counts.other++;
+  });
+  return counts;
+}
+function tagRingSubtitle(c) {
+  const parts = [`${n(c.hold)} hold`, `${n(c.canReg)} can reg`, `${n(c.nr)} not ret`];
+  if (c.other) parts.push(`${n(c.other)} other`);
+  return `${n(c.total)} tagged · ` + parts.join(' · ');
+}
+function renderTagRings() {
+  const row = document.getElementById('tag-rings-row');
+  const grid = document.getElementById('tag-rings-grid');
+  if (!row || !grid) return;
+  const anyTags = [...studentFlags.values()].some(set => set.size);
+  row.style.display = anyTags ? '' : 'none';
+  if (!anyTags) return;
+  grid.innerHTML = TAG_RING_GROUPS.map(g => {
+    const c = tagRingStats((id, set) => g.tags.some(t => set.has(t)));
+    return svgSegmentDonut({
+      label: g.label, count: c.reg, total: c.total, color: g.color,
+      subtitle: tagRingSubtitle(c),
+      onclick: `goToTaggedStudents(${msEsc(JSON.stringify(g.tags))})`,
+    });
+  }).join('');
+  // Midterm Meeting broken out by risk-score band.
+  const bandStats = RISK_BANDS.map(b => tagRingStats((id, set) =>
+    set.has('midterm_meeting') && riskBand(flagScore(id, 'midterm_meeting')) === b.band));
+  const wrap = document.getElementById('tag-level-rings-wrap');
+  wrap.style.display = bandStats.some(c => c.total) ? '' : 'none';
+  document.getElementById('tag-level-rings').innerHTML = bandStats.map((c, i) => svgSegmentDonut({
+    label: `Score ${RISK_BANDS[i].label}${i === 3 ? ' (highest)' : ''}`,
+    count: c.reg, total: c.total, color: RISK_BANDS[i].color,
+    subtitle: tagRingSubtitle(c),
+    onclick: `goToTaggedStudents(${msEsc(JSON.stringify(['midterm_meeting:' + RISK_BANDS[i].band]))})`,
+  })).join('');
+}
+// Open the Cohort tab filtered to students with ANY of the given tags.
+function goToTaggedStudents(tags) {
+  const navTab = [...document.querySelectorAll('.nav-tab')]
+    .find(t => (t.getAttribute('onclick') || '').includes("'cohort'"));
+  showPage('cohort', navTab);
+  msSet('co-status', []);
+  msSet('co-ptft', []);
+  setTagFilterTo('co-flag', tags, 'any');
+}
+function setTagFilterTo(id, tags, mode) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  clearTagFilter(id, false);
+  tags.forEach(t => { const cb = wrap.querySelector(`input[data-tag="${t}"]`); if (cb) cb.checked = true; });
+  const radio = wrap.querySelector(`input[name="${id}-mode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  const first = wrap.querySelector('input[data-tag]:checked');
+  if (first) tagFilterChanged(first); else { const fn = window[wrap.dataset.apply]; if (typeof fn === 'function') fn(); }
+}
+
 // ── Tags filter: a checklist popover on every tab ──
 // Markup per tab: <span class="tag-filter" id="X" data-apply="fnName">.
-// Tick tags, choose whether a student must have ALL or ANY of them, or tick
-// "No tags". Built from FLAG_DEFS, so new tags appear everywhere. Also fills
-// the Cohort tab's tag buttons.
+// Tick tags (and, for scored tags, specific score bands), choose whether a
+// student must have ALL or ANY of them, or tick "No tags". Built from
+// FLAG_DEFS, so new tags appear everywhere. Same look as every other filter
+// (.ms-btn / .ms-pop). Also fills the Cohort tab's tag buttons.
 function populateTagFilters() {
-  const tagBoxes = Object.entries(FLAG_DEFS).map(([key, def]) =>
-    `<label class="tf-row"><input type="checkbox" data-tag="${key}" onchange="tagFilterChanged(this)" /> ${def.label}</label>`).join('');
+  const tagBoxes = Object.entries(FLAG_DEFS).map(([key, def]) => {
+    let html = `<label class="ms-row"><input type="checkbox" data-tag="${key}" onchange="tagFilterChanged(this)" /><span>${def.label}</span></label>`;
+    if (def.scored) RISK_BANDS.forEach(b => {
+      html += `<label class="ms-row" style="padding-left:28px;"><input type="checkbox" data-tag="${key}:${b.band}" onchange="tagFilterChanged(this)" /><span>Score ${riskBandChip(b.band)}</span></label>`;
+    });
+    return html;
+  }).join('');
   document.querySelectorAll('span.tag-filter').forEach(wrap => {
     const id = wrap.id;
     wrap.innerHTML =
-      `<button type="button" class="filter-select tag-filter-btn" onclick="toggleTagFilter('${id}', event)">All Tags ▾</button>
-       <div class="tag-filter-pop" style="display:none;">
-         ${tagBoxes}
-         <div class="tf-sep"></div>
-         <label class="tf-row"><input type="radio" name="${id}-mode" value="all" checked onchange="tagFilterChanged(this)" /> Has all ticked</label>
-         <label class="tf-row"><input type="radio" name="${id}-mode" value="any" onchange="tagFilterChanged(this)" /> Has any ticked</label>
-         <div class="tf-sep"></div>
-         <label class="tf-row"><input type="checkbox" data-none="1" onchange="tagFilterChanged(this)" /> No tags</label>
-         <button type="button" class="nr-row-btn" style="margin-top:6px;" onclick="clearTagFilter('${id}', true)">Clear</button>
+      `<button type="button" class="ms-btn tag-filter-btn" onclick="toggleTagFilter('${id}', event)">${msBtnHtml('All Tags')}</button>
+       <div class="ms-pop tag-filter-pop" style="display:none;">
+         <div class="ms-list">${tagBoxes}</div>
+         <div class="ms-sep"></div>
+         <label class="ms-row"><input type="radio" name="${id}-mode" value="all" checked onchange="tagFilterChanged(this)" /><span>Has all ticked</span></label>
+         <label class="ms-row"><input type="radio" name="${id}-mode" value="any" onchange="tagFilterChanged(this)" /><span>Has any ticked</span></label>
+         <div class="ms-sep"></div>
+         <label class="ms-row"><input type="checkbox" data-none="1" onchange="tagFilterChanged(this)" /><span>No tags</span></label>
+         <div class="ms-foot"><span></span><button type="button" class="ms-link" onclick="clearTagFilter('${id}', true)">Clear</button></div>
        </div>`;
   });
   const btns = document.getElementById('co-flag-buttons');
   if (btns) {
     btns.innerHTML = Object.entries(FLAG_DEFS).map(([key, def]) =>
-      `<button class="nr-row-btn" onclick="setStudentFlag('${key}', true)" title="${def.perTerm ? 'This term only' : 'Stays with the student across terms'}${def.exclusive ? '; replaces the other ' + def.exclusive + ' tag' : ''}">${def.label}</button>`).join('');
+      `<button class="nr-row-btn" onclick="setStudentFlag('${key}', true)" title="${def.perTerm ? 'This term only' : 'Stays with the student across terms'}${def.exclusive ? '; replaces the other ' + def.exclusive + ' tag' : ''}${def.scored ? '; starts at score 1 — click the score in the Tags column to raise it' : ''}">${def.label}</button>`).join('');
   }
 }
 
 // Current filter for a tab: '' (no filter) or { tags: [...], mode, none }.
+// A tag entry is a flag key ("provisional") or "key:level" ("midterm_meeting:3").
 function tagFilterValue(id) {
   const wrap = document.getElementById(id);
   if (!wrap) return '';
@@ -1767,14 +2077,20 @@ function tagFilterValue(id) {
 function tagFilterLabel(f) {
   if (!f) return 'All Tags';
   if (f.none) return 'No tags';
-  return f.tags.map(t => FLAG_DEFS[t].short).join(f.mode === 'any' ? ' or ' : ' + ');
+  return f.tags.map(t => {
+    const [key, lv] = t.split(':');
+    return FLAG_DEFS[key].short + (lv ? ' ' + RISK_BANDS[lv - 1].label : '');
+  }).join(f.mode === 'any' ? ' or ' : ' + ');
 }
 function tagFilterChanged(input) {
   const wrap = input.closest('span.tag-filter');
   // "No tags" and specific tags are mutually exclusive choices.
   if (input.dataset.none && input.checked) wrap.querySelectorAll('input[data-tag]').forEach(i => { i.checked = false; });
   if (input.dataset.tag && input.checked) { const nb = wrap.querySelector('input[data-none]'); if (nb) nb.checked = false; }
-  wrap.querySelector('.tag-filter-btn').textContent = tagFilterLabel(tagFilterValue(wrap.id)) + ' ▾';
+  const f = tagFilterValue(wrap.id);
+  const btn = wrap.querySelector('.tag-filter-btn');
+  btn.innerHTML = msBtnHtml(tagFilterLabel(f));
+  btn.classList.toggle('ms-active', !!f);
   const fn = window[wrap.dataset.apply];
   if (typeof fn === 'function') fn();
 }
@@ -1785,20 +2101,19 @@ function clearTagFilter(id, reapply) {
   const allRadio = wrap.querySelector(`input[name="${id}-mode"][value="all"]`);
   if (allRadio) allRadio.checked = true;
   const btn = wrap.querySelector('.tag-filter-btn');
-  if (btn) btn.textContent = 'All Tags ▾';
+  if (btn) { btn.innerHTML = msBtnHtml('All Tags'); btn.classList.remove('ms-active'); }
   if (reapply) { const fn = window[wrap.dataset.apply]; if (typeof fn === 'function') fn(); }
 }
 function toggleTagFilter(id, ev) {
   ev.stopPropagation();
   const pop = document.querySelector(`#${id} .tag-filter-pop`);
-  const open = pop.style.display === 'none';
-  document.querySelectorAll('.tag-filter-pop').forEach(p => { p.style.display = 'none'; });
-  pop.style.display = open ? 'block' : 'none';
+  const opening = pop.style.display === 'none';
+  msCloseAll(pop);
+  pop.style.display = opening ? 'block' : 'none';
 }
+// Close any open filter dropdown when clicking elsewhere on the page.
 document.addEventListener('click', e => {
-  if (!e.target.closest('span.tag-filter')) {
-    document.querySelectorAll('.tag-filter-pop').forEach(p => { p.style.display = 'none'; });
-  }
+  if (!e.target.closest('.ms-wrap, span.tag-filter')) msCloseAll(null);
 });
 
 // Processed data
@@ -2073,88 +2388,31 @@ function getHoldsExportData() {
     ? getAllHoldsStudents().map(r => ({...r, __holdType: (r.__holdTypes || []).join(', ')}))
     : (holdGroups[currentHold] || []).map(r => ({...r, __holdType: currentHold}));
   const all = sourceRows.map(r => ({...r, __onNR: nrIds.has(r.id)}));
-  // Apply same filters as holdsApply
-  const retOnly = document.getElementById('h-returning').value === 'returning';
-  const cls     = document.getElementById('h-class').value.toLowerCase();
-  const major   = document.getElementById('h-major').value;
-  const advisor = document.getElementById('h-advisor').value;
-  const sport   = document.getElementById('h-sport').value;
-  const team    = document.getElementById('h-team').value;
-  const q       = document.getElementById('h-search').value.toLowerCase();
-  let visible = [...all];
-  if (retOnly) visible = visible.filter(r => !r.__onNR);
-  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
-  if (major)   visible = visible.filter(r => r.major === major);
-  if (advisor) visible = visible.filter(r => r.advisor === advisor);
-  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
-  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
-  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  visible = applyFlagFilter(visible, tagFilterValue('h-tags'));
-  visible = applySort(visible, hSort);
+  // Same filters as the table (graduating students are never listed).
+  const gradIds = getGraduatingIdSet();
+  const visible = applySort(runSteps(all.filter(r => !gradIds.has(r.id)), holdsSteps(nrIds)), hSort);
   return { visible, all };
 }
 
 function getRegisteredExportData() {
   const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
   const all = returningRegisteredList().map(r => ({...r, __onNR: nrIds.has(r.id)}));
-  const cls     = document.getElementById('reg-class').value.toLowerCase();
-  const q       = document.getElementById('reg-search').value.toLowerCase();
-  let visible = [...all];
-  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
-  if (q)       visible = visible.filter(r => (r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  visible = applyFlagFilter(visible, tagFilterValue('reg-tags'));
-  visible = applySort(visible, regSort_);
+  const visible = applySort(runSteps(all, regSteps()), regSort_);
   return { visible, all };
 }
 
 function getCanRegExportData() {
   const nrIds = new Set(nrList.map(s=>s.id).filter(Boolean));
   const all = canRegisterStudents.map(r => ({...r, __onNR: nrIds.has(r.id)}));
-  const retOnly = document.getElementById('cr-returning').value === 'returning';
-  const cls     = document.getElementById('cr-class').value.toLowerCase();
-  const major   = document.getElementById('cr-major').value;
-  const advisor = document.getElementById('cr-advisor').value;
-  const sport   = document.getElementById('cr-sport').value;
-  const team    = document.getElementById('cr-team').value;
-  const q       = document.getElementById('cr-search').value.toLowerCase();
-  let visible = [...all];
-  if (retOnly) visible = visible.filter(r => !r.__onNR);
-  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
-  if (major)   visible = visible.filter(r => r.major === major);
-  if (advisor) visible = visible.filter(r => r.advisor === advisor);
-  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
-  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
-  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  visible = applyFlagFilter(visible, tagFilterValue('cr-tags'));
-  visible = applySort(visible, crSort_);
+  const gradIds = getGraduatingIdSet();
+  const visible = applySort(runSteps(all.filter(r => !gradIds.has(r.id)), crSteps(nrIds)), crSort_);
   return { visible, all };
 }
 
 function getNewStudentsExportData() {
   const all = Object.values(newStudents);
-  const retOnly = document.getElementById('ns-returning').value === 'returning';
-  const status  = document.getElementById('ns-status').value;
-  const cls     = document.getElementById('ns-class').value.toLowerCase();
-  const major   = document.getElementById('ns-major').value;
-  const advisor = document.getElementById('ns-advisor').value;
-  const sport   = document.getElementById('ns-sport').value;
-  const team    = document.getElementById('ns-team').value;
-  const q       = document.getElementById('ns-search').value.toLowerCase();
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
-  let visible = [...all];
-  if (retOnly) visible = visible.filter(r => !nrIds.has(r.id));
-  if (status)  visible = visible.filter(r => r.status === status);
-  if (cls)     visible = visible.filter(r => (r.classYear||'').toLowerCase().includes(cls));
-  if (major)   visible = visible.filter(r => r.major === major);
-  if (advisor) visible = visible.filter(r => r.advisor === advisor);
-  if (sport==='Athletes Only')     visible = visible.filter(r => (r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only') visible = visible.filter(r => !(r.sports||[]).length);
-  if (team)    visible = visible.filter(r => (r.sports||[]).some(s=>s===team));
-  if (q)       visible = visible.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  visible = applyFlagFilter(visible, tagFilterValue('ns-tags'));
-  visible = applySort(visible, nsSort_);
+  const visible = applySort(runSteps(all, nsSteps(nrIds)), nsSort_);
   return { visible, all };
 }
 
@@ -2183,30 +2441,16 @@ function getWithdrawalsExportData() {
 
 function getNRExportData() {
   const all = [...nrList];
-  const wf = document.getElementById('nr-filter-withdrawal').value;
-  const rf = document.getElementById('nr-filter-reason').value;
-  const q  = document.getElementById('nr-search').value.toLowerCase();
-  let visible = [...all];
-  if (wf) visible = visible.filter(r => r.withdrawal === wf);
-  if (rf) visible = visible.filter(r => (r.reason || '') === rf);
-  if (q)  visible = visible.filter(r => ((r.name||'') + (r.id||'')).toLowerCase().includes(q));
-  visible = applyFlagFilter(visible, tagFilterValue('nr-filter-tags'));
-  visible = applySort(visible, nrSort_);
+  const newIds = new Set(Object.keys(newStudents || {}));
+  const shown = dedupeNRForDisplay(all).filter(r => !r.id || !newIds.has(r.id));
+  const visible = applySort(runSteps(shown, nrSteps()), nrSort_);
   return { visible, all };
 }
 
 function getFTFTExportData() {
   const gradIds = getGraduatingIdSet();
   const all = buildFTFTRows().filter(r => !gradIds.has(r.id));
-  const statusFilter = document.getElementById('ftft-status')?.value || '';
-  const q = (document.getElementById('ftft-search')?.value || '').toLowerCase();
-  let visible = [...all];
-  if (statusFilter) visible = visible.filter(r => r.__status === statusFilter);
-  if (q) visible = visible.filter(r =>
-    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q)
-  );
-  visible = applyFlagFilter(visible, tagFilterValue('ftft-tags'));
-  visible = applySort(visible, ftftSort_);
+  const visible = applySort(runSteps(all, ftftSteps()), ftftSort_);
   return { visible, all };
 }
 
@@ -3023,6 +3267,9 @@ function renderSummary() {
   // Smaller number below = total students with this hold. Ring shows the not-returning
   // slice (red) against the returning slice (hold's accent color).
   renderHoldDonuts();
+
+  // Tag tracking rings sit directly under the hold rings (Tony 2026-10-22).
+  renderTagRings();
 
   // Reasons-not-returning bar chart. Aggregates over nrList; multi-reason rows count
   // toward each of their reasons. Sorted desc.
@@ -4069,16 +4316,8 @@ function renderFTFT() {
 
 function ftftApply() {
   if (!ftftIds.size) return;
-  const statusFilter = document.getElementById('ftft-status')?.value || '';
-  const q = (document.getElementById('ftft-search')?.value || '').toLowerCase();
   const gradIds = getGraduatingIdSet();
-  let rows = buildFTFTRows().filter(r => !gradIds.has(r.id));
-  if (statusFilter) rows = rows.filter(r => r.__status === statusFilter);
-  rows = applyFlagFilter(rows, tagFilterValue('ftft-tags'));
-  if (q) rows = rows.filter(r =>
-    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q)
-  );
-  rows = applySort(rows, ftftSort_);
+  let rows = applySort(runSteps(buildFTFTRows().filter(r => !gradIds.has(r.id)), ftftSteps()), ftftSort_);
 
   const total = buildFTFTRows().filter(r => !gradIds.has(r.id)).length;
   const titleEl = document.getElementById('ftft-title');
@@ -4199,19 +4438,8 @@ function renderCohort() {
 
 function cohortApply() {
   if (!termCohort.size) return;
-  const statusFilter = document.getElementById('co-status')?.value || '';
-  const q = (document.getElementById('co-search')?.value || '').toLowerCase();
-  const ptftFilter = document.getElementById('co-ptft')?.value || '';
   const all = buildCohortRows();
-  let rows = all;
-  // A filter value may list several statuses separated by "|".
-  const statusSet = statusFilter ? new Set(statusFilter.split('|')) : null;
-  if (statusSet) rows = rows.filter(r => statusSet.has(r.__status));
-  if (ptftFilter)   rows = rows.filter(r => r.ptFt === ptftFilter);
-  rows = applyFlagFilter(rows, tagFilterValue('co-flag'));
-  if (q) rows = rows.filter(r =>
-    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
-  rows = applySort(rows, cohortSort_);
+  let rows = applySort(runSteps(all, cohortSteps()), cohortSort_);
 
   const titleEl = document.getElementById('co-title');
   if (titleEl) {
@@ -4345,16 +4573,22 @@ async function setCohortOverride(value) {
 function flagLabels(id) {
   const set = studentFlags.get(id);
   if (!set) return '';
-  return Object.entries(FLAG_DEFS).filter(([k]) => set.has(k)).map(([, d]) => d.label).join('; ');
+  return Object.entries(FLAG_DEFS).filter(([k]) => set.has(k))
+    .map(([k, d]) => d.scored ? `${d.label} (${fmtScore(flagScore(id, k))})` : d.label).join('; ');
 }
 // f = '' (no filter) or { tags, mode: 'all'|'any', none } from tagFilterValue.
 function applyFlagFilter(rows, f) {
   if (!f) return rows;
   const tagsOf = r => studentFlags.get(r.id) || new Set();
   if (f.none) return rows.filter(r => !tagsOf(r).size);
+  // "midterm_meeting:3" = has the tag with a score in band 3 (3–3.5).
+  const has = (r, t) => {
+    const [key, band] = t.split(':');
+    return tagsOf(r).has(key) && (!band || riskBand(flagScore(r.id, key)) === +band);
+  };
   return f.mode === 'any'
-    ? rows.filter(r => f.tags.some(t => tagsOf(r).has(t)))
-    : rows.filter(r => f.tags.every(t => tagsOf(r).has(t)));
+    ? rows.filter(r => f.tags.some(t => has(r, t)))
+    : rows.filter(r => f.tags.every(t => has(r, t)));
 }
 
 // Write one flag for many students (DB + local map). Returns false on error.
@@ -4376,7 +4610,13 @@ async function writeStudentFlag(ids, flag, on) {
   }
   ids.forEach(id => {
     if (!studentFlags.has(id)) studentFlags.set(id, new Set());
+    const had = studentFlags.get(id).has(flag);
     on ? studentFlags.get(id).add(flag) : studentFlags.get(id).delete(flag);
+    // Re-tagging keeps an existing score; a new tag starts at 1.
+    if (def.scored) {
+      if (!on) studentFlagScores.delete(`${id}|${flag}`);
+      else if (!had) studentFlagScores.set(`${id}|${flag}`, 1);
+    }
   });
   return true;
 }
@@ -4412,8 +4652,7 @@ async function clearStudentFlags() {
 }
 
 function cohortFilterByStatus(status) {
-  const sel = document.getElementById('co-status');
-  if (sel) sel.value = status || '';
+  msSet('co-status', status || ''); // "A|B" ticks several statuses
   cohortApply();
 }
 
@@ -4426,17 +4665,7 @@ function goToCohortPage(status) {
 
 function getCohortExportData() {
   const all = buildCohortRows();
-  const statusFilter = document.getElementById('co-status')?.value || '';
-  const q = (document.getElementById('co-search')?.value || '').toLowerCase();
-  const ptftFilter = document.getElementById('co-ptft')?.value || '';
-  let visible = [...all];
-  const statusSet = statusFilter ? new Set(statusFilter.split('|')) : null;
-  if (statusSet) visible = visible.filter(r => statusSet.has(r.__status));
-  if (ptftFilter)   visible = visible.filter(r => r.ptFt === ptftFilter);
-  visible = applyFlagFilter(visible, tagFilterValue('co-flag'));
-  if (q) visible = visible.filter(r =>
-    ((r.firstName||'') + (r.lastName||'') + (r.name||'') + (r.id||'')).toLowerCase().includes(q));
-  visible = applySort(visible, cohortSort_);
+  const visible = applySort(runSteps(all, cohortSteps()), cohortSort_);
   return { visible, all };
 }
 
@@ -4454,12 +4683,9 @@ function populateDropdowns() {
   )].sort();
 
   function fillSelect(id, items, label) {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = `<option value="">All ${label}</option>`;
-    items.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
-    if (items.includes(cur)) sel.value = cur;
+    const escOpt = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    msRepopulate(id, `<option value="">All ${label}</option>` +
+      items.map(v => `<option value="${escOpt(v)}">${escOpt(v)}</option>`).join(''));
   }
   // Registered tab no longer has major/advisor/team filter dropdowns
   // (Tony 2026-05-07 — those columns were removed too). Other tabs still
@@ -4500,11 +4726,260 @@ function ptFtChip(val) {
 // dropdown with values "" / "ftft" / "non-ftft" — Tony 2026-05-13. Reads
 // the selected value from the given select id and filters rows
 // accordingly. Defensive: rows without an id always count as Non-FTFT.
+// ══════════════════════════════════════════════════════════════
+//  MULTI-SELECT FILTERS (2026-10-22)
+// ══════════════════════════════════════════════════════════════
+// Every <select class="filter-select"> list filter is a hidden MULTIPLE
+// select driven by the checklist UI (msInit). Read ticked values with
+// msVals (empty array = no filter), set them with msSet. Each tab's
+// filtering lives in a *Steps() builder used by BOTH its table and its
+// "Download visible" export, so the two can't drift apart.
+function msEl(x) { return typeof x === 'string' ? document.getElementById(x) : x; }
+function msVals(x) {
+  const sel = msEl(x);
+  if (!sel) return [];
+  return [...sel.selectedOptions].map(o => o.value).filter(v => v !== '');
+}
+function msSet(x, vals) {
+  const sel = msEl(x);
+  if (!sel) return;
+  const want = new Set((Array.isArray(vals) ? vals : (vals ? String(vals).split('|') : [])).map(String));
+  if (sel.multiple) [...sel.options].forEach(o => { o.selected = o.value !== '' && want.has(o.value); });
+  else sel.value = [...want][0] || '';
+  msRefresh(sel);
+}
+// Repopulate a select's options, keeping whatever was ticked (if still offered).
+function msRepopulate(x, html) {
+  const sel = msEl(x);
+  if (!sel) return;
+  const keep = msVals(sel);
+  sel.innerHTML = html;
+  msSet(sel, keep.filter(v => [...sel.options].some(o => o.value === v)));
+}
+
+// ── Checklist UI ──
+// A select whose first option has value "" (e.g. "All Classes") becomes a
+// multi-select; one without (the "Returning Only / Show All" switches) stays
+// single-choice but gets the same look. The hidden select keeps its inline
+// onchange, so ticking a box re-runs the tab exactly as before.
+const msEsc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function msBtnHtml(text) {
+  return `<span class="ms-btn-text">${msEsc(text)}</span><span class="ms-caret">▾</span>`;
+}
+function msInit(sel) {
+  if (sel._ms) return;
+  const placeholder = [...sel.options].find(o => o.value === '');
+  const single = !placeholder;
+  if (!single) {
+    sel.multiple = true;
+    [...sel.options].forEach(o => { o.selected = false; });
+  }
+  sel.style.display = 'none';
+  const wrap = document.createElement('span');
+  wrap.className = 'ms-wrap';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ms-btn';
+  if (sel.title) btn.title = sel.title;
+  const pop = document.createElement('div');
+  pop.className = 'ms-pop';
+  pop.style.display = 'none';
+  wrap.append(btn, pop);
+  sel.after(wrap);
+  sel._ms = { btn, pop, single, placeholder: placeholder ? placeholder.textContent.trim() : '' };
+  btn.addEventListener('click', e => { e.stopPropagation(); msToggle(sel); });
+  pop.addEventListener('change', e => msPopChange(sel, e.target));
+  pop.addEventListener('input', e => { if (e.target.classList.contains('ms-search')) msFilterList(pop, e.target.value); });
+  msRefresh(sel);
+}
+function msInitAll() {
+  document.querySelectorAll('select.filter-select').forEach(msInit);
+}
+function msRefresh(x) {
+  const sel = msEl(x);
+  const m = sel && sel._ms;
+  if (!m) return;
+  if (m.single) {
+    m.btn.innerHTML = msBtnHtml(sel.selectedOptions[0]?.textContent.trim() || '');
+    return;
+  }
+  const picked = [...sel.selectedOptions].filter(o => o.value !== '');
+  let text = m.placeholder;
+  if (picked.length === 1) text = picked[0].textContent.trim();
+  else if (picked.length > 1) {
+    const joined = picked.map(o => o.textContent.trim()).join(', ');
+    const noun = m.placeholder.replace(/^All\s*/i, '') || 'selected';
+    text = joined.length <= 24 ? joined : `${picked.length} ${noun}`;
+  }
+  m.btn.innerHTML = msBtnHtml(text);
+  m.btn.classList.toggle('ms-active', picked.length > 0);
+  m.btn.title = picked.length > 1 ? picked.map(o => o.textContent.trim()).join(', ') : (sel.title || '');
+}
+function msCloseAll(except) {
+  document.querySelectorAll('.ms-pop, .tag-filter-pop').forEach(p => { if (p !== except) p.style.display = 'none'; });
+}
+function msToggle(sel) {
+  const m = sel._ms;
+  const opening = m.pop.style.display === 'none';
+  msCloseAll(m.pop);
+  if (!opening) { m.pop.style.display = 'none'; return; }
+  msRenderPop(sel);
+  m.pop.style.display = 'block';
+  m.pop.querySelector('.ms-search')?.focus();
+}
+function msRenderPop(sel) {
+  const m = sel._ms;
+  const opts = [...sel.options].filter(o => o.value !== '');
+  const rows = [];
+  let lastGroup = null;
+  opts.forEach(o => {
+    const group = o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : null;
+    if (group && group !== lastGroup) rows.push(`<div class="ms-group">${msEsc(group)}</div>`);
+    lastGroup = group;
+    const i = [...sel.options].indexOf(o);
+    const input = m.single
+      ? `<input type="radio" name="ms-${sel.id}" data-i="${i}" ${o.selected ? 'checked' : ''} />`
+      : `<input type="checkbox" data-i="${i}" ${o.selected ? 'checked' : ''} />`;
+    rows.push(`<label class="ms-row" data-text="${msEsc(o.textContent.trim().toLowerCase())}">${input}<span>${msEsc(o.textContent.trim())}</span></label>`);
+  });
+  if (!opts.length) rows.push('<div class="ms-empty">No options yet</div>');
+  m.pop.innerHTML =
+    (!m.single && opts.length > 8 ? '<input type="text" class="ms-search" placeholder="Search…" />' : '') +
+    `<div class="ms-list">${rows.join('')}</div>` +
+    (m.single ? '' : `<div class="ms-foot"><button type="button" class="ms-link" data-act="all">Select all</button><button type="button" class="ms-link" data-act="clear">Clear</button></div>`);
+  m.pop.querySelectorAll('.ms-link').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const on = b.dataset.act === 'all';
+    // "Select all" ticks only the rows currently shown by the search box.
+    m.pop.querySelectorAll('.ms-row').forEach(row => {
+      if (row.style.display === 'none') return;
+      const cb = row.querySelector('input');
+      cb.checked = on;
+      sel.options[+cb.dataset.i].selected = on;
+    });
+    msCommit(sel);
+  }));
+}
+function msPopChange(sel, input) {
+  if (!input.dataset || input.dataset.i == null) return;
+  const opt = sel.options[+input.dataset.i];
+  if (sel._ms.single) {
+    sel.value = opt.value;
+    sel._ms.pop.style.display = 'none';
+  } else {
+    opt.selected = input.checked;
+  }
+  msCommit(sel);
+}
+function msCommit(sel) {
+  msRefresh(sel);
+  sel.dispatchEvent(new Event('change')); // fires the select's inline onchange → re-filters the tab
+}
+function msFilterList(pop, q) {
+  const needle = q.trim().toLowerCase();
+  pop.querySelectorAll('.ms-row').forEach(row => {
+    row.style.display = !needle || row.dataset.text.includes(needle) ? '' : 'none';
+  });
+}
+
+function ftftMatch(vals, r) {
+  const isF = !!(r.id && ftftIds.has(r.id));
+  return (vals.includes('ftft') && isF) || (vals.includes('non-ftft') && !isF);
+}
 function applyFTFTFilter(rows, selectId) {
-  const v = document.getElementById(selectId)?.value || '';
-  if (v === 'ftft')     return rows.filter(r => r.id && ftftIds.has(r.id));
-  if (v === 'non-ftft') return rows.filter(r => !r.id || !ftftIds.has(r.id));
-  return rows;
+  const v = msVals(selectId);
+  return v.length ? rows.filter(r => ftftMatch(v, r)) : rows;
+}
+
+// A step = { label, fn(row) → keep? }. Labels feed the Holds title breakdown.
+function runSteps(rows, steps) {
+  return steps.reduce((acc, s) => acc.filter(s.fn), rows);
+}
+const orJoin = vals => vals.join(' or ');
+// Class / Major / Advisor / Sport / Team / FTFT — shared by Holds, Can
+// Register and New Students (ids `${p}-class` etc.).
+function stdFilterSteps(p) {
+  const steps = [];
+  const cls = msVals(p + '-class');
+  if (cls.length) steps.push({ label: orJoin(cls), fn: r => cls.some(c => (r.classYear || '').toLowerCase().includes(c.toLowerCase())) });
+  const majors = msVals(p + '-major');
+  if (majors.length) steps.push({ label: orJoin(majors), fn: r => majors.includes(r.major) });
+  const advisors = msVals(p + '-advisor');
+  if (advisors.length) steps.push({ label: 'w/ ' + orJoin(advisors), fn: r => advisors.includes(r.advisor) });
+  const sports = msVals(p + '-sport');
+  if (sports.length) steps.push({ label: orJoin(sports.map(s => s.replace(' Only', ''))),
+    fn: r => { const ath = (r.sports || []).length > 0;
+               return (ath && sports.includes('Athletes Only')) || (!ath && sports.includes('Non-Athletes Only')); } });
+  const teams = msVals(p + '-team');
+  if (teams.length) steps.push({ label: 'on ' + orJoin(teams), fn: r => (r.sports || []).some(s => teams.includes(s)) });
+  const ftft = msVals(p + '-ftft');
+  if (ftft.length) steps.push({ label: orJoin(ftft.map(v => v === 'ftft' ? 'FTFT' : 'Non-FTFT')), fn: r => ftftMatch(ftft, r) });
+  return steps;
+}
+function tagStep(id) {
+  const t = tagFilterValue(id);
+  return t ? [{ label: 'tagged ' + tagFilterLabel(t), fn: r => applyFlagFilter([r], t).length > 0 }] : [];
+}
+function searchStep(id, textOf) {
+  const q = (document.getElementById(id)?.value || '').toLowerCase();
+  return q ? [{ label: `matching "${q}"`, fn: r => textOf(r).toLowerCase().includes(q) }] : [];
+}
+function returningStep(id, nrIds) {
+  return document.getElementById(id)?.value === 'returning'
+    ? [{ label: 'Likely Returning', fn: r => !nrIds.has(r.id) }] : [];
+}
+function inSetStep(id, label, valueOf) {
+  const vals = msVals(id);
+  return vals.length ? [{ label: label(vals), fn: r => vals.includes(valueOf(r)) }] : [];
+}
+const nameEmailId = r => (r.name || '') + (r.email || '') + (r.id || '') + (r.lastName || '');
+const nameId      = r => (r.firstName || '') + (r.lastName || '') + (r.name || '') + (r.id || '');
+
+function holdsSteps(nrIds) {
+  return [...returningStep('h-returning', nrIds), ...stdFilterSteps('h'), ...tagStep('h-tags'),
+          ...searchStep('h-search', nameEmailId)];
+}
+function crSteps(nrIds) {
+  return [...returningStep('cr-returning', nrIds), ...stdFilterSteps('cr'), ...tagStep('cr-tags'),
+          ...searchStep('cr-search', nameEmailId)];
+}
+function nsSteps(nrIds) {
+  return [...returningStep('ns-returning', nrIds), ...inSetStep('ns-status', orJoin, r => r.status),
+          ...stdFilterSteps('ns'), ...tagStep('ns-tags'), ...searchStep('ns-search', nameEmailId)];
+}
+function regSteps() {
+  const cls = msVals('reg-class');
+  return [
+    ...(cls.length ? [{ label: orJoin(cls), fn: r => cls.some(c => (r.classYear || '').toLowerCase().includes(c.toLowerCase())) }] : []),
+    ...inSetStep('reg-ptft', orJoin, r => (r.ptFt || '').toUpperCase()),
+    ...(msVals('reg-ftft').length ? [{ label: 'FTFT', fn: r => ftftMatch(msVals('reg-ftft'), r) }] : []),
+    ...tagStep('reg-tags'),
+    ...searchStep('reg-search', r => (r.name || '') + (r.id || '') + (r.lastName || '')),
+  ];
+}
+function nrSteps() {
+  const sports = msVals('nr-filter-sport');
+  return [
+    ...inSetStep('nr-filter-withdrawal', orJoin, r => nrEffectiveStatus(r)),
+    ...inSetStep('nr-filter-reason', orJoin, r => r.reason || ''),
+    ...inSetStep('nr-filter-class', orJoin, r => r.classYear || ''),
+    // "(Non-Athlete)" matches rows with no sport; other values match the
+    // row's normalized sport list (Track & Field family rolled up).
+    ...(sports.length ? [{ label: orJoin(sports), fn: r => {
+        const list = normalizeSportList(r.sport).split(',').map(s => s.trim()).filter(Boolean);
+        return (sports.includes('(Non-Athlete)') && !list.length) || list.some(s => sports.includes(s)); } }] : []),
+    ...inSetStep('nr-filter-major', orJoin, r => r.major || ''),
+    ...(msVals('nr-filter-ftft').length ? [{ label: 'FTFT', fn: r => ftftMatch(msVals('nr-filter-ftft'), r) }] : []),
+    ...tagStep('nr-filter-tags'),
+    ...searchStep('nr-search', r => (r.name || '') + (r.firstName || '') + (r.lastName || '') + (r.id || '')),
+  ];
+}
+function ftftSteps() {
+  return [...inSetStep('ftft-status', orJoin, r => r.__status), ...tagStep('ftft-tags'), ...searchStep('ftft-search', nameId)];
+}
+function cohortSteps() {
+  return [...inSetStep('co-status', orJoin, r => r.__status), ...inSetStep('co-ptft', orJoin, r => r.ptFt),
+          ...tagStep('co-flag'), ...searchStep('co-search', nameId)];
 }
 function applySort(rows, state) {
   if (!state.col) return rows;
@@ -4558,7 +5033,8 @@ function holdsFilter(holdType, el) {
   if (target) target.classList.add('selected');
   currentHold = holdType;
   hSort = {col:null,dir:1};
-  ['h-search','h-major','h-advisor','h-sport'].forEach(id=>{ const e=document.getElementById(id); if(e)e.value=''; });
+  const hs = document.getElementById('h-search'); if (hs) hs.value = '';
+  ['h-major','h-advisor','h-sport'].forEach(id => msSet(id, []));
   holdsApply();
 }
 function holdsSort(col) {
@@ -4588,84 +5064,24 @@ function holdsApply() {
   if (!currentHold) return;
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
   const gradIds = getGraduatingIdSet(); // graduating rows are not counted anywhere
-  const retOnly = document.getElementById('h-returning').value === 'returning';
-  const cls     = document.getElementById('h-class').value.toLowerCase();
-  const major   = document.getElementById('h-major').value;
-  const advisor = document.getElementById('h-advisor').value;
-  const sport   = document.getElementById('h-sport').value;
-  const team    = document.getElementById('h-team').value;
-  const q       = document.getElementById('h-search').value.toLowerCase();
   // Source: a single hold group, OR the deduped union for All Holds.
   const isAllHolds = currentHold === 'All Holds';
   const sourceStudents = isAllHolds
     ? getAllHoldsStudents()
     : (holdGroups[currentHold] || []);
   const activeStudents = sourceStudents.filter(r => !gradIds.has(r.id));
-  let rows = [...activeStudents];
-  if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
-  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
-  if (major)   rows=rows.filter(r=>r.major===major);
-  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
-  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
-  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
-  rows = applyFTFTFilter(rows, 'h-ftft');
-  rows = applyFlagFilter(rows, tagFilterValue('h-tags'));
-  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  rows = applySort(rows, hSort);
+  const steps = holdsSteps(nrIds);
+  let rows = applySort(runSteps(activeStudents, steps), hSort);
   const holdIdx = HOLD_DISPLAY.indexOf(currentHold);
   const chip = holdIdx>=0 ? HOLD_CHIPS[holdIdx] : 'chip-blue';
   const total = activeStudents.length;
 
   // Tony 2026-05-11: title shows a cascading breakdown of every active
   // filter, each annotated with the running count after applying it.
-  // Example: "Account — 27 Likely Returning, 8 Freshman, 3 CS Major".
-  // Falls back to "Account — 47 Students" when nothing is filtered.
+  // Example: "Account — 27 Likely Returning, 8 Freshman or Junior, 3 BAD".
   const segments = [];
   let working = activeStudents;
-  if (retOnly) {
-    working = working.filter(r => !nrIds.has(r.id));
-    segments.push(`${n(working.length)} Likely Returning`);
-  }
-  if (cls) {
-    working = working.filter(r => (r.classYear||'').toLowerCase().includes(cls));
-    const className = cls.charAt(0).toUpperCase() + cls.slice(1);
-    segments.push(`${n(working.length)} ${className}`);
-  }
-  if (major) {
-    working = working.filter(r => r.major === major);
-    segments.push(`${n(working.length)} ${major}`);
-  }
-  if (advisor) {
-    working = working.filter(r => r.advisor === advisor);
-    segments.push(`${n(working.length)} w/ ${advisor}`);
-  }
-  if (sport === 'Athletes Only') {
-    working = working.filter(r => (r.sports||[]).length > 0);
-    segments.push(`${n(working.length)} Athletes`);
-  } else if (sport === 'Non-Athletes Only') {
-    working = working.filter(r => !(r.sports||[]).length);
-    segments.push(`${n(working.length)} Non-Athletes`);
-  }
-  if (team) {
-    working = working.filter(r => (r.sports||[]).some(s => s === team));
-    segments.push(`${n(working.length)} on ${team}`);
-  }
-  const beforeFTFT = working.length;
-  working = applyFTFTFilter(working, 'h-ftft');
-  if (working.length !== beforeFTFT) {
-    const ftftMode = document.getElementById('h-ftft')?.value;
-    segments.push(`${n(working.length)} ${ftftMode === 'ftft' ? 'FTFT' : 'Non-FTFT'}`);
-  }
-  const tagState = tagFilterValue('h-tags');
-  if (tagState) {
-    working = applyFlagFilter(working, tagState);
-    segments.push(`${n(working.length)} tagged ${tagFilterLabel(tagState)}`);
-  }
-  if (q) {
-    working = working.filter(r => (r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-    segments.push(`${n(working.length)} matching "${q}"`);
-  }
+  steps.forEach(st => { working = working.filter(st.fn); segments.push(`${n(working.length)} ${st.label}`); });
   const titleEl = document.getElementById('h-title');
   const baseHead = `${currentHold} — ${n(total)} Students`;
   titleEl.innerHTML = segments.length
@@ -4725,25 +5141,8 @@ function crApply() {
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
   const gradIds = getGraduatingIdSet(); // graduating rows are not counted anywhere
   const retOnly = document.getElementById('cr-returning').value === 'returning';
-  const cls     = document.getElementById('cr-class').value.toLowerCase();
-  const major   = document.getElementById('cr-major').value;
-  const advisor = document.getElementById('cr-advisor').value;
-  const sport   = document.getElementById('cr-sport').value;
-  const team    = document.getElementById('cr-team').value;
-  const q       = document.getElementById('cr-search').value.toLowerCase();
   const activeCanReg = canRegisterStudents.filter(r => !gradIds.has(r.id));
-  let rows = [...activeCanReg];
-  if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
-  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
-  if (major)   rows=rows.filter(r=>r.major===major);
-  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
-  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
-  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
-  rows = applyFTFTFilter(rows, 'cr-ftft');
-  rows = applyFlagFilter(rows, tagFilterValue('cr-tags'));
-  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  rows=applySort(rows,crSort_);
+  let rows = applySort(runSteps(activeCanReg, crSteps(nrIds)), crSort_);
   const retCount = activeCanReg.filter(r=>!nrIds.has(r.id)).length;
   document.getElementById('cr-title').textContent = retOnly
     ? `${n(retCount)} Likely Returning — No Blocking Holds`
@@ -4803,16 +5202,7 @@ function renderRegistered() {
 
 function regApply() {
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
-  const cls     = document.getElementById('reg-class').value.toLowerCase();
-  const ptft    = (document.getElementById('reg-ptft')?.value || '').toUpperCase();
-  const q       = document.getElementById('reg-search').value.toLowerCase();
-  let rows = returningRegisteredList();
-  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
-  if (ptft)    rows=rows.filter(r=>(r.ptFt||'').toUpperCase() === ptft);
-  rows = applyFTFTFilter(rows, 'reg-ftft');
-  rows = applyFlagFilter(rows, tagFilterValue('reg-tags'));
-  if (q) rows=rows.filter(r=>(r.name+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  rows=applySort(rows,regSort_);
+  let rows = applySort(runSteps(returningRegisteredList(), regSteps()), regSort_);
   document.getElementById('reg-title').textContent = `${n(rows.length)} of ${n(returningRegisteredList().length)} Returning Students Registered`;
   const tbody=document.getElementById('reg-tbody');
   tbody.innerHTML = rows.length
@@ -4869,27 +5259,7 @@ function regApply() {
 function nsSort(col) { if(nsSort_.col===col)nsSort_.dir*=-1;else{nsSort_.col=col;nsSort_.dir=1;} nsApply(); }
 function nsApply() {
   const nrIds   = new Set(nrList.map(s=>s.id).filter(Boolean));
-  const retOnly = document.getElementById('ns-returning').value === 'returning';
-  const status  = document.getElementById('ns-status').value;
-  const cls     = document.getElementById('ns-class').value.toLowerCase();
-  const major   = document.getElementById('ns-major').value;
-  const advisor = document.getElementById('ns-advisor').value;
-  const sport   = document.getElementById('ns-sport').value;
-  const team    = document.getElementById('ns-team').value;
-  const q       = document.getElementById('ns-search').value.toLowerCase();
-  let rows = Object.values(newStudents);
-  if (retOnly) rows=rows.filter(r=>!nrIds.has(r.id));
-  if (status)  rows=rows.filter(r=>r.status===status);
-  if (cls)     rows=rows.filter(r=>(r.classYear||'').toLowerCase().includes(cls));
-  if (major)   rows=rows.filter(r=>r.major===major);
-  if (advisor) rows=rows.filter(r=>r.advisor===advisor);
-  if (sport==='Athletes Only')    rows=rows.filter(r=>(r.sports||[]).length>0);
-  if (sport==='Non-Athletes Only')rows=rows.filter(r=>!(r.sports||[]).length);
-  if (team)    rows=rows.filter(r=>(r.sports||[]).some(s=>s===team));
-  rows = applyFTFTFilter(rows, 'ns-ftft');
-  rows = applyFlagFilter(rows, tagFilterValue('ns-tags'));
-  if (q) rows=rows.filter(r=>(r.name+r.email+r.id+(r.lastName||'')).toLowerCase().includes(q));
-  rows=applySort(rows,nsSort_);
+  let rows = applySort(runSteps(Object.values(newStudents), nsSteps(nrIds)), nsSort_);
   const nsTotal = Object.keys(newStudents).length;
   document.getElementById('ns-title').textContent = rows.length !== nsTotal
     ? `${n(rows.length)} of ${n(nsTotal)} New Students`
@@ -5567,12 +5937,6 @@ function nrEffectiveStatus(r) {
 }
 
 function nrRender() {
-  const wf = document.getElementById('nr-filter-withdrawal').value;
-  const rf = document.getElementById('nr-filter-reason').value;
-  const cf = document.getElementById('nr-filter-class')?.value || '';
-  const sf = document.getElementById('nr-filter-sport')?.value || '';
-  const mf = document.getElementById('nr-filter-major')?.value || '';
-  const q  = document.getElementById('nr-search').value.toLowerCase();
   // Index FIRST so action buttons map back to the original nrList row, then
   // dedupe so a student doesn't appear twice (e.g. when both auto-import
   // and human-entered rows exist for the same ID — keep the better-filled one).
@@ -5582,33 +5946,9 @@ function nrRender() {
   // Refresh filter dropdown options every render so newly added values
   // (e.g., from a fresh CSV upload) become available immediately.
   nrPopulateAttributeFilters(indexed);
-  // Tony 2026-05-13: filter on EFFECTIVE status, not the raw r.withdrawal
-  // field. The row renderer auto-promotes a Pending row to "Registered"
-  // when isNRRegistered(r) is true (i.e., the student is on the NR list
-  // AND still enrolled). Without this match, clicking the "Registered for
-  // Courses" KPI set the dropdown to "Registered" but `r.withdrawal` for
-  // those rows was still "Pending" — so the filter returned 0. The
-  // computed status here mirrors `effectiveStatus` in nrRenderStaticRow.
-  if (wf) {
-    indexed = indexed.filter(r => nrEffectiveStatus(r) === wf);
-  }
-  if (rf) indexed=indexed.filter(r => (r.reason || '') === rf);
-  if (cf) indexed=indexed.filter(r => (r.classYear || '') === cf);
-  // Sport filter: special "(Non-Athlete)" sentinel matches rows with an
-  // empty sport field. Otherwise we compare against the row's normalized
-  // sport list so "Men's Track & Field" matches a row stored as
-  // "Men's Cross Country, Men's Outdoor Track and Field".
-  if (sf === '(Non-Athlete)') {
-    indexed = indexed.filter(r => !normalizeSportList(r.sport));
-  } else if (sf) {
-    indexed = indexed.filter(r =>
-      normalizeSportList(r.sport).split(',').map(s => s.trim()).includes(sf));
-  }
-  if (mf) indexed=indexed.filter(r => (r.major || '') === mf);
-  indexed = applyFTFTFilter(indexed, 'nr-filter-ftft');
-  indexed = applyFlagFilter(indexed, tagFilterValue('nr-filter-tags'));
-  if (q)  indexed=indexed.filter(r=>((r.name||'')+(r.firstName||'')+(r.lastName||'')+(r.id||'')).toLowerCase().includes(q));
-  indexed=applySort(indexed,nrSort_);
+  // Status filters on the EFFECTIVE status (nrEffectiveStatus), matching
+  // the row chip and KPI cards. See nrSteps for every filter.
+  indexed = applySort(runSteps(indexed, nrSteps()), nrSort_);
   // Visible-vs-total count next to the table title (Tony 2026-05-07 — makes
   // it obvious how aggressive the active filters are).
   const totalRows = dedupeNRForDisplay(nrList.map((r,i)=>({...r, _idx:i}))).filter(r => !r.id || !_nrNewIds.has(r.id)).length;
@@ -5861,8 +6201,9 @@ function overrideButtonsCell(id) {
 function nrBdClick(filterId, value) {
   const sel = document.getElementById(filterId);
   if (!sel) return;
-  // Coerce to string to compare with dropdown values which are always strings.
-  const newVal = sel.value === String(value) ? '' : String(value);
+  // Clicking a slice filters to just that value; clicking it again clears.
+  const cur = msVals(sel);
+  const newVal = (cur.length === 1 && cur[0] === String(value)) ? '' : String(value);
   // Ensure the value exists as an option — nrPopulateAttributeFilters
   // adds non-empty distinct values, but a freshly-rendered card might
   // race with the dropdown rebuild. Defensive add:
@@ -5871,7 +6212,7 @@ function nrBdClick(filterId, value) {
     opt.value = newVal; opt.textContent = newVal;
     sel.appendChild(opt);
   }
-  sel.value = newVal;
+  msSet(sel, newVal ? [newVal] : []);
   nrRender();
 }
 
@@ -6121,14 +6462,11 @@ function renderNRBreakdowns(indexed) {
 // selection if it still has matching rows; otherwise resets to "All ___".
 function nrPopulateAttributeFilters(rows) {
   const fillSelect = (selectId, allLabel, values, prepend = []) => {
-    const sel = document.getElementById(selectId);
-    if (!sel) return;
-    const cur = sel.value;
+    const escOpt = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
     const sorted = [...new Set(values.filter(Boolean))].sort((a,b) => a.localeCompare(b));
     const opts = [`<option value="">${allLabel}</option>`]
-      .concat(prepend.map(v => `<option ${cur===v?'selected':''}>${v}</option>`))
-      .concat(sorted.map(v => `<option ${cur===v?'selected':''}>${v}</option>`));
-    sel.innerHTML = opts.join('');
+      .concat([...prepend, ...sorted].map(v => `<option value="${escOpt(v)}">${escOpt(v)}</option>`));
+    msRepopulate(selectId, opts.join(''));
   };
   fillSelect('nr-filter-class', 'All Classes', rows.map(r => r.classYear));
   // Sport filter: build from the NORMALIZED sport list so the dropdown
@@ -6847,8 +7185,7 @@ function goToFilteredTab(tab, ftftValue, useAllHolds) {
     'new':          'ns-ftft',
     'notreturning': 'nr-filter-ftft',
   };
-  const sel = document.getElementById(filterIdMap[tab]);
-  if (sel) sel.value = ftftValue || '';
+  msSet(filterIdMap[tab], ftftValue ? [ftftValue] : []);
   // Donut counts ignore tags, so drop any tag filter left from a prior visit.
   const tagIdMap = { registered: 'reg-tags', holds: 'h-tags', canreg: 'cr-tags', new: 'ns-tags', notreturning: 'nr-filter-tags' };
   clearTagFilter(tagIdMap[tab], false);
@@ -6869,18 +7206,15 @@ function goToFilteredTab(tab, ftftValue, useAllHolds) {
 // (class, major, search, etc.) are preserved so the user can drill in
 // from an existing slice.
 function nsFilterByStatus(status) {
-  const sel = document.getElementById('ns-status');
-  if (sel) sel.value = status || '';
+  msSet('ns-status', status || '');
   if (typeof nsApply === 'function') nsApply();
 }
 function ftftFilterByStatus(status) {
-  const sel = document.getElementById('ftft-status');
-  if (sel) sel.value = status || '';
+  msSet('ftft-status', status || '');
   if (typeof ftftApply === 'function') ftftApply();
 }
 function nrFilterByWithdrawal(status) {
-  const sel = document.getElementById('nr-filter-withdrawal');
-  if (sel) sel.value = status || '';
+  msSet('nr-filter-withdrawal', status || '');
   if (typeof nrRender === 'function') nrRender();
 }
 
@@ -6888,22 +7222,20 @@ function nrFilterByWithdrawal(status) {
 // reasons currently in nrList so a user can filter to "show me everyone who said
 // 'Lost dorm room'" even though it's not a canonical category.
 function nrPopulateReasonFilter() {
-  const sel = document.getElementById('nr-filter-reason');
-  if (!sel) return;
-  const current = sel.value;
   const customSet = new Set();
   nrList.forEach(r => {
     if (r.reason && !NR_REASONS.includes(r.reason)) customSet.add(r.reason);
   });
   const customs = [...customSet].sort();
+  const escOpt = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   let opts = '<option value="">All Reasons</option>' +
-    NR_REASONS.map(r => `<option ${current===r?'selected':''}>${r}</option>`).join('');
+    NR_REASONS.map(r => `<option value="${escOpt(r)}">${escOpt(r)}</option>`).join('');
   if (customs.length) {
     opts += '<optgroup label="Custom reasons">' +
-      customs.map(r => `<option ${current===r?'selected':''}>${r}</option>`).join('') +
+      customs.map(r => `<option value="${escOpt(r)}">${escOpt(r)}</option>`).join('') +
       '</optgroup>';
   }
-  sel.innerHTML = opts;
+  msRepopulate('nr-filter-reason', opts);
 }
 
 // Add-row form: when "Other" is picked, swap a text input in next to the dropdown
@@ -7739,18 +8071,20 @@ async function loadHostedDashboardData() {
   // A missing table is non-fatal — badges just don't show.
   {
     const flRes = await fetchAllRows(() => {
-      let q = sb.from('student_flags').select('id, student_id, flag, term_id').order('id');
+      let q = sb.from('student_flags').select('id, student_id, flag, term_id, risk_score').order('id');
       return currentTermIdForCohort
         ? q.or(`term_id.is.null,term_id.eq.${currentTermIdForCohort}`)
         : q.is('term_id', null);
     });
     studentFlags = new Map();
+    studentFlagScores = new Map();
     if (flRes.error) {
       console.warn('student_flags fetch failed (non-fatal):', flRes.error.message);
     } else {
       flRes.data.forEach(r => {
         if (!studentFlags.has(r.student_id)) studentFlags.set(r.student_id, new Set());
         studentFlags.get(r.student_id).add(r.flag);
+        if (FLAG_DEFS[r.flag]?.scored) studentFlagScores.set(`${r.student_id}|${r.flag}`, Number(r.risk_score) || 1);
       });
     }
   }
@@ -8757,6 +9091,7 @@ loadNRList();
 loadIgnoredWithdrawals();
 loadTermSettings();
 loadFTFTIds();
+msInitAll(); // turn every filter <select> into a checklist dropdown before anything populates them
 nrPopulateAddReason();
 nrPopulateReasonFilter();
 populateTagFilters();
