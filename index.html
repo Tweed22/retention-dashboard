@@ -309,6 +309,15 @@ body.dark .ms-row input { accent-color: #4a7fc4; }
 body.dark .ms-group { color: #8a8a8a; }
 body.dark .ms-sep, body.dark .ms-foot { border-color: #353535; }
 body.dark .ms-link { color: #93c5fd; }
+/* Filter bar inside the table card, between the title bar and the column
+   headings, so it reads as "filters for this table". */
+.table-wrap > .filter-row { margin: 0 !important; padding: 9px 15px; border-bottom: 1px solid #e8eaf0; background: #fafbfc; }
+.table-wrap > #co-bulk { margin: 0 !important; padding: 8px 15px; border-bottom: 1px solid #e8eaf0; }
+body.dark .table-wrap > .filter-row { background: #222222; border-bottom-color: #353535; }
+body.dark .table-wrap > #co-bulk { border-bottom-color: #353535; }
+/* Dropdown panels are positioned with JS (position: fixed) so the table
+   card's overflow:hidden can't clip them. */
+.ms-pop.ms-floating { position: fixed; }
 /* Row-selection checkboxes (Cohort tab etc.) share the accent. */
 input[type="checkbox"], input[type="radio"] { accent-color: #2563eb; }
 body.dark input[type="checkbox"], body.dark input[type="radio"] { accent-color: #4a7fc4; color-scheme: dark; }
@@ -1183,14 +1192,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="registered-empty" class="empty-state"><p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your CSV files</a> to see registered returning students.</p></div>
   <div id="registered-content" style="display:none;">
     <div class="section-label">Returning students with at least one enrollment</div>
-    <div class="filter-row">
-      <span class="filter-label">Filter:</span>
-      <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
-      <select class="filter-select" id="reg-ptft" onchange="regApply()" title="Filter by Part-Time vs Full-Time enrollment status"><option value="">All Enrollment</option><option value="F">Full-Time</option><option value="P">Part-Time</option></select>
-      <select class="filter-select" id="reg-ftft" onchange="regApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
-      <span class="tag-filter" id="reg-tags" data-apply="regApply"></span>
-      <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
-    </div>
     <div class="table-wrap">
       <div class="table-header-row">
         <h3 id="reg-title">—</h3>
@@ -1199,6 +1200,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
           <button class="export-btn export-btn-all" onclick="exportTabCSV('registered','all')" title="Download every returning registered student, ignoring filters">Download all (.csv)</button>
         </div>
       </div>
+      <div class="filter-row">
+      <span class="filter-label">Filter:</span>
+      <select class="filter-select" id="reg-class" onchange="regApply()"><option value="">All Classes</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+      <select class="filter-select" id="reg-ptft" onchange="regApply()" title="Filter by Part-Time vs Full-Time enrollment status"><option value="">All Enrollment</option><option value="F">Full-Time</option><option value="P">Part-Time</option></select>
+      <select class="filter-select" id="reg-ftft" onchange="regApply()" title="Filter by First-Time Full-Time roster status"><option value="">All Cohorts</option><option value="ftft">FTFT only</option><option value="non-ftft">Non-FTFT only</option></select>
+      <span class="tag-filter" id="reg-tags" data-apply="regApply"></span>
+      <input class="table-search" type="text" id="reg-search" placeholder="Search name or ID…" oninput="regApply()" />
+    </div>
+
       <table><thead><tr>
         <th class="sortable" onclick="regSort('id')">Student ID</th>
         <th class="sortable" onclick="regSort('lastName')">Name</th>
@@ -1219,7 +1229,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="holds-content" style="display:none;">
     <div class="section-label">Returning Unregistered — Students may appear in multiple hold groups · Click a hold type to filter the table</div>
     <div class="hold-grid" id="hold-cards-container"></div>
-    <div class="filter-row">
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="h-title">Select a hold type above</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('holds','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('holds','all')" title="Download every student in this hold type, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="h-returning" onchange="holdsApply()" style="font-weight:600;">
         <option value="returning">Returning Only</option>
@@ -1234,14 +1252,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span class="tag-filter" id="h-tags" data-apply="holdsApply"></span>
       <input class="table-search" type="text" id="h-search" placeholder="Search name, email, ID…" oninput="holdsApply()" />
     </div>
-    <div class="table-wrap">
-      <div class="table-header-row">
-        <h3 id="h-title">Select a hold type above</h3>
-        <div class="export-cluster">
-          <button class="export-btn" onclick="exportTabCSV('holds','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
-          <button class="export-btn export-btn-all" onclick="exportTabCSV('holds','all')" title="Download every student in this hold type, ignoring filters">Download all (.csv)</button>
-        </div>
-      </div>
+
       <table><thead><tr>
         <th class="sortable" onclick="holdsSort('id')">Student ID</th>
         <th class="sortable" onclick="holdsSort('lastName')">Last Name</th>
@@ -1264,7 +1275,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <div id="canreg-empty" class="empty-state"><p>No data loaded yet.<br><a onclick="toggleUploadPanel()">Upload your CSV files</a> to see students who can register.</p></div>
   <div id="canreg-content" style="display:none;">
     <div class="section-label">Returning students with no blocking holds who have not yet enrolled</div>
-    <div class="filter-row">
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="cr-title">—</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('canreg','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('canreg','all')" title="Download every Can-Register student, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="cr-returning" onchange="crApply()" style="font-weight:600;">
         <option value="returning">Returning Only</option>
@@ -1279,14 +1298,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span class="tag-filter" id="cr-tags" data-apply="crApply"></span>
       <input class="table-search" type="text" id="cr-search" placeholder="Search name, email, ID…" oninput="crApply()" />
     </div>
-    <div class="table-wrap">
-      <div class="table-header-row">
-        <h3 id="cr-title">—</h3>
-        <div class="export-cluster">
-          <button class="export-btn" onclick="exportTabCSV('canreg','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
-          <button class="export-btn export-btn-all" onclick="exportTabCSV('canreg','all')" title="Download every Can-Register student, ignoring filters">Download all (.csv)</button>
-        </div>
-      </div>
+
       <table><thead><tr>
         <th class="sortable" onclick="crSort('id')">Student ID</th>
         <th class="sortable" onclick="crSort('lastName')">Last Name</th>
@@ -1315,7 +1327,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card red kpi-clickable" onclick="nsFilterByStatus('Withdrawn')" title="Click to filter to Withdrawn new students"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="ns-withdrawn">—</div><div class="kpi-sub">Formally withdrew before attendance (NW)</div></div>
     </div>
     <p style="font-size:11px;color:#888;font-style:italic;margin-bottom:14px;">New students are excluded from the returning registration rate on the Summary page.</p>
-    <div class="filter-row">
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="ns-title">—</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('newstudents','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('newstudents','all')" title="Download every new student, ignoring filters">Download all (.csv)</button>
+        </div>
+      </div>
+      <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="ns-returning" onchange="nsApply()" style="font-weight:600;">
         <option value="returning">Returning Only</option>
@@ -1331,14 +1351,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span class="tag-filter" id="ns-tags" data-apply="nsApply"></span>
       <input class="table-search" type="text" id="ns-search" placeholder="Search name, email, ID…" oninput="nsApply()" />
     </div>
-    <div class="table-wrap">
-      <div class="table-header-row">
-        <h3 id="ns-title">—</h3>
-        <div class="export-cluster">
-          <button class="export-btn" onclick="exportTabCSV('newstudents','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
-          <button class="export-btn export-btn-all" onclick="exportTabCSV('newstudents','all')" title="Download every new student, ignoring filters">Download all (.csv)</button>
-        </div>
-      </div>
+
       <table><thead><tr>
         <th class="sortable" onclick="nsSort('id')">Student ID</th>
         <th class="sortable" onclick="nsSort('lastName')">Last Name</th>
@@ -1368,7 +1381,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card amber kpi-clickable" onclick="ftftFilterByStatus('Not Returning')" title="Click to filter to FTFT students on the Not Returning list"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="ftft-nr">0</div><div class="kpi-sub">Explicitly on the NR list this semester</div></div>
     </div>
     <div class="section-label">First-Time Full-Time Roster</div>
-    <div class="filter-row">
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="ftft-title">FTFT Students</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('ftft','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('ftft','all')" title="Download every FTFT student">Download all (.csv)</button>
+        </div>
+      </div>
+      <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="ftft-status" onchange="ftftApply()">
         <option value="">All Statuses</option>
@@ -1381,14 +1402,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span class="tag-filter" id="ftft-tags" data-apply="ftftApply"></span>
       <input class="table-search" type="text" id="ftft-search" placeholder="Search name or ID…" oninput="ftftApply()" />
     </div>
-    <div class="table-wrap">
-      <div class="table-header-row">
-        <h3 id="ftft-title">FTFT Students</h3>
-        <div class="export-cluster">
-          <button class="export-btn" onclick="exportTabCSV('ftft','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
-          <button class="export-btn export-btn-all" onclick="exportTabCSV('ftft','all')" title="Download every FTFT student">Download all (.csv)</button>
-        </div>
-      </div>
+
       <table><thead><tr>
         <th class="sortable" onclick="ftftSort('id')">Student ID</th>
         <th class="sortable" onclick="ftftSort('lastName')">Last Name</th>
@@ -1418,7 +1432,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     </div>
     <div id="co-hs-toggle" style="display:none;margin-bottom:12px;font-size:12px;color:#555;"></div>
     <div class="section-label" id="co-section-label">Term Cohort</div>
-    <div class="filter-row">
+    <div class="table-wrap">
+      <div class="table-header-row">
+        <h3 id="co-title">Cohort Students</h3>
+        <div class="export-cluster">
+          <button class="export-btn" onclick="exportTabCSV('cohort','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+          <button class="export-btn export-btn-all" onclick="exportTabCSV('cohort','all')" title="Download every cohort student">Download all (.csv)</button>
+        </div>
+      </div>
+      <div class="filter-row">
       <span class="filter-label">Filter:</span>
       <select class="filter-select" id="co-status" onchange="cohortApply()">
         <option value="">All Statuses</option>
@@ -1453,14 +1475,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
         <button class="nr-row-btn" onclick="setCohortOverride(null)" title="Remove the override and use the reports again">Clear override</button>
       </span>
     </div>
-    <div class="table-wrap">
-      <div class="table-header-row">
-        <h3 id="co-title">Cohort Students</h3>
-        <div class="export-cluster">
-          <button class="export-btn" onclick="exportTabCSV('cohort','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
-          <button class="export-btn export-btn-all" onclick="exportTabCSV('cohort','all')" title="Download every cohort student">Download all (.csv)</button>
-        </div>
-      </div>
+
       <table><thead><tr>
         <th style="width:28px;"><input type="checkbox" id="co-select-all" onchange="cohortSelectAll(this.checked)" title="Select all shown" /></th>
         <th class="sortable" onclick="cohortSort('id')">Student ID</th>
@@ -1511,7 +1526,15 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   </div>
 
   <!-- ── Filters + table ── -->
-  <div class="filter-row" style="margin-bottom:10px;">
+  <div class="table-wrap">
+    <div class="table-header-row">
+      <h3>Not Returning Students</h3>
+      <div class="export-cluster">
+        <button class="export-btn" onclick="exportTabCSV('notreturning','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
+        <button class="export-btn export-btn-all" onclick="exportTabCSV('notreturning','all')" title="Download the entire Not Returning list">Download all (.csv)</button>
+      </div>
+    </div>
+      <div class="filter-row" style="margin-bottom:10px;">
     <span class="filter-label">Filter:</span>
     <select class="filter-select" id="nr-filter-withdrawal" onchange="nrRender()"><option value="">All Statuses</option><option>Pending</option><option>Withdrawn</option><option>Registered</option></select>
     <select class="filter-select" id="nr-filter-reason" onchange="nrRender()">
@@ -1530,14 +1553,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span class="tag-filter" id="nr-filter-tags" data-apply="nrRender"></span>
     <input class="table-search" type="text" id="nr-search" placeholder="Search name or ID…" oninput="nrRender()" style="width:180px;" />
   </div>
-  <div class="table-wrap">
-    <div class="table-header-row">
-      <h3>Not Returning Students</h3>
-      <div class="export-cluster">
-        <button class="export-btn" onclick="exportTabCSV('notreturning','visible')" title="Download the rows currently shown (filters + sort applied)">Download visible (.csv)</button>
-        <button class="export-btn export-btn-all" onclick="exportTabCSV('notreturning','all')" title="Download the entire Not Returning list">Download all (.csv)</button>
-      </div>
-    </div>
+
     <table><thead><tr>
       <th class="sortable" onclick="nrSort('id')">Student ID</th>
       <th class="sortable" onclick="nrSort('lastName')">Last Name</th>
@@ -2111,11 +2127,17 @@ function toggleTagFilter(id, ev) {
   const opening = pop.style.display === 'none';
   msCloseAll(pop);
   pop.style.display = opening ? 'block' : 'none';
+  if (opening) msPlace(document.querySelector(`#${id} .tag-filter-btn`), pop);
 }
-// Close any open filter dropdown when clicking elsewhere on the page.
+// Close any open filter dropdown when clicking elsewhere on the page, and on
+// page scroll or resize (the panels float, so they'd drift from their button).
 document.addEventListener('click', e => {
   if (!e.target.closest('.ms-wrap, span.tag-filter')) msCloseAll(null);
 });
+window.addEventListener('scroll', e => {
+  if (e.target === document || e.target === document.documentElement) msCloseAll(null);
+}, true);
+window.addEventListener('resize', () => msCloseAll(null));
 
 // Processed data
 let returningStudents   = {}; // id -> student obj
@@ -4816,6 +4838,24 @@ function msRefresh(x) {
   m.btn.classList.toggle('ms-active', picked.length > 0);
   m.btn.title = picked.length > 1 ? picked.map(o => o.textContent.trim()).join(', ') : (sel.title || '');
 }
+// Float a dropdown panel just under its button. position: fixed escapes the
+// table card's overflow:hidden; on phones it spans the screen width.
+function msPlace(btn, pop) {
+  const r = btn.getBoundingClientRect();
+  pop.classList.add('ms-floating');
+  pop.style.top = `${Math.round(r.bottom + 4)}px`;
+  if (window.innerWidth <= 640) {
+    pop.style.left = '16px';
+    pop.style.width = `${window.innerWidth - 32}px`;
+    return;
+  }
+  pop.style.width = '';
+  const w = Math.max(pop.offsetWidth, 200);
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - w - 8)))}px`;
+  // Not enough room below? open upward instead.
+  const h = pop.offsetHeight;
+  if (r.bottom + 4 + h > window.innerHeight && r.top - 4 - h > 0) pop.style.top = `${Math.round(r.top - 4 - h)}px`;
+}
 function msCloseAll(except) {
   document.querySelectorAll('.ms-pop, .tag-filter-pop').forEach(p => { if (p !== except) p.style.display = 'none'; });
 }
@@ -4826,6 +4866,7 @@ function msToggle(sel) {
   if (!opening) { m.pop.style.display = 'none'; return; }
   msRenderPop(sel);
   m.pop.style.display = 'block';
+  msPlace(m.btn, m.pop);
   m.pop.querySelector('.ms-search')?.focus();
 }
 function msRenderPop(sel) {
