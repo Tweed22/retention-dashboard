@@ -318,6 +318,13 @@ body.dark .table-wrap > #co-bulk { border-bottom-color: #353535; }
 /* Dropdown panels are positioned with JS (position: fixed) so the table
    card's overflow:hidden can't clip them. */
 .ms-pop.ms-floating { position: fixed; }
+/* Unaccounted count beside the Returning Student Status title. */
+.unacc-pill { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: middle; background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+.unacc-pill-alert { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; cursor: pointer; }
+.unacc-pill-alert:hover { background: #fecaca; }
+body.dark .unacc-pill { background: #2a2a2a; color: #9a9a9a; border-color: #3a3a3a; }
+body.dark .unacc-pill-alert { background: #3d1c1c; color: #f5a3a3; border-color: #6b2b2b; }
+body.dark .unacc-pill-alert:hover { background: #4a2222; }
 /* Row-selection checkboxes (Cohort tab etc.) share the accent. */
 input[type="checkbox"], input[type="radio"] { accent-color: #2563eb; }
 body.dark input[type="checkbox"], body.dark input[type="radio"] { accent-color: #4a7fc4; color-scheme: dark; }
@@ -1161,7 +1168,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
     </div>
     <div class="charts-row" id="status-cards-row" style="grid-template-columns: 1fr 1fr;">
       <div class="card">
-        <div class="card-title">Returning Student Status</div>
+        <div class="card-title">Returning Student Status <span id="unacc-badge"></span></div>
         <div class="card-subtitle">Registered · Has Blocking Hold · Can Register — Each segment of the returning population at a glance</div>
         <div id="returning-donuts-grid" class="returning-donuts-grid"></div>
       </div>
@@ -3341,10 +3348,16 @@ function renderReturningDonuts(stats) {
       subtitle:`${n(stats.partTimeCount)} PT · ${n(stats.dualCreditCount)} dual credit, on no report`,
       onclick: "goToCohortPage('Part-Time|Dual Credit')" });
   }
-  if (isCohort) {
-    segments.push({ label:'Unaccounted', count: stats.unaccounted, color:'#7c3aed',
-      subtitle:'In cohort, on no report or list',
-      onclick: "goToCohortPage('Unaccounted')" });
+  // Unaccounted is a count beside the card title, not a donut (Tony
+  // 2026-10-22): red and clickable when any cohort student can't be placed,
+  // muted at 0. Cohort mode only — roster mode has no such bucket.
+  const badge = document.getElementById('unacc-badge');
+  if (badge) {
+    const u = stats.unaccounted;
+    badge.innerHTML = !isCohort ? ''
+      : u > 0
+        ? `<span class="unacc-pill unacc-pill-alert" role="button" tabindex="0" onclick="goToCohortPage('Unaccounted')" onkeydown="if(event.key==='Enter')goToCohortPage('Unaccounted')" title="Cohort students on no report or list — click to see them">${n(u)} unaccounted</span>`
+        : `<span class="unacc-pill" title="Every cohort student is on a report or list">0 unaccounted</span>`;
   }
   container.style.gridTemplateColumns = `repeat(${segments.length}, 1fr)`;
   container.innerHTML = segments.map(seg => svgSegmentDonut({
@@ -4080,7 +4093,7 @@ function renderReasonsChart() {
   });
   const entries = Object.entries(tally).sort((a,b) => b[1] - a[1]);
   if (!entries.length) {
-    container.innerHTML = '<div class="reasons-chart-empty">No Not Returning entries yet — add students on the Not Returning page to see the breakdown.</div>';
+    container.innerHTML = '<div class="reasons-chart-empty">No Not Returning entries yet — mark students Not Returning on the Cohort tab to see the breakdown.</div>';
     return;
   }
   const max = entries[0][1];
