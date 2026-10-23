@@ -3602,7 +3602,7 @@ async function backfillRecentHistoryToToday() {
     }
   }
   console.log(`Backfill done — ${updated} updated, ${failed} failed.`);
-  if (updated) renderTrendChart();
+  if (updated) { termHistoryCache = null; renderTrendChart(); }
   return { updated, failed };
 }
 // Expose on window so the function is reachable from the console.
@@ -3677,6 +3677,10 @@ function getNextTermLabel() {
 // The current term's chart goes above the Reasons chart; historical terms
 // go below. "Current" = whichever term_label matches getNextTermLabel()
 // based on termSettings.currentName.
+// term_history only changes on upload, but renderSummary runs after every
+// NR edit, tag click, etc. Cache it; loadHostedDashboardData and the upload
+// path clear the cache so fresh rows are fetched when they can have changed.
+let termHistoryCache = null;
 async function renderTrendChart() {
   const currentEl = document.getElementById('trend-current-container');
   const historicalEl = document.getElementById('trend-historical-container');
@@ -3686,10 +3690,16 @@ async function renderTrendChart() {
     historicalEl.innerHTML = '<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">Trend charts only available in hosted mode.</div></div>';
     return;
   }
-  const { data, error } = await sb
-    .from('term_history')
-    .select('snapshot_date, term_label, registered_count, holds_count, registration_rate, nr_rate')
-    .order('snapshot_date', { ascending: true });
+  if (!termHistoryCache) {
+    // Cache the in-flight request (a real Promise — awaiting a Supabase query
+    // builder twice would send it twice), so overlapping renders share it.
+    termHistoryCache = Promise.resolve(sb
+      .from('term_history')
+      .select('snapshot_date, term_label, registered_count, holds_count, registration_rate, nr_rate')
+      .order('snapshot_date', { ascending: true }));
+  }
+  const { data, error } = await termHistoryCache;
+  if (error) termHistoryCache = null; // retry next time
   if (error) {
     currentEl.innerHTML = '';
     historicalEl.innerHTML = `<div class="card"><div style="color:#888;font-size:12px;padding:18px;text-align:center;">Could not load history: ${error.message}</div></div>`;
@@ -7564,7 +7574,7 @@ async function refreshAuthState(session) {
       } else {
         userRole = lookup.data.role || 'member';
         userDisplay = lookup.data.display_name || session.user.email;
-        await _aspLoadSchedUrl();
+        _aspLoadSchedUrl(); // not awaited: only the app switcher needs it, so don't hold up the data load
         initAppSwitcher(rows || []);
       }
     }
@@ -7726,6 +7736,7 @@ async function loadHostedDashboardData() {
     if (s) s.textContent = msg;
   };
   setStatus('Loading from database…');
+  termHistoryCache = null;
   const data = await fetchDashboardData();
   if (!data) {
     setStatus('Failed to load from database. Check your connection or RLS policies.');
@@ -8010,13 +8021,25 @@ async function loadHostedDashboardData() {
   // Term cohort (student listing) for the CURRENT term. A cohort uploaded in
   // this session stays authoritative over the DB copy (same guard as FTFT),
   // and a missing/blocked table falls back to roster mode rather than failing.
+  // Cohort and student flags only depend on the current term id, so fetch
+  // them together — one network round trip instead of two in a row.
+  const [coRes, flRes] = await Promise.all([
+    (!fileProvided('cohort') && currentTermIdForCohort)
+      ? fetchAllRows(() => sb.from('term_cohort')
+          .select('student_id, first_name, last_name, class_cde, major, div_cde, hrs_enrolled, pt_ft_sts, status_override')
+          .eq('term_id', currentTermIdForCohort)
+          .order('student_id'))
+      : Promise.resolve(null),
+    fetchAllRows(() => {
+      const q = sb.from('student_flags').select('id, student_id, flag, term_id, risk_score').order('id');
+      return currentTermIdForCohort
+        ? q.or(`term_id.is.null,term_id.eq.${currentTermIdForCohort}`)
+        : q.is('term_id', null);
+    }),
+  ]);
   if (!fileProvided('cohort')) {
     termCohort = new Map();
-    if (currentTermIdForCohort) {
-      const coRes = await fetchAllRows(() => sb.from('term_cohort')
-        .select('student_id, first_name, last_name, class_cde, major, div_cde, hrs_enrolled, pt_ft_sts, status_override')
-        .eq('term_id', currentTermIdForCohort)
-        .order('student_id'));
+    if (coRes) {
       if (coRes.error) {
         console.warn('term_cohort fetch failed (non-fatal, using roster mode):', coRes.error.message);
       } else {
@@ -8040,12 +8063,6 @@ async function loadHostedDashboardData() {
   // Student flags: sticky ones (term_id null) plus this term's per-term ones.
   // A missing table is non-fatal — badges just don't show.
   {
-    const flRes = await fetchAllRows(() => {
-      let q = sb.from('student_flags').select('id, student_id, flag, term_id, risk_score').order('id');
-      return currentTermIdForCohort
-        ? q.or(`term_id.is.null,term_id.eq.${currentTermIdForCohort}`)
-        : q.is('term_id', null);
-    });
     studentFlags = new Map();
     studentFlagScores = new Map();
     if (flRes.error) {
@@ -8309,7 +8326,8 @@ async function pushDataToSupabase() {
       // as the persistence rate. Tony 2026-05-13.
       const nrRateSnap = pct1(statsSnap.nrInCohort, statsSnap.eligible);
       const today = todayLocalISO();
-      const histRes = await sb.from('term_history').upsert({
+      termHistoryCache = null;
+    const histRes = await sb.from('term_history').upsert({
         snapshot_date: today,
         term_label: termLabel,
         registered_count: returningRegistered,
@@ -9033,7 +9051,15 @@ if (HOSTED) {
       try { await sb.auth.setSession({ access_token: _at, refresh_token: _rt }); } catch {}
     } else {
       const shared = _wwuReadSession();
-      if (shared) try { await sb.auth.setSession(shared); } catch {}
+      if (shared) {
+        // setSession() verifies the token with a network call. Skip it when
+        // this browser already holds the same session (the usual case — this
+        // app writes the cookie itself on every auth change).
+        const { data: { session: local } } = await sb.auth.getSession();
+        if (!local || local.refresh_token !== shared.refresh_token) {
+          try { await sb.auth.setSession(shared); } catch {}
+        }
+      }
     }
     // Wait for the auth state, then load. onAuthStateChange fires once
     // immediately with INITIAL_SESSION, so we don't need a separate getSession().
