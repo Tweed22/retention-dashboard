@@ -864,6 +864,17 @@ body.dark .theme-toggle:hover { background: rgba(255,255,255,0.24); }
    body class flips and the gate disappears. */
 .auth-gate { display: none; position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; padding: 20px; background: rgba(8,14,26,0.78); backdrop-filter: blur(6px); }
 body.auth-anon .auth-gate { display: flex; }
+/* While the saved session is still being checked on page load, the gate
+   shows only "Checking your sign-in…" — the sign-in form appears only once
+   we know the visitor is actually signed out. */
+/* (The message box's class must differ from the body's state class — a shared
+   name would put display:none on <body> itself.) */
+.auth-checking-msg { display: none; align-items: center; gap: 10px; padding: 12px 0 4px; color: #5a6b63; font-size: 14px; }
+body.auth-checking .auth-checking-msg { display: flex; }
+body.auth-checking .auth-gate-card > :not(h2):not(.auth-checking-msg) { display: none !important; }
+.auth-spinner { width: 18px; height: 18px; flex: none; border: 2px solid #cfd8d3; border-top-color: #00563f; border-radius: 50%; animation: auth-spin 0.8s linear infinite; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .auth-spinner { animation-duration: 2.4s; } }
 body.auth-anon .header,
 body.auth-anon .nav,
 body.auth-anon .page,
@@ -974,6 +985,9 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="auth-gate anon-only" id="auth-gate">
   <div class="auth-gate-card">
     <h2>Registration Dashboard</h2>
+    <div class="auth-checking-msg" id="auth-checking" role="status" aria-live="polite">
+      <span class="auth-spinner" aria-hidden="true"></span><span>Checking your sign-in…</span>
+    </div>
 
     <!-- Step 1: email -->
     <div id="auth-gate-step-email">
@@ -1468,6 +1482,8 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <span>— tag:</span>
       <span id="co-flag-buttons" style="display:inline-flex;gap:8px;flex-wrap:wrap;"></span>
       <button class="nr-row-btn" onclick="clearStudentFlags()" title="Remove every tag from the selected students">Remove tags</button>
+      <span>·</span>
+      <button class="nr-row-btn nr-row-btn-danger" onclick="markCohortNotReturning()" title="Add the selected students to the Not Returning list as Pending (set the reason on the Not Returning tab)">Mark Not Returning</button>
       <span class="admin-only" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span>· mark as:</span>
         <button class="nr-row-btn" onclick="setCohortOverride('graduating')" title="Exclude from every number, like a Graduating tag">Graduating</button>
@@ -1505,25 +1521,6 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
   <!-- ── Breakdown cards (Class · Sport · Major · Reason) ── -->
   <div class="section-label">Breakdown <span style="color:#888;text-transform:none;letter-spacing:0;font-weight:400;font-size:10px;">— excludes students with reason: Graduating</span></div>
   <div class="nr-breakdown-grid" id="nr-breakdowns"></div>
-
-  <!-- ── Inline add row ── -->
-  <div id="nr-dup-warn" class="alert-box alert-warn" style="display:none;"></div>
-  <div class="nr-add-row">
-    <div class="nr-field sm"><label>Student ID</label><input type="text" id="nr-f-id" placeholder="e.g. 1001423" /></div>
-    <div class="nr-field wide"><label>Name</label><input type="text" id="nr-f-name" placeholder="Last, First or First Last" oninput="nrNameInputAutofill()" /></div>
-    <div class="nr-field med"><label>Major</label><input type="text" id="nr-f-major" placeholder="e.g. Psychology" /></div>
-    <div class="nr-field med">
-      <label>Reason</label>
-      <select id="nr-f-reason" onchange="nrAddReasonChange()"></select>
-      <input type="text" id="nr-f-reason-other" placeholder="Type a custom reason" style="display:none;margin-top:4px;border:1px solid #dde1ea;border-radius:6px;padding:6px 9px;font-size:12px;height:32px;outline:none;" />
-    </div>
-    <div class="nr-field med">
-      <label>Withdrawal</label>
-      <select id="nr-f-withdrawal"><option value="Pending">Pending</option><option value="Withdrawn">Withdrawn</option><option value="Registered">Registered</option></select>
-    </div>
-    <div class="nr-field wide"><label>Notes</label><input type="text" id="nr-f-notes" placeholder="Optional notes" /></div>
-    <button class="nr-add-btn" onclick="nrAdd()">+ Add Row</button>
-  </div>
 
   <!-- ── Filters + table ── -->
   <div class="table-wrap">
@@ -4662,6 +4659,55 @@ async function setStudentFlag(flag, on) {
   renderAll(); // the Tags column appears on every tab
 }
 
+// Cohort tab → Not Returning list. Replaces the old add-row form on the Not
+// Returning tab (Tony 2026-10-22). Rows start as Pending with no reason; the
+// committee sets the reason inline on the Not Returning tab.
+async function markCohortNotReturning() {
+  if (!isCommittee()) return;
+  const ids = [...cohortSelected];
+  if (!ids.length) { alert('Tick one or more students first.'); return; }
+  const onList = new Set(getDedupedNRList().map(r => r.id).filter(Boolean));
+  const toAdd = ids.filter(id => !onList.has(id));
+  const already = ids.length - toAdd.length;
+  if (!toAdd.length) { alert('Everyone selected is already on the Not Returning list.'); return; }
+  if (!confirm(`Add ${n(toAdd.length)} student${toAdd.length === 1 ? '' : 's'} to the Not Returning list as Pending?` +
+      (already ? `\n\n${n(already)} already on the list will be skipped.` : '') +
+      `\n\nSet the reason on the Not Returning tab.`)) return;
+  const recs = toAdd.map(id => {
+    const c = termCohort.get(id) || {};
+    const live = registeredStudents[id] || returningStudents[id] || newStudents[id] || {};
+    const firstName = c.firstName || live.firstName || '';
+    const lastName  = c.lastName  || live.lastName  || '';
+    return {
+      id, firstName, lastName,
+      name: [firstName, lastName].filter(Boolean).join(' ') || live.name || c.name || '',
+      email: live.email || '', major: c.major || live.major || '', advisor: live.advisor || '',
+      sport: (live.sports || []).join(', '),
+      classYear: normalizeClassYear(c.classYear || live.classYear || ''),
+      isRegistered: registeredIds.has(id),
+      reason: '', notes: '', withdrawal: 'Pending', dateAdded: todayLocalISO(),
+      _updatedAt: new Date().toISOString(),
+    };
+  });
+  if (HOSTED && sb) {
+    const { data, error } = await sb.from('not_returning_reports').insert(recs.map(r => ({
+      student_id: r.id, student_name: r.name, reason: '', withdrawal_status: 'Pending', notes: '',
+      sport: r.sport || null, major: r.major || null, class_year: r.classYear || null,
+      submitter_name: userDisplay, submitter_email: currentUser?.email, submitter_uid: currentUser?.id,
+    }))).select('id, student_id, updated_at');
+    if (error) { alert('Could not add to the Not Returning list: ' + error.message); return; }
+    (data || []).forEach(d => {
+      const r = recs.find(x => x.id === d.student_id);
+      if (r) { r._supabaseId = d.id; r._updatedAt = d.updated_at || r._updatedAt; }
+    });
+  }
+  recs.forEach(r => nrList.unshift(r));
+  Object.keys(nrOtherMode).forEach(k => delete nrOtherMode[k]); // row indices shifted
+  saveNRList();
+  cohortSelected.clear();
+  renderAll();
+}
+
 async function clearStudentFlags() {
   if (!isCommittee()) return;
   const ids = [...cohortSelected];
@@ -5803,102 +5849,6 @@ function saveIgnoredWithdrawals() {
   try { localStorage.setItem('nr_ignored_withdrawals', JSON.stringify([...nrIgnoredWithdrawalIds])); } catch(e) {}
 }
 
-function nrAdd() {
-  const id         = document.getElementById('nr-f-id').value.trim();
-  const name       = document.getElementById('nr-f-name').value.trim();
-  const major      = document.getElementById('nr-f-major').value.trim();
-  // Email/advisor are no longer collected from the form (the columns were dropped
-  // from the table). They still get populated from CSV lookup when an ID matches.
-  const email = '';
-  const advisor = '';
-  // Reason: single select. If "Other" is chosen, the linked text input holds the
-  // custom string and we use that as the actual reason. Picking Other without
-  // typing falls back to the literal string "Other" so we don't lose the entry.
-  const reasonSel  = document.getElementById('nr-f-reason').value;
-  const reasonOther = document.getElementById('nr-f-reason-other').value.trim();
-  const reason     = (reasonSel === 'Other' && reasonOther) ? reasonOther : reasonSel;
-  const withdrawal = document.getElementById('nr-f-withdrawal').value;
-  const notes      = document.getElementById('nr-f-notes').value.trim();
-  const warn       = document.getElementById('nr-dup-warn');
-
-  if (!id && !name) { warn.style.display='block'; warn.textContent='Please enter at least a Student ID or Name.'; return; }
-
-  // Look up student data from CSVs. Order matters: prefer unregistered (the source we
-  // already report on), then new students, then fall back to the registered CSV so
-  // committee members can still flag students whose data only appears there.
-  // Lookup is by ID first, then by case-insensitive name when no ID was typed.
-  let csvStudent = null;
-  let foundInRegisteredOnly = false;
-  if (csvLoaded.unreg || csvLoaded.reg || csvLoaded.new) {
-    if (id) {
-      if      (returningStudents[id])  csvStudent = returningStudents[id];
-      else if (newStudents[id])        csvStudent = newStudents[id];
-      else if (registeredStudents[id]) { csvStudent = registeredStudents[id]; foundInRegisteredOnly = true; }
-    } else if (name) {
-      const nameKey = name.toLowerCase();
-      const matchByName = (map) => Object.values(map).find(s => (s.name||'').toLowerCase() === nameKey);
-      csvStudent = matchByName(returningStudents) || matchByName(newStudents) || null;
-      if (!csvStudent) {
-        const reg = matchByName(registeredStudents);
-        if (reg) { csvStudent = reg; foundInRegisteredOnly = true; }
-      }
-    }
-  }
-
-  // Resolve final ID: prefer typed ID, otherwise pull from the matched CSV record
-  const resolvedId = id || (csvStudent?.id || '');
-
-  // Check for duplicate ID
-  if (resolvedId && nrList.find(s=>s.id===resolvedId)) {
-    warn.style.display='block';
-    warn.textContent='A student with ID ' + resolvedId + ' is already on the Not Returning list.';
-    return;
-  }
-  warn.style.display='none';
-
-  // Is this student registered for at least one course? True if we found them via
-  // the registered-CSV fallback OR if their resolved ID is in registeredIds.
-  const isRegistered = foundInRegisteredOnly || (resolvedId && registeredIds.has(resolvedId));
-
-  const today = todayLocalISO(); // local date — toISOString() is UTC and flips a day early in US evenings
-  const newRow = {
-    id:           resolvedId,
-    name:         name       || csvStudent?.name    || '',
-    firstName:    csvStudent?.firstName || '',
-    lastName:     csvStudent?.lastName  || '',
-    email:        email      || csvStudent?.email   || '',
-    major:        major      || csvStudent?.major   || '',
-    advisor:      advisor    || csvStudent?.advisor || '',
-    sport:        csvStudent?.sports?.join(', ') || '',
-    isRegistered: !!isRegistered,
-    reason,
-    notes, withdrawal, dateAdded: today
-  };
-  ensureNRNameFields(newRow); // backfill firstName/lastName from typed name if needed
-  nrList.unshift(newRow);
-  // Every existing row's index just shifted by one — drop transient
-  // per-index UI state so an open "Other reason" input doesn't jump rows.
-  Object.keys(nrOtherMode).forEach(k => delete nrOtherMode[k]);
-
-  saveNRList(); nrUpdateKpis(); nrRender();
-  if (csvLoaded.unreg) { renderHoldsPage(); renderHoldDonuts(); } // refresh hold counts
-  renderReasonsChart();
-
-  // Reset form fields
-  ['nr-f-id','nr-f-name','nr-f-major','nr-f-notes'].forEach(fid=>document.getElementById(fid).value='');
-  document.getElementById('nr-f-reason').value='';
-  document.getElementById('nr-f-reason-other').value='';
-  document.getElementById('nr-f-reason-other').style.display='none';
-  document.getElementById('nr-f-withdrawal').value='Pending';
-  // Focus back to ID field for quick successive entry
-  document.getElementById('nr-f-id').focus();
-}
-
-// Allow Enter key on any add-row input to submit
-document.addEventListener('keydown', function(e) {
-  if (e.key==='Enter' && e.target.closest && e.target.closest('.nr-add-row')) nrAdd();
-});
-
 function nrRemove(idx) {
   const row = nrList[idx];
   const isFromCSV = !!(row && row._sourceWithdrawalId);
@@ -6006,7 +5956,7 @@ function nrRender() {
     tbody.innerHTML = emptyRow(13,
       filtered
         ? 'No rows match the current filters. Try clearing one of the dropdowns above.'
-        : 'No students on the Not Returning list yet. Use the form above to add the first entry.');
+        : 'No students on the Not Returning list yet. To add someone, tick them on the Cohort tab and click Mark Not Returning.');
     // Render breakdowns even in the empty case so the cards show the
     // "No matches" copy instead of stale data from a prior render.
     renderNRBreakdowns(indexed);
@@ -7280,28 +7230,6 @@ function nrPopulateReasonFilter() {
   msRepopulate('nr-filter-reason', opts);
 }
 
-// Add-row form: when "Other" is picked, swap a text input in next to the dropdown
-// so the user can type a custom reason. Picking anything else hides it again.
-function nrAddReasonChange() {
-  const sel = document.getElementById('nr-f-reason');
-  const other = document.getElementById('nr-f-reason-other');
-  if (sel.value === 'Other') {
-    other.style.display = 'block';
-    other.focus();
-  } else {
-    other.style.display = 'none';
-    other.value = '';
-  }
-}
-
-// Populate the add-row reason select with NR_REASONS at startup
-function nrPopulateAddReason() {
-  const sel = document.getElementById('nr-f-reason');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">— Select —</option>' +
-    NR_REASONS.map(r => `<option>${r}</option>`).join('');
-}
-
 // ══════════════════════════════════════════════════════════════
 //  AUTH (magic link via Supabase)
 // ══════════════════════════════════════════════════════════════
@@ -7649,7 +7577,7 @@ async function refreshAuthState(session) {
 
 function applyAuthUIState() {
   const body = document.body;
-  body.classList.remove('auth-anon', 'auth-committee', 'auth-admin');
+  body.classList.remove('auth-anon', 'auth-committee', 'auth-admin', 'auth-checking');
   if (userRole === 'admin') body.classList.add('auth-admin');
   else if (userRole === 'member') body.classList.add('auth-committee');
   else body.classList.add('auth-anon');
@@ -8941,44 +8869,12 @@ async function persistNRRowToSupabase(idx) {
 // the inner function bailed (failed validation, user clicked Cancel on the
 // confirm dialog) so we don't issue a stray Supabase write for an action
 // the user actually cancelled.
-const _origNrAdd          = nrAdd;
 const _origNrRemove       = nrRemove;
 const _origNrSave         = nrSave;
 const _origNrCellReason   = nrCellReason;
 const _origNrCellReasonText = nrCellReasonText;
 const _origNrResetReason  = nrResetReason;
 const _origNrCellNotes    = nrCellNotes;
-nrAdd = async function nrAddWithSupabase() {
-  const lenBefore = nrList.length;
-  _origNrAdd();
-  if (nrList.length <= lenBefore) return; // validation failed inside _origNrAdd
-  if (HOSTED && isCommittee()) {
-    const fresh = nrList[0]; // _origNrAdd unshifted the new entry
-    if (!fresh || fresh._supabaseId) return;
-    const { data, error } = await sb.from('not_returning_reports').insert({
-      student_id: fresh.id || null,
-      student_name: fresh.name,
-      reason: fresh.reason,
-      withdrawal_status: fresh.withdrawal,
-      notes: fresh.notes,
-      sport: fresh.sport || null,
-      major: fresh.major || null,
-      class_year: fresh.classYear || null,
-      submitter_name: userDisplay,
-      submitter_email: currentUser?.email,
-      submitter_uid: currentUser?.id,
-    }).select().single();
-    if (error) {
-      alert('Failed to save NR entry to database: ' + error.message +
-        '\n\nThe row is shown locally but will disappear on refresh. ' +
-        'Likely cause: RLS policy or network issue.');
-      return;
-    }
-    fresh._supabaseId = data.id;
-    saveNRList(); // local cache for offline resilience
-  }
-  renderSummary(); // refresh persistence rate + trend chart with the new NR row
-};
 nrRemove = async function nrRemoveWithSupabase(idx) {
   const row = nrList[idx];
   if (!row) return;
@@ -9064,45 +8960,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// As the user types in the NR add-row Name field, look up their CSV records
-// and pre-populate ID + Major when there's a confident match. Match strategy:
-//   1. Exact case-insensitive match against student.name → autofill
-//   2. "Last, First" or "Last First" partial match if exact fails
-// Triggers on input (not blur) so the form fills in real time.
-function nrNameInputAutofill() {
-  const nameInput = document.getElementById('nr-f-name');
-  const idInput   = document.getElementById('nr-f-id');
-  const majorInput = document.getElementById('nr-f-major');
-  if (!nameInput) return;
-  const typed = nameInput.value.trim().toLowerCase();
-  if (typed.length < 3) return; // wait for enough characters to be useful
-  // Search across all student maps. Don't autofill if user already typed a value.
-  const candidates = [
-    ...Object.values(returningStudents),
-    ...Object.values(newStudents),
-    ...Object.values(registeredStudents),
-  ];
-  // Exact match first
-  let match = candidates.find(s => (s.name || '').toLowerCase() === typed);
-  if (!match) {
-    // Try "Last, First" → "First Last" reorder
-    if (typed.includes(',')) {
-      const [last, first] = typed.split(',').map(p => p.trim());
-      const reordered = `${first} ${last}`;
-      match = candidates.find(s => (s.name || '').toLowerCase() === reordered);
-    }
-  }
-  if (!match) {
-    // Substring match — only autofill when it's unambiguous (exactly one match)
-    const subs = candidates.filter(s => (s.name || '').toLowerCase().includes(typed));
-    if (subs.length === 1) match = subs[0];
-  }
-  if (!match) return;
-  // Fill only fields that the user hasn't typed into themselves.
-  if (!idInput.value)    idInput.value    = match.id    || '';
-  if (!majorInput.value) majorInput.value = match.major || '';
-}
-
 // ══════════════════════════════════════════════════════════════
 //  REALTIME — auto-refresh on new uploads
 // ══════════════════════════════════════════════════════════════
@@ -9134,7 +8991,6 @@ loadIgnoredWithdrawals();
 loadTermSettings();
 loadFTFTIds();
 msInitAll(); // turn every filter <select> into a checklist dropdown before anything populates them
-nrPopulateAddReason();
 nrPopulateReasonFilter();
 populateTagFilters();
 nrUpdateKpis();
@@ -9161,10 +9017,13 @@ function _wwuReadSession() {
 }
 
 if (HOSTED) {
-  // Default to anon BEFORE the auth callback fires, so the auth gate
-  // shows immediately on page load and the dashboard content stays hidden
-  // until Supabase confirms the session.
-  document.body.classList.add('auth-anon');
+  // Default to anon BEFORE the auth callback fires, so the dashboard content
+  // stays hidden until Supabase confirms the session — but in the
+  // "checking" state, so a signed-in user sees "Checking your sign-in…"
+  // instead of the sign-in form flashing up. applyAuthUIState clears it.
+  // The timer is a safety net: never leave someone stuck on the spinner.
+  document.body.classList.add('auth-anon', 'auth-checking');
+  setTimeout(() => document.body.classList.remove('auth-checking'), 12000);
   (async () => {
     // SSO: URL params take priority, then shared domain cookie
     const _qp = new URLSearchParams(window.location.search);
