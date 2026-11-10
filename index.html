@@ -1493,9 +1493,10 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <button class="nr-row-btn nr-row-btn-danger" onclick="markCohortNotReturning()" title="Add the selected students to the Not Returning list as Pending (set the reason on the Not Returning tab)">Mark Not Returning</button>
       <span class="admin-only" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span>· mark as:</span>
+        <button class="nr-row-btn" onclick="markCohortRegistered()" title="Count as Registered even though the registered report doesn't show it (for report errors). Stays until cleared.">Registered</button>
         <button class="nr-row-btn" onclick="setCohortOverride('graduating')" title="Exclude from every number, like a Graduating tag">Graduating</button>
         <button class="nr-row-btn" onclick="setCohortOverride('hs')" title="Treat as high-school dual credit (follows the dual credit setting above)">Dual Credit</button>
-        <button class="nr-row-btn" onclick="setCohortOverride(null)" title="Remove the override and use the reports again">Clear override</button>
+        <button class="nr-row-btn" onclick="setCohortOverride(null)" title="Remove any Registered / Graduating / Dual Credit mark and use the reports again">Clear override</button>
       </span>
     </div>
 
@@ -4539,8 +4540,9 @@ function cohortApply() {
     s === 'Dual Credit'   ? 'chip-indigo' : 'chip-gray';
   const dash = '<span style="color:#bbb;font-size:11px;">—</span>';
   tbody.innerHTML = rows.map(r => {
-    const overrideNote = r.override
-      ? ` <span style="font-size:10px;color:#888;" title="Set by an admin on the Cohort tab">(marked)</span>` : '';
+    const manual = manualStatusOverrides.get(r.id);
+    const overrideNote = (r.override || manual)
+      ? ` <span style="font-size:10px;color:#888;" title="${manual === 'registered' ? 'Marked Registered by an admin (the registered report does not show it)' : 'Set by an admin'}">(marked)</span>` : '';
     const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>${overrideNote}`;
     const hrs = r.hrsEnrolled ? (Number.isInteger(r.hrsEnrolled) ? r.hrsEnrolled : r.hrsEnrolled.toFixed(1)) : dash;
     return `<tr>
@@ -4632,6 +4634,8 @@ async function setCohortOverride(value) {
   if (!ids.length) { alert('Tick one or more students first.'); return; }
   const label = value === 'graduating' ? 'Graduating' : value === 'hs' ? 'Dual Credit' : 'no override (use the reports)';
   if (!confirm(`Mark ${ids.length} student${ids.length === 1 ? '' : 's'} as ${label}?`)) return;
+  // Clearing also drops a manual Registered / Not Returning pin (students.manual_status).
+  const manualIds = value === null ? ids.filter(id => manualStatusOverrides.has(id)) : [];
   if (HOSTED && sb) {
     if (!currentTermDbId) { alert('No current term is loaded; reload the dashboard and try again.'); return; }
     for (const part of chunk(ids, 500)) {
@@ -4641,10 +4645,66 @@ async function setCohortOverride(value) {
         .in('student_id', part);
       if (error) { alert('Could not save the change: ' + error.message); return; }
     }
+    for (const part of chunk(manualIds, 500)) {
+      const { error } = await sb.from('students').update({ manual_status: null }).in('id', part);
+      if (error) { alert('Could not clear the manual Registered mark: ' + error.message); return; }
+    }
   }
   ids.forEach(id => { termCohort.get(id).statusOverride = value; });
   cohortSelected.clear();
+  if (manualIds.length && HOSTED && sb) {
+    manualIds.forEach(id => manualStatusOverrides.delete(id));
+    await loadHostedDashboardData(); // registered sets are rebuilt from the students table
+    return;
+  }
   renderAll(); // graduating status affects every tab, not just the Summary
+}
+
+// Admin: count ticked cohort students as Registered when the registered report
+// is wrong (Tony 2026-11-10 — students registered in Jenzabar but on neither
+// report). Uses the same students.manual_status = 'registered' pin as the
+// Holds / Can Register "Reg" button, so it survives every upload until
+// cleared ("Clear override") or the next "Start new cycle". A student on no
+// report has no students row yet, so a stub is inserted from the listing first.
+async function markCohortRegistered() {
+  if (!isAdmin()) return;
+  if (!HOSTED || !sb) { alert('Manual overrides only work in hosted mode.'); return; }
+  const ids = [...cohortSelected].filter(id => termCohort.has(id) && !registeredIds.has(id));
+  if (!ids.length) {
+    alert(cohortSelected.size ? 'Everyone selected already counts as Registered.' : 'Tick one or more students first.');
+    return;
+  }
+  const onNr = new Set(getDedupedNRList().map(r => r.id).filter(Boolean));
+  const nrIds = ids.filter(id => onNr.has(id));
+  if (!confirm(`Mark ${n(ids.length)} student${ids.length === 1 ? '' : 's'} as Registered?\n\n` +
+      `This overrides the registered report and stays through future uploads until you clear it.` +
+      (nrIds.length ? `\n\n${n(nrIds.length)} of them ${nrIds.length === 1 ? 'is' : 'are'} on the Not Returning list and will be removed from it.` : ''))) return;
+  const known = new Set([...Object.keys(registeredStudents), ...Object.keys(returningStudents), ...Object.keys(newStudents)]);
+  const stubs = ids.filter(id => !known.has(id)).map(id => {
+    const c = termCohort.get(id) || {};
+    return {
+      id, first_name: c.firstName || null, last_name: c.lastName || null,
+      major: c.major || null, class_year: c.classYear || null,
+      pt_ft_status: c.ptFt || null, sports: [], holds: [],
+      is_registered: false, is_new_student: false, snapshot_id: null,
+    };
+  });
+  for (const part of chunk(stubs, 500)) {
+    // ignoreDuplicates: never overwrite a row an upload already wrote.
+    const { error } = await sb.from('students').upsert(part, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) { alert('Could not save the change: ' + error.message); return; }
+  }
+  for (const part of chunk(ids, 500)) {
+    const { data, error } = await sb.from('students').update({ manual_status: 'registered' }).in('id', part).select('id');
+    if (error) { alert('Could not save the change: ' + error.message); return; }
+    (data || []).forEach(r => manualStatusOverrides.set(r.id, 'registered'));
+  }
+  for (const part of chunk(nrIds, 500)) {
+    const { error } = await sb.from('not_returning_reports').update({ is_hidden: true }).in('student_id', part).eq('is_hidden', false);
+    if (error) console.warn('Could not hide NR rows:', error);
+  }
+  cohortSelected.clear();
+  await loadHostedDashboardData();
 }
 
 // ── Student flags (Midterm Meeting, Provisional) — committee-settable ──
@@ -8682,9 +8742,11 @@ async function pushDataToSupabase() {
     // Supabase's 1000-row default limit. Students with manual overrides are kept
     // (they have snapshot_id = snapshotId from the upsert above, so this is safe).
     status('Cleanup: removing stale snapshot rows…');
+    // snapshot_id IS NULL = stub rows from the Cohort tab's "Registered" mark
+    // (markCohortRegistered) whose mark has since been cleared.
     const { error: cleanupErr } = await sb.from('students')
       .delete()
-      .neq('snapshot_id', snapshotId)
+      .or(`snapshot_id.is.null,snapshot_id.neq.${snapshotId}`)
       .is('manual_status', null);
     if (cleanupErr) console.warn('Old snapshot cleanup failed (non-fatal):', cleanupErr.message);
 
