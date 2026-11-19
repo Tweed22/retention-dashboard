@@ -1779,6 +1779,53 @@ let phoneNumbers = new Map();
 //   key   = student_id (string)
 //   value = 'registered' | 'not_returning'
 let manualStatusOverrides = new Map();
+
+// Last-known student info (student_profiles, migration 0025; Tony 2026-11-18).
+// The registrar's daily reports drop a student the day their withdrawal is
+// processed, and the registered report carries no sport/advisor/email — so
+// class, major, and sport used to vanish from a student who withdrew or
+// registered. Each upload merges what it sees here (blanks never erase), and
+// applyStudentProfiles() fills EMPTY fields on every loaded record from it.
+// Values already on a record (incl. committee edits on NR rows) always win.
+let studentProfiles = new Map(); // id -> { first_name, last_name, email, major, advisor, sports[], class_year }
+
+function profileFill(rec, id) {
+  const p = id && studentProfiles.get(id);
+  if (!rec || !p) return rec;
+  if (!rec.firstName && p.first_name) rec.firstName = p.first_name;
+  if (!rec.lastName && p.last_name) rec.lastName = p.last_name;
+  if (!rec.name && (p.first_name || p.last_name)) rec.name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+  if (!rec.email && p.email) rec.email = p.email;
+  if (!rec.major && p.major) rec.major = p.major;
+  if (!rec.advisor && p.advisor) rec.advisor = p.advisor;
+  if (!rec.classYear && p.class_year) rec.classYear = normalizeClassYear(p.class_year);
+  const sports = (p.sports || []).filter(Boolean);
+  if (sports.length) {
+    if (Array.isArray(rec.sports)) { if (!rec.sports.length) rec.sports = [...sports]; }
+    else if ('sport' in rec && !rec.sport) rec.sport = sports.join(', ');
+  }
+  return rec;
+}
+
+function applyStudentProfiles() {
+  if (!studentProfiles.size) return;
+  [registeredStudents, returningStudents, newStudents].forEach(map =>
+    Object.values(map || {}).forEach(s => profileFill(s, s.id)));
+  (nrList || []).forEach(r => profileFill(r, r.id));
+  (withdrawalsList || []).forEach(w => profileFill(w, w.id));
+}
+
+// Rows for merge_student_profiles from any student-shaped records.
+function profileRowsFrom(records) {
+  return records.filter(s => s && s.id).map(s => ({
+    id: String(s.id).trim(),
+    first_name: s.firstName || '', last_name: s.lastName || '',
+    email: s.email || '', major: s.major || '', advisor: s.advisor || '',
+    sports: Array.isArray(s.sports) ? s.sports.filter(Boolean)
+          : String(s.sport || '').split(',').map(x => x.trim()).filter(Boolean),
+    class_year: s.classYear || '',
+  }));
+}
 function loadFTFTIds() {
   try {
     const raw = localStorage.getItem('ftft_ids');
@@ -4339,7 +4386,7 @@ function buildFTFTRows() {
                    || returningStudents[id]
                    || newStudents[id]
                    || nrById.get(id);
-    const stu = stuRecord || { id };
+    const stu = profileFill({ ...(stuRecord || { id }) }, id);
     // An FTFT student whose ID doesn't appear in any loaded data source has
     // withdrawn — they are no longer on any roster or report.
     const found = !!stuRecord;
@@ -4457,7 +4504,7 @@ function buildCohortRows() {
   const ctx = retentionContext();
   return [...termCohort.values()].map(c => {
     // Prefer the live record for major/advisor; fall back to the listing.
-    const live = registeredStudents[c.id] || returningStudents[c.id] || {};
+    const live = profileFill({ ...(registeredStudents[c.id] || returningStudents[c.id] || newStudents[c.id] || {}) }, c.id);
     return {
       id: c.id,
       lastName: c.lastName || live.lastName || '',
@@ -8133,7 +8180,7 @@ async function loadHostedDashboardData() {
   // and a missing/blocked table falls back to roster mode rather than failing.
   // Cohort and student flags only depend on the current term id, so fetch
   // them together — one network round trip instead of two in a row.
-  const [coRes, flRes] = await Promise.all([
+  const [coRes, flRes, prRes] = await Promise.all([
     (!fileProvided('cohort') && currentTermIdForCohort)
       ? fetchAllRows(() => sb.from('term_cohort')
           .select('student_id, first_name, last_name, class_cde, major, div_cde, hrs_enrolled, pt_ft_sts, status_override')
@@ -8146,7 +8193,18 @@ async function loadHostedDashboardData() {
         ? q.or(`term_id.is.null,term_id.eq.${currentTermIdForCohort}`)
         : q.is('term_id', null);
     }),
+    fetchAllRows(() => sb.from('student_profiles')
+      .select('id, first_name, last_name, email, major, advisor, sports, class_year')
+      .order('id')),
   ]);
+  // Last-known student info (migration 0025) — survives the rosters dropping
+  // a withdrawn or newly registered student. Missing table is non-fatal.
+  studentProfiles = new Map();
+  if (prRes.error) {
+    console.warn('student_profiles fetch failed (non-fatal):', prRes.error.message);
+  } else {
+    prRes.data.forEach(p => studentProfiles.set(p.id, p));
+  }
   if (!fileProvided('cohort')) {
     termCohort = new Map();
     if (coRes) {
@@ -8185,6 +8243,7 @@ async function loadHostedDashboardData() {
       });
     }
   }
+  applyStudentProfiles();
   // FTFT roster: replace local set with whatever Supabase has — but only
   // when the fetch actually succeeded AND the result isn't suspiciously
   // empty compared to what we just had locally. Three guards:
@@ -8331,6 +8390,28 @@ async function pushDataToSupabase() {
         expect(`students upsert chunk ${i+1}/${chunks.length}`,
           await sb.from('students').upsert(chunks[i], { onConflict: 'id' }));
       }
+    }
+
+    // 2a) Merge everything this upload knows about each student into
+    //     student_profiles (migration 0025), so class/major/sport/advisor
+    //     outlive the rosters. Sources run least → most authoritative (each
+    //     call's non-blank values win); rosters last. Non-fatal on error.
+    status('Step 2a/6: saving last-known student info…');
+    try {
+      const dedupe = rows => [...new Map(rows.map(r => [r.id, r])).values()];
+      const sources = [
+        [...termCohort.values()],
+        withdrawalsList,
+        allStudents,
+      ];
+      for (const src of sources) {
+        for (const part of chunk(dedupe(profileRowsFrom(src)), 1000)) {
+          const { error } = await sb.rpc('merge_student_profiles', { rows: part });
+          if (error) throw error;
+        }
+      }
+    } catch (e) {
+      console.warn('student_profiles merge failed (non-fatal):', e.message || e);
     }
 
     // 2b) Reset is_registered for any student the DB still has marked registered
@@ -8634,12 +8715,18 @@ async function pushDataToSupabase() {
           const stu = returningStudents[w.student_id]
                    || newStudents[w.student_id]
                    || registeredStudents[w.student_id];
-          const sportFromCSV = stu && stu.sports ? stu.sports.join(', ') : null;
+          // The rosters usually dropped the student already (same day as the
+          // withdrawal), so fall back to the last-known profile and listing.
+          const prof = profileFill({ id: w.student_id, sports: [...((stu && stu.sports) || [])],
+            major: w.major || (stu && stu.major) || '', classYear: w.class_year || (stu && stu.classYear) || '' }, w.student_id);
+          const coRec = termCohort.get(w.student_id);
+          if (!prof.classYear && coRec) prof.classYear = coRec.classYear || '';
+          if (!prof.major && coRec) prof.major = coRec.major || '';
           inserts.push({
             ...csvFields,
-            major: w.major || null,
-            class_year: w.class_year || null,
-            sport: sportFromCSV,
+            major: prof.major || null,
+            class_year: prof.classYear || null,
+            sport: prof.sports.length ? prof.sports.join(', ') : null,
             submitter_name: '[CSV import]',
             submitter_uid: currentUser?.id,
           });
