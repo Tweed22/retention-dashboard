@@ -1442,7 +1442,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 <div class="page" id="page-cohort">
   <div id="cohort-empty" class="empty-state"><p>No term cohort loaded for the current term.<br>Upload the current term's student listing report in the <a onclick="toggleUploadPanel()">upload panel</a> (Term Cohort slot). Until then, Eligible to Return is derived from the daily rosters.</p></div>
   <div id="cohort-content" style="display:none;">
-    <div class="kpi-row kpi-row-7">
+    <div class="kpi-row kpi-row-8">
       <div class="kpi-card indigo kpi-clickable" onclick="cohortFilterByStatus('')" title="Clear the status filter"><div class="kpi-label">Eligible (Cohort)</div><div class="kpi-value" id="co-total">0</div><div class="kpi-sub" id="co-total-sub">Listing minus Graduating</div></div>
       <div class="kpi-card green kpi-clickable" onclick="cohortFilterByStatus('Registered')"><div class="kpi-label">Registered</div><div class="kpi-value" id="co-reg">0</div><div class="kpi-sub">Registered for next term</div></div>
       <div class="kpi-card red kpi-clickable" onclick="cohortFilterByStatus('Has Hold')"><div class="kpi-label">Has Hold</div><div class="kpi-value" id="co-hold">0</div><div class="kpi-sub">On unregistered report, blocking hold</div></div>
@@ -1450,6 +1450,7 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
       <div class="kpi-card amber kpi-clickable" onclick="cohortFilterByStatus('Not Returning')"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="co-nr">0</div><div class="kpi-sub">On NR list or withdrew this term</div></div>
       <div class="kpi-card blue kpi-clickable" onclick="cohortFilterByStatus('Part-Time|Dual Credit')"><div class="kpi-label">Part-Time / Dual Credit</div><div class="kpi-value" id="co-ptdc">0</div><div class="kpi-sub" id="co-ptdc-sub">On no report or list</div></div>
       <div class="kpi-card purple kpi-clickable" onclick="cohortFilterByStatus('Unaccounted')"><div class="kpi-label">Unaccounted</div><div class="kpi-value" id="co-unacc">0</div><div class="kpi-sub">Not on any report or list</div></div>
+      <div class="kpi-card orange kpi-clickable" onclick="cohortFilterByStatus('Graduating')" title="Show everyone counted as Graduating (left out of every number)"><div class="kpi-label">Graduating</div><div class="kpi-value" id="co-grad">0</div><div class="kpi-sub" id="co-grad-sub">Left out of every number</div></div>
     </div>
     <div id="co-hs-toggle" style="display:none;margin-bottom:12px;font-size:12px;color:#555;"></div>
     <div class="section-label" id="co-section-label">Term Cohort</div>
@@ -1519,11 +1520,12 @@ body.auth-admin     .show-when-authed { display: inline-flex; }
 
 <!-- ══════════════════════════ NOT RETURNING ══════════════════════════ -->
 <div class="page" id="page-notreturning">
-  <div class="kpi-row kpi-row-4" style="margin-bottom:18px;">
+  <div class="kpi-row kpi-row-5" style="margin-bottom:18px;">
     <div class="kpi-card red kpi-clickable" onclick="nrFilterByWithdrawal('')" title="Click to clear the status filter and show all NR rows"><div class="kpi-label">Not Returning</div><div class="kpi-value" id="nr-count">0</div><div class="kpi-sub">Students reported not returning</div></div>
     <div class="kpi-card amber kpi-clickable" onclick="nrFilterByWithdrawal('Pending')" title="Click to filter to Pending-withdrawal rows"><div class="kpi-label">Withdrawal Pending</div><div class="kpi-value" id="nr-pending">0</div><div class="kpi-sub">Formal withdrawal not processed</div></div>
     <div class="kpi-card green kpi-clickable" onclick="nrFilterByWithdrawal('Withdrawn')" title="Click to filter to Withdrawn rows"><div class="kpi-label">Withdrawn</div><div class="kpi-value" id="nr-withdrawn">0</div><div class="kpi-sub">Formal withdrawal processed</div></div>
     <div class="kpi-card sky kpi-clickable" onclick="nrFilterByWithdrawal('Registered')" title="Click to filter to NR rows whose students are still registered for courses"><div class="kpi-label">Registered for Courses</div><div class="kpi-value" id="nr-registered">0</div><div class="kpi-sub">On NR list AND enrolled — needs reconciliation</div></div>
+    <div class="kpi-card orange" id="nr-grad-card" title="For information only: graduating students are left out of every number"><div class="kpi-label">Graduating</div><div class="kpi-value" id="nr-grad">0</div><div class="kpi-sub" id="nr-grad-sub">Left out of every number</div></div>
   </div>
 
   <!-- ── Breakdown cards (Class · Sport · Major · Reason) ── -->
@@ -4554,6 +4556,11 @@ function renderCohort() {
     excluded['Part-Time (excluded)']   ? `${n(excluded['Part-Time (excluded)'])} PT` : '',
     excluded['Graduating']             ? `${n(excluded['Graduating'])} Graduating` : '',
   ].filter(Boolean);
+  // Graduating block: everyone the Cohort tab shows as Graduating, split by
+  // where the Graduating status came from (Tony 2026-11-24).
+  const grad = graduatingSummary(rows);
+  document.getElementById('co-grad').textContent = n(grad.count);
+  document.getElementById('co-grad-sub').textContent = grad.sub;
   document.getElementById('co-total-sub').textContent =
     `${n(rows.length)} students` + (exParts.length ? ` − ${exParts.join(', ')}` : '');
   renderCohortToggles(rows);
@@ -4588,7 +4595,10 @@ function cohortApply() {
   const dash = '<span style="color:#bbb;font-size:11px;">—</span>';
   tbody.innerHTML = rows.map(r => {
     const manual = manualStatusOverrides.get(r.id);
-    const overrideNote = (r.override || manual)
+    const gradSrc = r.__status === 'Graduating' ? graduatingSource(r.id) : null;
+    const overrideNote = (gradSrc === 'hold' || gradSrc === 'nr')
+      ? ` <span style="font-size:10px;color:#888;" title="${gradSrc === 'hold' ? 'Registrar hold: changes can affect graduation' : 'Reason on the Not Returning list is Graduating'}">(${gradSrc === 'hold' ? 'grad hold' : 'NR list'})</span>`
+      : (r.override || manual)
       ? ` <span style="font-size:10px;color:#888;" title="${manual === 'registered' ? 'Marked Registered by an admin (the registered report does not show it)' : 'Set by an admin'}">(marked)</span>` : '';
     const statusHtml = `<span class="chip ${statusChip(r.__status)}">${r.__status}</span>${overrideNote}`;
     const hrs = r.hrsEnrolled ? (Number.isInteger(r.hrsEnrolled) ? r.hrsEnrolled : r.hrsEnrolled.toFixed(1)) : dash;
@@ -5703,6 +5713,31 @@ function syncHoldBasedNR() {
   if (added) saveNRList();
 }
 
+// Graduating block shown on the Cohort and Not Returning tabs. Cohort mode:
+// cohort rows whose status is Graduating (matches the Cohort table). Roster
+// mode: every id in getGraduatingIdSet.
+function graduatingSummary(cohortRows) {
+  const ids = termCohort.size
+    ? (cohortRows || buildCohortRows()).filter(r => r.__status === 'Graduating').map(r => r.id)
+    : [...getGraduatingIdSet()];
+  const src = { marked: 0, hold: 0, nr: 0 };
+  ids.forEach(id => { src[graduatingSource(id)]++; });
+  const sub = ids.length
+    ? [src.marked && `${n(src.marked)} marked`, src.hold && `${n(src.hold)} grad hold`, src.nr && `${n(src.nr)} NR list`].filter(Boolean).join(' · ')
+    : 'Left out of every number';
+  return { count: ids.length, sub };
+}
+
+// Why a student counts as Graduating: 'marked' (admin, Cohort tab), 'hold'
+// (registrar "changes can affect graduation" hold), or 'nr' (NR reason).
+// Same three sources as getGraduatingIdSet, first match wins.
+function graduatingSource(id) {
+  if (termCohort.get(id)?.statusOverride === 'graduating') return 'marked';
+  const hasHold = [returningStudents, registeredStudents, newStudents].some(map =>
+    ((map || {})[id]?.holds || []).some(h => GRADUATION_HOLD_PATTERN.test(h || '')));
+  return hasHold ? 'hold' : 'nr';
+}
+
 function getGraduatingIdSet() {
   const ids = new Set(
     nrList
@@ -6074,6 +6109,18 @@ function nrUpdateKpis() {
   const regNRCount = nonGrad.filter(s => nrEffectiveStatus(s) === 'Registered').length;
   const regEl = document.getElementById('nr-registered');
   if (regEl) regEl.textContent = n(regNRCount);
+  // Graduating — informational (Tony 2026-11-24). Same number as the Cohort
+  // tab's Graduating block; most come from the grad hold or an admin mark, not
+  // this list, so a click opens the Cohort tab filtered to Graduating.
+  const grad = graduatingSummary();
+  const gEl = document.getElementById('nr-grad');
+  if (gEl) {
+    gEl.textContent = n(grad.count);
+    document.getElementById('nr-grad-sub').textContent = grad.sub + (termCohort.size && grad.count ? ' · click to list' : '');
+    const card = document.getElementById('nr-grad-card');
+    card.classList.toggle('kpi-clickable', !!termCohort.size);
+    card.onclick = termCohort.size ? () => goToCohortPage('Graduating') : null;
+  }
 }
 
 // True if this NR entry is also registered for courses. Combines the flag set at
